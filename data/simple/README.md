@@ -2,6 +2,7 @@
 
 ### Structure
 
+```
 | Syntax element                        | Comment                                                                  |
 |:--------------------------------------|:-------------------------------------------------------------------------|
 | input = unit_cell coordinate_vector   | numbers are white space/line separated, comment lines can be anywhere    |
@@ -13,9 +14,11 @@
 | coordinate_vector = vec{20,40}        | on line per vec (min 20, max 40 vecs), in reciprocal space               |
 |---------------------------------------+--------------------------------------------------------------------------|
 | comment_line = # comment              |                                                                          |
+```
 
 ### Data
 
+```
 | File                                  | Comment                                                                  |
 |:--------------------------------------|:-------------------------------------------------------------------------|
 | test0.txt - test2.txt                 | Purely artificial and perfect sets (i.e. all points are produces by      |
@@ -29,3 +32,4 @@
 |                                       | a = 39.431335      25.273994      63.585350                              |
 |                                       | b = 28.513729      60.642746     -41.786659                              |
 |                                       | c = -29.096014      20.499205       9.895323                             |
+```
