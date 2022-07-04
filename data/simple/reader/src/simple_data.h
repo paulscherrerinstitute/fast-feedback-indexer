@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <stdexcept>
 #include <iostream>
+#include <vector>
 #include <Eigen/Core>
 #include <Eigen/LU>
 
