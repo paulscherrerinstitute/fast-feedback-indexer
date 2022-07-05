@@ -4,4 +4,6 @@ project(fast_feedback_indexer)
 option(TEST_ALL "Add test targets" OFF)
 
 enable_testing()
+add_subdirectory(indexer)
 add_subdirectory(data)
+add_subdirectory(tests)

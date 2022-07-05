@@ -1,9 +1,4 @@
 cmake_minimum_required (VERSION 3.0)
-project(simple_data)
-
-option(TEST_SIMPLE_DATA "Add targets for testing simple data" OFF)
-IF(TEST_DATA)
-    set(TEST_SIMPLE_DATA ON)
-ENDIF(TEST_DATA)
+project(simple_data_top)
 
 add_subdirectory(reader)

@@ -1,3 +1,6 @@
+#ifndef SIMPLE_DATA_H
+#define SIMPLE_DATA_H
+
 // Read in simple data files
 
 #include <fstream>
@@ -131,3 +134,5 @@ namespace simple_data {
     }; // SimpleData
 
 } // namespace simple_data
+
+#endif
