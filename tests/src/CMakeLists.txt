@@ -22,7 +22,7 @@ if(TEST_INDEXER_SIMPLE)
                 PRIVATE fast_indexer
                 PRIVATE simple_data)
 
-        add_test(NAME index_file_0 COMMAND test_indexer $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/data/simple/image0_local.txt>)
+        add_test(NAME index_file_0 COMMAND test_indexer $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/data/simple/files/image0_local.txt>)
         set_property(TEST index_file_0 PROPERTY PASS_REGULAR_EXPRESSION "Test OK")
         set_property(TEST index_file_0 PROPERTY FAIL_REGULAR_EXPRESSION "Test failed")
 endif(TEST_INDEXER_SIMPLE)
@@ -49,7 +49,7 @@ if(TEST_SIMPLE_DATA_READER)
     target_link_libraries(test_simple_data_reader
         PRIVATE simple_data)
 
-    add_test(NAME read_file_0 COMMAND test_simple_data_reader $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/data/simple/image0_local.txt>)
+    add_test(NAME read_file_0 COMMAND test_simple_data_reader $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/data/simple/files/image0_local.txt>)
     set_property(TEST read_file_0 PROPERTY PASS_REGULAR_EXPRESSION "^Test OK")
     set_property(TEST read_file_0 PROPERTY FAIL_REGULAR_EXPRESSION "^Error")
 endif(TEST_SIMPLE_DATA_READER)
