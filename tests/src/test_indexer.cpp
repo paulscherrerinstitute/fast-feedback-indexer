@@ -51,7 +51,7 @@ int main (int argc, char *argv[])
             z[i] = coord.z;
             i++;            
         }
-        fast_feedback::input<float> in{x.data(), y.data(), z.data(), i-3};
+        fast_feedback::input<float> in{x.data(), y.data(), z.data(), 1u, i-3u};
         std::array<float, 3*3> buf;
         fast_feedback::output<float> out{&buf[0], &buf[3], &buf[6], 0u};
         fast_feedback::indexer indexer;
