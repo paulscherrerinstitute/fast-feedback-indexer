@@ -10,8 +10,10 @@ IF(TEST_ALL)
 ENDIF(TEST_ALL)
                 
 option(TEST_INDEXER_SIMPLE "Enable test code for simple indexer test" OFF)
+option(TEST_INDEXER_EXCEPTION "Enable test code for indexer exception test" OFF)
 if (TEST_INDEXER)
         set(TEST_INDEXER_SIMPLE ON)
+        set(TEST_INDEXER_EXCEPTION ON)
 endif(TEST_INDEXER)
 
 if(TEST_INDEXER_SIMPLE)
@@ -26,6 +28,18 @@ if(TEST_INDEXER_SIMPLE)
         set_property(TEST index_file_0 PROPERTY PASS_REGULAR_EXPRESSION "Test OK")
         set_property(TEST index_file_0 PROPERTY FAIL_REGULAR_EXPRESSION "Test failed")
 endif(TEST_INDEXER_SIMPLE)
+
+if(TEST_INDEXER_EXCEPTION)
+    set(BUILD_FAST_INDEXER ON)
+        add_executable(test_indexer_exception test_indexer_exception.cpp)
+        target_compile_features(test_indexer_exception PRIVATE cxx_std_17)
+        target_link_libraries(test_indexer_exception
+                PRIVATE fast_indexer)
+
+        add_test(NAME fast_feedback_exception COMMAND test_indexer_exception)
+        set_property(TEST fast_feedback_exception PROPERTY PASS_REGULAR_EXPRESSION "Test OK")
+        set_property(TEST fast_feedback_exception PROPERTY FAIL_REGULAR_EXPRESSION "Test failed")
+endif(TEST_INDEXER_EXCEPTION)
 
 # ---- Data Tests ----
 
