@@ -1,5 +1,5 @@
-#ifndef FAST_FEEDBACK_EXCEPTION
-#define FAST_FEEDBACK_EXCEPTION
+#ifndef FAST_FEEDBACK_EXCEPTION_H
+#define FAST_FEEDBACK_EXCEPTION_H
 
 #include <exception>
 #include <sstream>
