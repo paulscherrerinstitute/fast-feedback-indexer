@@ -2,11 +2,15 @@
 #include <atomic>
 #include <mutex>
 #include <vector>
+#include <cstdlib>
+#include <sstream>
 #include "exception.h"
 #include "indexer_gpu.h"
 #include "cuda_runtime.h"
 
 namespace {
+
+    constexpr char INDEXER_GPU_DEVICE[] = "INDEXER_GPU_DEVICE";
 
     // Cuda device infos
     struct gpu_device final {
@@ -18,6 +22,8 @@ namespace {
     };
 
     std::vector<gpu_device> gpu_device::list;
+
+    int gpu_device_number;
 
     // Exception for cuda related errors
     struct cuda_exception final : public fast_feedback::exception {
@@ -65,6 +71,22 @@ namespace {
                 gpu_device& device = gpu_device::list[dev];
                 device.id = dev;
                 CU_CHECK(cudaGetDeviceProperties(&device.prop, dev));
+            }
+
+            CU_CHECK(cudaGetDevice(&gpu_device_number));
+            {
+                char* dev_string = std::getenv(INDEXER_GPU_DEVICE);
+                if (dev_string != nullptr) {
+                    std::istringstream iss(dev_string);
+                    int dev = -1;
+                    iss >> dev;
+                    if (!iss || !iss.eof())
+                        throw FF_EXCEPTION_OBJ << "wrong format for " << INDEXER_GPU_DEVICE << ": " << dev_string << " (should be an integer)\n";
+                    if ((dev < 0) || (dev >= num_devices))
+                        throw FF_EXCEPTION_OBJ << "illegal value for " << INDEXER_GPU_DEVICE << ": " << dev << " (should be in [0, " << num_devices << "[)\n";
+                    CU_CHECK(cudaSetDevice(dev));
+                    CU_CHECK(cudaGetDevice(&gpu_device_number));
+                }
             }
 
             cuda_initialized.store(true);
