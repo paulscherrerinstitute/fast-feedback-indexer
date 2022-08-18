@@ -9,6 +9,8 @@
 #include "indexer_gpu.h"
 #include "cuda_runtime.h"
 
+using logger::stanza;
+
 namespace {
 
     constexpr char INDEXER_GPU_DEVICE[] = "INDEXER_GPU_DEVICE";
@@ -90,7 +92,7 @@ namespace {
                 }
             }
 
-            logger::info << logger::stanza << "using GPU device " << gpu_device_number << '\n';
+            logger::info << stanza << "using GPU device " << gpu_device_number << '\n';
             cuda_initialized.store(true);
         } // release cuda_init_lock
     }
