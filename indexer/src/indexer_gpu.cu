@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <sstream>
 #include "exception.h"
+#include "log.h"
 #include "indexer_gpu.h"
 #include "cuda_runtime.h"
 
@@ -89,6 +90,7 @@ namespace {
                 }
             }
 
+            logger::info << logger::stanza << "using GPU device " << gpu_device_number << '\n';
             cuda_initialized.store(true);
         } // release cuda_init_lock
     }
