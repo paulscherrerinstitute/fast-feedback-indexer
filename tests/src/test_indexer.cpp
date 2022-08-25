@@ -34,7 +34,9 @@ int main (int argc, char *argv[])
     try {
         if (argc <= 1)
             throw std::runtime_error("missing file argument");
+
         SimpleData<float, raise> data(argv[1]);         // read simple data file
+
         std::vector<float> x(data.spots.size() + 3);    // coordinate containers
         std::vector<float> y(data.spots.size() + 3);
         std::vector<float> z(data.spots.size() + 3);
@@ -53,18 +55,19 @@ int main (int argc, char *argv[])
             i++;            
         }
 
+        std::array<float, 3*3> buf;                     // output coordinate container
+        fast_feedback::config_runtime<float> crt{};     // default runtime config
+        fast_feedback::indexer indexer;                 // indexer object with default config
+
         fast_feedback::memory_pin pin_x{x};             // pin input coordinate containers
         fast_feedback::memory_pin pin_y{y};
         fast_feedback::memory_pin pin_z{z};
-        fast_feedback::input<float> in{x.data(), y.data(), z.data(), 1u, i-3u}; // create indexer input object
+        fast_feedback::memory_pin pin_buf{buf};         // pin output coordinate container
+        fast_feedback::memory_pin pin_crt{fast_feedback::memory_pin::on(crt)};  // pin runtime config memory
 
-        std::array<float, 3*3> buf;                                             // output coordinate container
-        fast_feedback::memory_pin pin_buf{buf};                                 // pin output coordinate container
+        fast_feedback::input<float> in{x.data(), y.data(), z.data(), 1u, i-3u}; // create indexer input object
         fast_feedback::output<float> out{&buf[0], &buf[3], &buf[6], 0u};        // create indexer output object
 
-        fast_feedback::indexer indexer;                                         // indexer object with default config
-        fast_feedback::config_runtime<float> crt{};                             // default runtime config
-        fast_feedback::memory_pin pin_crt(fast_feedback::memory_pin::on(crt));  // pin runtime config memory
         indexer.index(in, out, crt);                                            // run indexer
 
         auto success = true;
