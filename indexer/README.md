@@ -1,3 +1,7 @@
+### Performance issues
+
+* Keep memory for each coordinate dimension separate to avoid a stride of 3 elements in GPU kernels
+
 ### Dependencies
 
 * Minimize indexer API include dependencies, try to rely on standard C++17 only
