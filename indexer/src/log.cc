@@ -1,3 +1,5 @@
+#define _INDEXER_LOG_IMPL_
+
 #include <map>
 #include <string>
 #include <iostream>
@@ -58,7 +60,7 @@ namespace logger {
 
     const char* level_to_string(unsigned log_level)
     {
-        switch (level.load()) {
+        switch (log_level) {
             case l_fatal:
                 return "fatal";
             case l_error:
@@ -73,5 +75,11 @@ namespace logger {
         
         return "undef";
     }
+
+    logger<l_fatal> fatal;
+    logger<l_error> error;
+    logger<l_warn> warn;
+    logger<l_info> info;
+    logger<l_debug> debug;
 
 } // namespace log

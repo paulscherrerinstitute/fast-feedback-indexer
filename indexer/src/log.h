@@ -61,12 +61,14 @@ namespace logger {
         return out;
     }
 
-    // Logger objects
-    inline logger<l_fatal> fatal;
-    inline logger<l_error> error;
-    inline logger<l_warn> warn;
-    inline logger<l_info> info;
-    inline logger<l_debug> debug;
+    #ifndef _INDEXER_LOG_IMPL_
+        // Logger objects
+        extern logger<l_fatal> fatal;
+        extern logger<l_error> error;
+        extern logger<l_warn> warn;
+        extern logger<l_info> info;
+        extern logger<l_debug> debug;
+    #endif
 
 }
 
