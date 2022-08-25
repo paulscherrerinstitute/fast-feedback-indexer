@@ -51,14 +51,14 @@ namespace logger {
                     levels_list.erase(levels_list.size() - 2);
                     throw FF_EXCEPTION_OBJ << "illegal value for " << INDEXER_LOG_LEVEL << ": " << l_string << " (should be in [" << levels_list << "])\n";
                 }
-                level = entry->second;
+                level.store(entry->second);
             }
         } // release logging_init_lock
     }
 
     const char* level_to_string(unsigned log_level)
     {
-        switch (level) {
+        switch (level.load()) {
             case l_fatal:
                 return "fatal";
             case l_error:
