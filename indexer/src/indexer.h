@@ -65,52 +65,59 @@ namespace fast_feedback {
 
     // Indexer object
     //
-    // May keep some persistent state, like GPU memory allocations.
+    // Keeps persistent state, like GPU memory allocations.
     template <typename float_type=float>
     struct indexer final {
         config_persistent<float_type> cpers;    // persistent configuration
         const state_id::type state;             // object instance private state identifier
 
-        // Initialize/reconfigure this instance to persistent state conf
+        // Initialize/reconfigure this instance according to conf
         static void init (indexer<float_type>& instance, const config_persistent<float_type>& conf);
 
         // Drop this instance and its private state
         static void drop (indexer<float_type>& instance);
 
-        inline indexer (const config_persistent<float_type>& c)
+        // Create according to c
+        explicit inline indexer (const config_persistent<float_type>& c)
             : state{state_id::next.fetch_add(1u)}
         { init(*this, c); }
 
+        // Create with default persistent config
         inline indexer ()
             : state{state_id::next.fetch_add(1u)}
         { init(*this, config_persistent<float_type>{}); }
 
+        // Create according to other.cpers
         inline indexer (const indexer& other)
             : state{state_id::next.fetch_add(1u)}
         { init(*this, other.cpers); }
 
+        // Reconfigure according to other.cpers
         inline indexer& operator= (const indexer& other)
         { init(*this, other.cpers); return *this; }
 
+        // Take over others state
         inline indexer (indexer&& other)
-            : cpers{std::move(other.cpers)}, state{other.state}
+            : state(state_id::null), cpers(std::move(other.cpers))
         {
-            const_cast<state_id::type&>(other.state) = state_id::null;
+            std::swap(state, other.state);
         }
 
+        // Take over others state
         inline indexer& operator= (indexer&& other)
         {
-            cpers = std::move(other.cpers);
-            state = other.state;
-            const_cast<state_id::type&>(other.state) = state_id::null;
+            std::swap(cpers, other.cpers);
+            std::swap(state, other.state);
         }
 
+        // Drop if valid
         inline ~indexer ()
         {
             if (state != state_id::null)
                 drop(*this);
         }
 
+        // Run indexing according to conf_rt on in data, put result into out data
         void index (const input<float_type>& in, output<float_type>& out, const config_runtime<float_type>& conf_rt);
     };
 
@@ -118,10 +125,12 @@ namespace fast_feedback {
     struct memory_pin final {
         void* ptr;
 
+        // Nothing is pinned by default
         inline memory_pin()
             : ptr(nullptr)
         {}
 
+        // Pin standard container content
         template<typename Container>
         explicit inline memory_pin(const Container& container)
             : ptr(nullptr)
@@ -131,6 +140,7 @@ namespace fast_feedback {
             ptr = mem_ptr;
         }
 
+        // Raw memory pin
         inline memory_pin(void* mem_ptr, std::size_t num_bytes)
             : ptr(nullptr)
         {
@@ -138,12 +148,14 @@ namespace fast_feedback {
             ptr = mem_ptr;
         }
 
+        // Take over pin from other
         inline memory_pin(memory_pin&& other) noexcept
             : ptr(nullptr)
         {
             std::swap(ptr, other.ptr);
         }
 
+        // Take over pin from other
         inline memory_pin& operator=(memory_pin&& other)
         {
             void* mem_ptr = nullptr;
@@ -154,6 +166,7 @@ namespace fast_feedback {
             return *this;
         }
 
+        // Unpin pinned memory if any
         inline ~memory_pin()
         {
             if (ptr != nullptr) {
@@ -165,6 +178,7 @@ namespace fast_feedback {
         memory_pin(const memory_pin&) = delete;
         memory_pin& operator=(const memory_pin&) = delete;
 
+        // Pin on object
         template<typename Object>
         static inline memory_pin on(const Object& obj)
         {
@@ -172,6 +186,7 @@ namespace fast_feedback {
             return memory_pin(mem_ptr, sizeof(obj));
         }
 
+        // Pin on object underlying the pointer
         template<typename Object>
         static inline memory_pin on(const Object* obj_ptr)
         {
@@ -179,8 +194,8 @@ namespace fast_feedback {
             return memory_pin(mem_ptr, sizeof(*obj_ptr));
         }
 
-        static void pin(void* ptr, std::size_t size);
-        static void unpin(void* ptr);
+        static void pin(void* ptr, std::size_t size);   // Raw memory pin
+        static void unpin(void* ptr);                   // Raw unpin
     };
 
 } // namespace fast_feedback

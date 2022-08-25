@@ -1,3 +1,8 @@
+### Dependencies
+
+* Minimize indexer API include dependencies, try to rely on standard C++17 only
+* Minimize linkage dependencies, try to rely on standard C++177 and CUDA runtime only
+
 ### Memory handling
 
 * All memory should be allocated once at startup

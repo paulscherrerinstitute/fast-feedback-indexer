@@ -28,7 +28,7 @@ namespace {
 
     std::vector<gpu_device> gpu_device::list;
 
-    int gpu_device_number;
+    int gpu_device_number;  // Used gpu device, TODO: allow multiple GPU devices
 
     // Exception for cuda related errors
     struct cuda_exception final : public fast_feedback::exception {
@@ -51,6 +51,7 @@ namespace {
             CU_EXCEPTION(error);   \
     }
 
+    // Deleter for device smart pointers
     template<typename T>
     struct gpu_deleter final {
         void operator()(T* ptr) const
@@ -59,6 +60,7 @@ namespace {
         }
     };
 
+    // Device smart pointer
     template<typename T>
     using gpu_pointer = std::unique_ptr<T, gpu_deleter<T>>;
 
@@ -68,6 +70,7 @@ namespace {
     // Protect cuda runtime initalisation
     std::mutex cuda_init_lock;
 
+    // Init CUDA runtime environment
     void cuda_init()
     {
         if (cuda_initialized.load())
@@ -110,7 +113,7 @@ namespace {
         } // release cuda_init_lock
     }
 
-    // 
+    // On GPU data for indexer
     template<typename float_type>
     struct indexer_device_data final {
         fast_feedback::config_persistent<float_type> cpers;
@@ -145,9 +148,14 @@ namespace {
         float_type* oy;
         float_type* oz;
 
-        static std::mutex state_update;
-        static map_type dev_ptr;
+        static std::mutex state_update; // Protect per indexer state map
+        static map_type dev_ptr;        // Per indexer state map
 
+        // Create hostside on GPU state representation with
+        // d        on GPU state pointer
+        // e        on GPU input and output elements pointed to by *d
+        // x/y/zi   on GPU input pointers d->input.x / y / z
+        // x/y/zo   on GPU output pointers d->output.x / y / z
         indexer_gpu_state(gpu_pointer<content_type>&& d, gpu_pointer<float_type>&& e, float* xi, float* yi, float* zi, float* xo, float* yo, float* zo)
             : data{std::move(d)}, elements{std::move(e)}, ix{xi}, iy{yi}, iz{zi}, ox{xo}, oy{yo}, oz{zo}
         {
@@ -155,12 +163,12 @@ namespace {
             tmp_pin = memory_pin::on(tmp.get());
         }
 
-        indexer_gpu_state() = default;
+        indexer_gpu_state() = default;                                      // Default with some uninitialized pointers
         indexer_gpu_state(const indexer_gpu_state&) = delete;
-        indexer_gpu_state(indexer_gpu_state&&) = default;
+        indexer_gpu_state(indexer_gpu_state&&) = default;                   // Take over state representation
         indexer_gpu_state& operator=(const indexer_gpu_state&) = delete;
-        indexer_gpu_state& operator=(indexer_gpu_state&&) = default;
-        ~indexer_gpu_state() = default;
+        indexer_gpu_state& operator=(indexer_gpu_state&&) = default;        // Take over state representation
+        ~indexer_gpu_state() = default;                                     // Drop on GPU state data
 
         // Shortcut to get at state data pointer
         static inline gpu_pointer<content_type>& ptr(const key_type& id)
@@ -168,11 +176,13 @@ namespace {
             return dev_ptr[id].data;
         }
 
+        // Copy runtime configuration to GPU
         static inline void copy_crt(const key_type& state_id, const fast_feedback::config_runtime<float_type>& crt, cudaStream_t stream=0)
         {
             CU_CHECK(cudaMemcpyAsync(&ptr(state_id)->crt, &crt, sizeof(crt), cudaMemcpyHostToDevice, stream));
         }
 
+        // Copy input data to GPU
         static inline void copy_in(const key_type& state_id, const config_persistent& cpers,
                                    const fast_feedback::input<float_type>& input, cudaStream_t stream=0)
         {
@@ -218,6 +228,7 @@ namespace {
                           << input.z << "-->" << gpu_state.iz << '\n';
         }
 
+        // Copy output data from GPU
         static inline void copy_out(const key_type& state_id, fast_feedback::output<float_type>& output, cudaStream_t stream=0)
         {
             const auto& gpu_state = dev_ptr[state_id];
@@ -248,6 +259,7 @@ namespace {
     //            GPU Kernels
     // -----------------------------------
 
+    // Dummy kernel for dummy indexer test: copy first input cell to output cell
     template<typename float_type>
     __global__ void gpu_index(indexer_device_data<float_type>* data)
     {
@@ -263,6 +275,7 @@ namespace {
 
 namespace gpu {
 
+    // Check for an initialized CUDA runtime
     #define CU_CHECK_INIT {                                      \
         if (! cuda_initialized.load())                           \
             throw FF_EXCEPTION("cuda runtime not initialized");  \
@@ -275,6 +288,7 @@ namespace gpu {
         using device_data = indexer_device_data<float_type>;
 
         cuda_init();
+        drop<float_type>(instance); // drop state if any
 
         const auto state_id = instance.state;
         const auto& cpers = instance.cpers;
@@ -328,6 +342,7 @@ namespace gpu {
         }
     }
 
+    // Drop state if any
     template <typename float_type>
     void drop (const indexer<float_type>& instance)
     {
@@ -337,6 +352,7 @@ namespace gpu {
         gpu_state::dev_ptr.erase(instance.state);
     }
 
+    // Run indexer
     template <typename float_type>
     void index (const indexer<float_type>& instance, const input<float_type>& in, output<float_type>& out, const config_runtime<float_type>& conf_rt)
     {
@@ -350,11 +366,13 @@ namespace gpu {
         gpu_state::copy_out(state_id, out);
     }
 
+    // Raw memory pin
     void pin_memory(void* ptr, std::size_t size)
     {
         CU_CHECK(cudaHostRegister(ptr, size, cudaHostRegisterDefault));
     }
 
+    // Raw memory unpin
     void unpin_memory(void* ptr)
     {
         CU_CHECK(cudaHostUnregister(ptr));
