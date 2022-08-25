@@ -24,6 +24,16 @@ namespace fast_feedback {
         gpu::index(*this, in, out, conf_rt);
     }
 
+    void memory_pin::pin(void* ptr, std::size_t size)
+    {
+        gpu::pin_memory(ptr, size);
+    }
+
+    void memory_pin::unpin(void* ptr)
+    {
+        gpu::unpin_memory(ptr);
+    }
+
     template void indexer<float>::init(indexer<float>&, const config_persistent<float>&);
     template void indexer<float>::drop(indexer<float>&);
     template void indexer<float>::index(const input<float>&, output<float>&, const config_runtime<float>&);

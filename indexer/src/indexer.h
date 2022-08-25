@@ -4,6 +4,7 @@
 // Fast feedback indexer
 
 #include <stdexcept>
+#include <utility>
 #include <atomic>
 
 namespace fast_feedback {
@@ -19,14 +20,14 @@ namespace fast_feedback {
         float_type* x;      // x coordinates
         float_type* y;      // y coordinates
         float_type* z;      // z coordinates
-        unsigned n_cells;   // number of given unit cells
-        unsigned n_spots;   // number of spots
+        unsigned n_cells;   // number of given unit cells (must be before n_spots in memory, see copy_in())
+        unsigned n_spots;   // number of spots (must be after n_cells in memory, see copy_in())
     };
 
     // Output data for fast feedback indexer
     //
     // Output data consists of the (x,y,z) reciprocal space
-    // coordinates of the found unit cell vectors [0..3*n_cells-1]
+    // coordinates of the found unit cell vectors [0..3*n_cells[
     //
     // The coordinate arrays must be of size
     // 3*n_cells at least
@@ -48,8 +49,8 @@ namespace fast_feedback {
     template <typename float_type=float>
     struct config_persistent final {
         unsigned max_output_cells=1;    // maximum number of output unit cells
-        unsigned max_input_cells=1;     // maximum number of input unit cells
-        unsigned max_spots=200;         // maximum number of input spots
+        unsigned max_input_cells=1;     // maximum number of input unit cells, (must be before max_spots in memory, see copy_in())
+        unsigned max_spots=200;         // maximum number of input spots, (must be after max_input_cells in memory, see copy_in())
     };
 
     // Exception type for fast feedback indexer
@@ -111,6 +112,75 @@ namespace fast_feedback {
         }
 
         void index (const input<float_type>& in, output<float_type>& out, const config_runtime<float_type>& conf_rt);
+    };
+
+    // Pin host memory during lifetime of this object
+    struct memory_pin final {
+        void* ptr;
+
+        inline memory_pin()
+            : ptr(nullptr)
+        {}
+
+        template<typename Container>
+        explicit inline memory_pin(const Container& container)
+            : ptr(nullptr)
+        {
+            void* mem_ptr = const_cast<Container&>(container).data();
+            pin(mem_ptr, container.size() * sizeof(typename Container::value_type));
+            ptr = mem_ptr;
+        }
+
+        inline memory_pin(void* mem_ptr, std::size_t num_bytes)
+            : ptr(nullptr)
+        {
+            pin(mem_ptr, num_bytes);
+            ptr = mem_ptr;
+        }
+
+        inline memory_pin(memory_pin&& other) noexcept
+            : ptr(nullptr)
+        {
+            std::swap(ptr, other.ptr);
+        }
+
+        inline memory_pin& operator=(memory_pin&& other)
+        {
+            void* mem_ptr = nullptr;
+            std::swap(ptr, mem_ptr);
+            if (mem_ptr != nullptr)
+                unpin(mem_ptr);
+            std::swap(ptr, other.ptr);
+            return *this;
+        }
+
+        inline ~memory_pin()
+        {
+            if (ptr != nullptr) {
+                unpin(ptr);
+                ptr = nullptr;
+            }
+        }
+
+        memory_pin(const memory_pin&) = delete;
+        memory_pin& operator=(const memory_pin&) = delete;
+
+        template<typename Object>
+        static inline memory_pin on(const Object& obj)
+        {
+            void* mem_ptr = const_cast<Object*>(&obj);
+            return memory_pin(mem_ptr, sizeof(obj));
+        }
+
+        template<typename Object>
+        static inline memory_pin on(const Object* obj_ptr)
+        {
+            void* mem_ptr = const_cast<Object*>(obj_ptr);
+            return memory_pin(mem_ptr, sizeof(*obj_ptr));
+        }
+
+        static void pin(void* ptr, std::size_t size);
+        static void unpin(void* ptr);
     };
 
 } // namespace fast_feedback
