@@ -17,9 +17,9 @@ namespace fast_feedback {
     // - of the spots               [3*n_cells..3*n_cells+n_spots[
     template <typename float_type=float>
     struct input final {
-        float_type* x;      // x coordinates
-        float_type* y;      // y coordinates
-        float_type* z;      // z coordinates
+        float_type* x;      // x coordinates, pinned memory
+        float_type* y;      // y coordinates, pinned memory
+        float_type* z;      // z coordinates, pinned memory
         unsigned n_cells;   // number of given unit cells (must be before n_spots in memory, see copy_in())
         unsigned n_spots;   // number of spots (must be after n_cells in memory, see copy_in())
     };
@@ -33,13 +33,14 @@ namespace fast_feedback {
     // 3*n_cells at least
     template <typename float_type=float>
     struct output final {
-        float_type* x;      // x coordinates
-        float_type* y;      // y coordinates
-        float_type* z;      // z coordinates
+        float_type* x;      // x coordinates, pinned memory
+        float_type* y;      // y coordinates, pinned memory
+        float_type* z;      // z coordinates, pinned memory
         unsigned n_cells;   // number of unit cells
     };
 
     // Configuration setting for the fast feedback indexer runtime state
+    // Memory must be pinned in order to be used as an argument for indexing
     template <typename float_type=float>
     struct config_runtime final {
         float_type angular_step=.02;    // step through sample space [0..pi, 0..pi] with this angular step (radians)
@@ -100,14 +101,14 @@ namespace fast_feedback {
         inline indexer (indexer&& other)
             : state(state_id::null), cpers(std::move(other.cpers))
         {
-            std::swap(state, other.state);
+            std::swap(const_cast<state_id::type&>(state), const_cast<state_id::type&>(other.state));
         }
 
         // Take over others state
         inline indexer& operator= (indexer&& other)
         {
             std::swap(cpers, other.cpers);
-            std::swap(state, other.state);
+            std::swap(const_cast<state_id::type&>(state), const_cast<state_id::type&>(other.state));
         }
 
         // Drop if valid
@@ -118,6 +119,7 @@ namespace fast_feedback {
         }
 
         // Run indexing according to conf_rt on in data, put result into out data
+        // All coordinate data and the runtime config memory must be pinned
         void index (const input<float_type>& in, output<float_type>& out, const config_runtime<float_type>& conf_rt);
     };
 

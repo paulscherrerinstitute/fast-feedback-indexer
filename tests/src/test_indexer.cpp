@@ -57,15 +57,15 @@ int main (int argc, char *argv[])
         fast_feedback::memory_pin pin_y{y};
         fast_feedback::memory_pin pin_z{z};
         fast_feedback::input<float> in{x.data(), y.data(), z.data(), 1u, i-3u}; // create indexer input object
-        fast_feedback::memory_pin pin_in{fast_feedback::memory_pin::on(in)};    // pin indexer input object
 
         std::array<float, 3*3> buf;                                             // output coordinate container
         fast_feedback::memory_pin pin_buf{buf};                                 // pin output coordinate container
         fast_feedback::output<float> out{&buf[0], &buf[3], &buf[6], 0u};        // create indexer output object
-        fast_feedback::memory_pin pin_out{fast_feedback::memory_pin::on(out)};  // pin indexer output object
 
         fast_feedback::indexer indexer;                                         // indexer object with default config
-        indexer.index(in, out, fast_feedback::config_runtime<float>{});         // run indexer with default runtime config
+        fast_feedback::config_runtime<float> crt{};                             // default runtime config
+        fast_feedback::memory_pin pin_crt(fast_feedback::memory_pin::on(crt));  // pin runtime config memory
+        indexer.index(in, out, crt);                                            // run indexer
 
         auto success = true;
         for (unsigned i=0; i<3; ++i) {  // dummy indexing kernel copied first input cell to output cell

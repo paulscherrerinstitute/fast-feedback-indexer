@@ -232,10 +232,12 @@ namespace {
         static inline void copy_out(const key_type& state_id, fast_feedback::output<float_type>& output, cudaStream_t stream=0)
         {
             const auto& gpu_state = dev_ptr[state_id];
+            auto& pinned_tmp = const_cast<config_persistent&>(*gpu_state.tmp);
             const auto& device_data = gpu_state.data;
 
-            CU_CHECK(cudaMemcpyAsync(&output.n_cells, &device_data->output.n_cells, sizeof(output.n_cells), cudaMemcpyDeviceToHost, stream));
+            CU_CHECK(cudaMemcpyAsync(&pinned_tmp.max_output_cells, &device_data->output.n_cells, sizeof(output.n_cells), cudaMemcpyDeviceToHost, stream));
             CU_CHECK(cudaStreamSynchronize(stream));
+            output.n_cells = pinned_tmp.max_output_cells;
 
             if (output.n_cells > 0) {
                 const auto cell_sz = 3 * output.n_cells * sizeof(float_type);
