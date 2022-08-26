@@ -24,6 +24,12 @@ namespace gpu {
     // Unregister host memory
     void unpin_memory(void* ptr);
 
+    // Allocate pinned host memory
+    void* alloc_pinned(std::size_t num_bytes);
+
+    // Deallocate pinned host memory
+    void dealloc_pinned(void* ptr);
+
 } // namespace gpu
 
 #endif

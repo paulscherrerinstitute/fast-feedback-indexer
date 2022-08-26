@@ -5,6 +5,7 @@
 
 #include <stdexcept>
 #include <utility>
+#include<memory>
 #include <atomic>
 
 namespace fast_feedback {
@@ -123,7 +124,8 @@ namespace fast_feedback {
         void index (const input<float_type>& in, output<float_type>& out, const config_runtime<float_type>& conf_rt);
     };
 
-    // Pin host memory during lifetime of this object
+    // Pin allocated memory during the lifetime of this object
+    // Use this for already allocated unpinned memory
     struct memory_pin final {
         void* ptr;
 
@@ -199,6 +201,43 @@ namespace fast_feedback {
         static void pin(void* ptr, std::size_t size);   // Raw memory pin
         static void unpin(void* ptr);                   // Raw unpin
     };
+
+    // Allocate pinned raw memory
+    void* alloc_pinned(std::size_t num_bytes);
+
+    // Deallocate pinned memory
+    void dealloc_pinned(void* ptr);
+
+    // Deleter for pinned smart pointers
+    template<typename T>
+    struct pinned_deleter final {
+        inline void operator()(T* ptr) const
+        {
+            try {
+                ptr->~T();
+            } catch (...) {
+                try {
+                    dealloc_pinned(ptr);
+                } catch (...) {}    // ignore dealloc exception
+                throw;
+            }
+            dealloc_pinned(ptr);
+        }
+    };
+
+    // Pinned smart pointer
+    // Use this for memory allocated with alloc_pinned
+    template<typename T>
+    using pinned_ptr = std::unique_ptr<T, pinned_deleter<T>>;
+
+    // Allocate pinned object
+    template<typename T>
+    inline pinned_ptr<T> alloc_pinned()
+    {
+        pinned_ptr<T> ptr{static_cast<T*>(alloc_pinned(sizeof(T)))};
+        new (ptr.get()) T;
+        return ptr;
+    }
 
 } // namespace fast_feedback
 

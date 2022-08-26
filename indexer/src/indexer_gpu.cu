@@ -135,8 +135,7 @@ namespace {
         gpu_pointer<float_type> elements;   // Input and output vector elements of data on GPU
 
         // Temporary pinned space to transfer n_input_cells, n_output_cells, n_spots
-        std::unique_ptr<config_persistent> tmp; // Pointer to make move construction simple
-        memory_pin tmp_pin;                     // Pin on tmp.get()
+        fast_feedback::pinned_ptr<config_persistent> tmp;   // Pointer to make move construction simple
 
         // Input coordinates on GPU pointing into elements
         float_type* ix;
@@ -159,8 +158,7 @@ namespace {
         indexer_gpu_state(gpu_pointer<content_type>&& d, gpu_pointer<float_type>&& e, float* xi, float* yi, float* zi, float* xo, float* yo, float* zo)
             : data{std::move(d)}, elements{std::move(e)}, ix{xi}, iy{yi}, iz{zi}, ox{xo}, oy{yo}, oz{zo}
         {
-            tmp.reset(new config_persistent{});
-            tmp_pin = memory_pin::on(tmp.get());
+            tmp = fast_feedback::alloc_pinned<config_persistent>();
         }
 
         indexer_gpu_state() = default;                                      // Default with some uninitialized pointers
@@ -378,6 +376,18 @@ namespace gpu {
     void unpin_memory(void* ptr)
     {
         CU_CHECK(cudaHostUnregister(ptr));
+    }
+
+    void* alloc_pinned(std::size_t num_bytes)
+    {
+        void* ptr;
+        CU_CHECK(cudaHostAlloc(&ptr, num_bytes, cudaHostAllocDefault));
+        return ptr;
+    }
+
+    void dealloc_pinned(void* ptr)
+    {
+        CU_CHECK(cudaFreeHost(ptr));
     }
 
     template void init<float> (const indexer<float>&);

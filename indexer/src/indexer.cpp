@@ -34,6 +34,16 @@ namespace fast_feedback {
         gpu::unpin_memory(ptr);
     }
 
+    void* alloc_pinned(std::size_t num_bytes)
+    {
+        return gpu::alloc_pinned(num_bytes);
+    }
+
+    void dealloc_pinned(void* ptr)
+    {
+        gpu::dealloc_pinned(ptr);
+    }
+
     template void indexer<float>::init(indexer<float>&, const config_persistent<float>&);
     template void indexer<float>::drop(indexer<float>&);
     template void indexer<float>::index(const input<float>&, output<float>&, const config_runtime<float>&);
