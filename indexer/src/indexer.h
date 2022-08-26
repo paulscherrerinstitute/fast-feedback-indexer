@@ -126,6 +126,7 @@ namespace fast_feedback {
 
     // Pin allocated memory during the lifetime of this object
     // Use this for already allocated unpinned memory
+    // Watch out when pinning memory that might move (like container data)
     struct memory_pin final {
         void* ptr;
 
@@ -135,6 +136,7 @@ namespace fast_feedback {
         {}
 
         // Pin standard container content
+        // Make sure the container data is not moved during the lifetime of the pin
         template<typename Container>
         explicit inline memory_pin(const Container& container)
             : ptr(nullptr)
@@ -183,6 +185,7 @@ namespace fast_feedback {
         memory_pin& operator=(const memory_pin&) = delete;
 
         // Pin on object
+        // Only works for objects without internally allocated extra memory
         template<typename Object>
         static inline memory_pin on(const Object& obj)
         {
@@ -191,6 +194,7 @@ namespace fast_feedback {
         }
 
         // Pin on object underlying the pointer
+        // Only works for objects without internally allocated extra memory
         template<typename Object>
         static inline memory_pin on(const Object* obj_ptr)
         {
@@ -209,6 +213,7 @@ namespace fast_feedback {
     void dealloc_pinned(void* ptr);
 
     // Deleter for pinned smart pointers
+    // Calls destructor
     template<typename T>
     struct pinned_deleter final {
         inline void operator()(T* ptr) const
@@ -231,6 +236,8 @@ namespace fast_feedback {
     using pinned_ptr = std::unique_ptr<T, pinned_deleter<T>>;
 
     // Allocate pinned object
+    // Calls default constructor
+    // This only works for objects that do not allocate internal extra memory
     template<typename T>
     inline pinned_ptr<T> alloc_pinned()
     {
