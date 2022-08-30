@@ -22,7 +22,7 @@ namespace fast_feedback {
         inline exception& operator=(const exception&) = default;
         inline exception& operator=(exception&&) = default;
 
-        inline virtual ~exception() noexcept
+        inline ~exception() noexcept override
         {}
 
         inline const char* what() const noexcept override
