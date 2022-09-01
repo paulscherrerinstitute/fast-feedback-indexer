@@ -10,10 +10,12 @@ Develop an indexer for fast feedback
 
 ### Build Instructions
 
+Get hold of the Eigen3 library, either by installing it via your distro (e.g. on Ubuntu: `sudo apt install libeigen3-dev`) or download it using `git submodule update`.
+
 ```
 > mkdir build
 > cd build
-> cmake ..
+> cmake -DTEST_ALL=1 -DBUILD_SIMPLE_DATA_READER=1 ..
 > make
 > ctest
 ```
