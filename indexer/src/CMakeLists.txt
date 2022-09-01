@@ -11,5 +11,6 @@ if(BUILD_FAST_INDEXER)
                       log.cc log.h
                       exception.h)
         set_target_properties(fast_indexer PROPERTIES CUDA_ARCHITECTURES "75;80")
+        target_compile_features(fast_indexer PUBLIC cxx_std_17)
         target_include_directories(fast_indexer PUBLIC .)
 endif(BUILD_FAST_INDEXER)
