@@ -24,11 +24,18 @@ namespace logger {
     // Get string representation for log level
     const char* level_to_string(unsigned log_level);
 
+    // Check if log level is active
+    template<unsigned log_level>
+    inline bool level_active() noexcept
+    {
+        return log_level <= level.load();
+    }
+
     // Logger writes to clog
     // Flushes only if log_level is l_fatal
     template<unsigned log_level>
     struct logger final {
-        logger()
+        inline logger()
         {
             init_log_level();
         }
@@ -41,7 +48,7 @@ namespace logger {
     template<typename T, unsigned log_level>
     inline logger<log_level>& operator<<(logger<log_level>& out, const T& value)
     {
-        if (log_level <= level.load())
+        if (level_active<log_level>())
             std::clog << value;
         if constexpr (log_level == l_fatal) {
             std::clog.flush();
@@ -53,7 +60,7 @@ namespace logger {
     template<unsigned log_level>
     inline logger<log_level>& operator<<(logger<log_level>& out, const stanza_type&)
     {
-        if (log_level <= level.load())
+        if (level_active<log_level>())
             std::clog << '(' << level_to_string(log_level) << ") ";
         if constexpr (log_level == l_fatal) {
             std::clog.flush();

@@ -6,6 +6,7 @@
 #include <sstream>
 #include <map>
 #include <memory>
+#include <chrono>
 #include "exception.h"
 #include "log.h"
 #include "indexer_gpu.h"
@@ -113,6 +114,71 @@ namespace {
         } // release cuda_init_lock
     }
 
+    // Check for an initialized CUDA runtime
+    #define CU_CHECK_INIT {                                      \
+        if (! cuda_initialized.load())                           \
+            throw FF_EXCEPTION("cuda runtime not initialized");  \
+    }
+
+    // Cuda event wrapper
+    template<unsigned flags=cudaEventDisableTiming>
+    struct gpu_event final {
+        cudaEvent_t event;
+
+        inline gpu_event()
+            : event{}
+        {}
+
+        gpu_event(const gpu_event&) = delete;
+        gpu_event& operator=(const gpu_event&) = delete;
+
+        gpu_event(gpu_event&& other)
+            : event{}
+        {
+            std::swap(other.event, event);
+        }
+        
+        gpu_event& operator=(gpu_event&& other)
+        {
+            event = cudaEvent_t{};
+            std::swap(other.event, event);
+            return *this;
+        }
+
+        inline ~gpu_event()
+        {
+            if (event != cudaEvent_t{})
+                CU_CHECK(cudaEventDestroy(event));
+        }
+
+        inline void init()
+        {
+            if (event == cudaEvent_t{}) {
+                CU_CHECK_INIT;
+                CU_CHECK(cudaEventCreateWithFlags(&event, flags));
+            }
+        }
+
+        inline void record(cudaStream_t stream=0)
+        {
+            CU_CHECK(cudaEventRecord(event, stream));
+        }
+
+        inline void sync()
+        {
+            CU_CHECK(cudaEventSynchronize(event));
+        }
+    };
+
+    template<unsigned flags>
+    static float gpu_timing(const gpu_event<flags>& start, const gpu_event<flags>& end)
+    {
+        static_assert(!(flags & cudaEventDisableTiming), "GPU timing measurement are only valid on events that don't have the cudaEventDisableTiming flag set");
+        float time;
+        CU_CHECK(cudaEventElapsedTime(&time, start.event, end.event));
+        return time;
+    }
+
     // On GPU compact vector representation
     template<typename float_type>
     struct compact_vec final {
@@ -162,6 +228,10 @@ namespace {
         float_type* oy;
         float_type* oz;
 
+        // Timings
+        gpu_event<cudaEventDefault> start;
+        gpu_event<cudaEventDefault> end;
+
         static std::mutex state_update; // Protect per indexer state map
         static map_type dev_ptr;        // Per indexer state map
 
@@ -186,10 +256,16 @@ namespace {
         indexer_gpu_state& operator=(indexer_gpu_state&&) = default;        // Take over state representation
         ~indexer_gpu_state() = default;                                     // Drop on GPU state data
 
+        // Shortcut to get at reference
+        static inline indexer_gpu_state& ref(const key_type& id)
+        {
+            return dev_ptr[id];
+        }
+
         // Shortcut to get at state data pointer
         static inline gpu_pointer<content_type>& ptr(const key_type& id)
         {
-            return dev_ptr[id].data;
+            return ref(id).data;
         }
 
         // Copy runtime configuration to GPU
@@ -202,7 +278,7 @@ namespace {
         static inline void copy_in(const key_type& state_id, const config_persistent& cpers,
                                    const fast_feedback::input<float_type>& input, cudaStream_t stream=0)
         {
-            const auto& gpu_state = dev_ptr[state_id];
+            const auto& gpu_state = ref(state_id);
             auto& pinned_tmp = const_cast<config_persistent&>(*gpu_state.tmp);
             const auto& device_data = gpu_state.data;
             const auto n_cells = std::min(input.n_cells, cpers.max_input_cells);
@@ -247,7 +323,7 @@ namespace {
         // Copy output data from GPU
         static inline void copy_out(const key_type& state_id, fast_feedback::output<float_type>& output, cudaStream_t stream=0)
         {
-            const auto& gpu_state = dev_ptr[state_id];
+            const auto& gpu_state = ref(state_id);
             auto& pinned_tmp = const_cast<config_persistent&>(*gpu_state.tmp);
             const auto& device_data = gpu_state.data;
 
@@ -297,12 +373,6 @@ namespace {
 }
 
 namespace gpu {
-
-    // Check for an initialized CUDA runtime
-    #define CU_CHECK_INIT {                                      \
-        if (! cuda_initialized.load())                           \
-            throw FF_EXCEPTION("cuda runtime not initialized");  \
-    }
 
     template <typename float_type>
     void init (const indexer<float_type>& instance)
@@ -360,9 +430,9 @@ namespace gpu {
 
             {
                 std::lock_guard<std::mutex> state_lock{gpu_state::state_update};
-                gpu_state::dev_ptr[state_id] = gpu_state{std::move(data_ptr), std::move(element_ptr),
-                                                         std::move(candidate_ptr), std::move(candidate_length_ptr),
-                                                         ix, iy, iz, ox, oy, oz};
+                gpu_state::ref(state_id) = gpu_state{std::move(data_ptr), std::move(element_ptr),
+                                                     std::move(candidate_ptr), std::move(candidate_length_ptr),
+                                                     ix, iy, iz, ox, oy, oz};
             }
 
             logger::debug << stanza << "init id=" << state_id << ", elements=" << elements << ", candidates=" << candidates << '\n'
@@ -394,13 +464,36 @@ namespace gpu {
     void index (const indexer<float_type>& instance, const input<float_type>& in, output<float_type>& out, const config_runtime<float_type>& conf_rt)
     {
         using gpu_state = indexer_gpu_state<float_type>;
+        using clock = std::chrono::high_resolution_clock;
+        using duration = std::chrono::duration<double, std::milli>;
+        using time_point = std::chrono::time_point<clock>;
 
         CU_CHECK_INIT;
         auto state_id = instance.state;
+        auto& state = gpu_state::ref(state_id);
+
+        bool timing = logger::level_active<logger::l_info>();
+        time_point start, end;
+        if (timing) {
+            start = clock::now();
+            state.start.init();
+            state.end.init();
+        }
+        
         gpu_state::copy_crt(state_id, conf_rt);
         gpu_state::copy_in(state_id, instance.cpers, in);
+        state.start.record();
         gpu_index<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get(), indexer_args<float_type>{0u});
+        state.end.record();
         gpu_state::copy_out(state_id, out);
+
+        if (timing) {
+            end = clock::now();
+            duration elapsed = end - start;
+            logger::info << stanza << "indexing_time: " << elapsed.count() << "ms\n";
+            state.end.sync(); // probably unnecessary right now, since copy_out syncs on stream
+            logger::info << stanza << "kernel_time: " << gpu_timing(state.start, state.end) << "ms\n";
+        }
     }
 
     // Raw memory pin
