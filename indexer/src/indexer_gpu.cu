@@ -113,6 +113,14 @@ namespace {
         } // release cuda_init_lock
     }
 
+    // On GPU compact vector representation
+    template<typename float_type>
+    struct compact_vec final {
+        float_type x;
+        float_type y;
+        float_type z;
+    };
+
     // On GPU data for indexer
     template<typename float_type>
     struct indexer_device_data final {
@@ -120,9 +128,14 @@ namespace {
         fast_feedback::config_runtime<float_type> crt;
         fast_feedback::input<float_type> input;
         fast_feedback::output<float_type> output;
+        compact_vec<float_type>* candidates;    // Candidate vector coordinates, [3 * max_input_cells * num_candidate_vectors]
+        float_type* candidate_length;           // Vector length per candidate vector group
     };
 
     // Indexer GPU state representation on the Host side
+    //
+    // Candidate vector group = set of vectors with same length that are candidates for a unit cell vector
+    //
     template<typename float_type>
     struct indexer_gpu_state final {
         using content_type = indexer_device_data<float_type>;
@@ -131,8 +144,10 @@ namespace {
         using config_persistent = fast_feedback::config_persistent<float_type>;
         using memory_pin = fast_feedback::memory_pin;
 
-        gpu_pointer<content_type> data;     // indexer_device_data on GPU
-        gpu_pointer<float_type> elements;   // Input and output vector elements of data on GPU
+        gpu_pointer<content_type> data;                     // indexer_device_data on GPU
+        gpu_pointer<float_type> elements;                   // Input/output vector elements of data on GPU
+        gpu_pointer<compact_vec<float_type>> candidates;    // Candidate vectors on GPU
+        gpu_pointer<float_type> candidate_length;           // Vector length per candidate vector group
 
         // Temporary pinned space to transfer n_input_cells, n_output_cells, n_spots
         fast_feedback::pinned_ptr<config_persistent> tmp;   // Pointer to make move construction simple
@@ -155,8 +170,11 @@ namespace {
         // e        on GPU input and output elements pointed to by *d
         // x/y/zi   on GPU input pointers d->input.x / y / z
         // x/y/zo   on GPU output pointers d->output.x / y / z
-        indexer_gpu_state(gpu_pointer<content_type>&& d, gpu_pointer<float_type>&& e, float* xi, float* yi, float* zi, float* xo, float* yo, float* zo)
-            : data{std::move(d)}, elements{std::move(e)}, ix{xi}, iy{yi}, iz{zi}, ox{xo}, oy{yo}, oz{zo}
+        indexer_gpu_state(gpu_pointer<content_type>&& d, gpu_pointer<float_type>&& e,
+                          gpu_pointer<compact_vec<float_type>>&& c, gpu_pointer<float_type>&& cl,
+                          float_type* xi, float_type* yi, float_type* zi, float_type* xo, float_type* yo, float_type* zo)
+            : data{std::move(d)}, elements{std::move(e)}, candidates{std::move(c)}, candidate_length{std::move(cl)},
+              ix{xi}, iy{yi}, iz{zi}, ox{xo}, oy{yo}, oz{zo}
         {
             tmp = fast_feedback::alloc_pinned<config_persistent>();
         }
@@ -255,13 +273,18 @@ namespace {
     template<> std::mutex indexer_gpu_state<float>::state_update{};
     template<> indexer_gpu_state<float>::map_type indexer_gpu_state<float>::dev_ptr{};
 
+    template<typename float_type>
+    struct indexer_args final {
+        unsigned num_candidate_groups;  // number of candidate vector groups
+    };
+
     // -----------------------------------
     //            GPU Kernels
     // -----------------------------------
 
     // Dummy kernel for dummy indexer test: copy first input cell to output cell
     template<typename float_type>
-    __global__ void gpu_index(indexer_device_data<float_type>* data)
+    __global__ void gpu_index(indexer_device_data<float_type>* data, [[maybe_unused]] indexer_args<float_type> args)
     {
         // NOTE: assume max_output_cells is >= 1u
         for (unsigned i=0; i<3u; ++i) {
@@ -294,6 +317,8 @@ namespace gpu {
         const auto& cpers = instance.cpers;
 
         device_data* data = nullptr;
+        compact_vec<float_type>* candidates = nullptr;
+        float_type* candidate_length = nullptr;
         float* elements = nullptr;
         float* ix;
         float* iy;
@@ -311,6 +336,18 @@ namespace gpu {
             }
             gpu_pointer<float_type> element_ptr{elements};
 
+            {
+                std::size_t vector_dimension = 3 * cpers.num_candidate_vectors * cpers.max_input_cells;
+                CU_CHECK(cudaMalloc(&candidates, vector_dimension * sizeof(compact_vec<float_type>)));
+            }
+            gpu_pointer<compact_vec<float_type>> candidate_ptr{candidates};
+
+            {
+                std::size_t vector_dimension = 3 * cpers.max_input_cells;
+                CU_CHECK(cudaMalloc(&candidate_length, vector_dimension * sizeof(float_type)));
+            }
+            gpu_pointer<float_type> candidate_length_ptr{candidate_length};
+
             std::size_t dim = 3 * cpers.max_output_cells;
             ox = elements;
             oy = ox + dim;
@@ -323,22 +360,22 @@ namespace gpu {
 
             {
                 std::lock_guard<std::mutex> state_lock{gpu_state::state_update};
-                gpu_state::dev_ptr[state_id] = gpu_state{std::move(data_ptr), std::move(element_ptr), ix, iy, iz, ox, oy, oz};
+                gpu_state::dev_ptr[state_id] = gpu_state{std::move(data_ptr), std::move(element_ptr),
+                                                         std::move(candidate_ptr), std::move(candidate_length_ptr),
+                                                         ix, iy, iz, ox, oy, oz};
             }
 
-            logger::debug << stanza << "init id=" << state_id << ", elements=" << elements << '\n'
+            logger::debug << stanza << "init id=" << state_id << ", elements=" << elements << ", candidates=" << candidates << '\n'
                           << stanza << "     ox=" << ox << ", oy=" << oy << ", oz=" << oz << '\n'
                           << stanza << "     ix=" << ix << ", iy=" << iy << ", iz=" << iz << '\n';
         }
 
-        CU_CHECK(cudaMemcpy(&data->cpers, &cpers, sizeof(cpers), cudaMemcpyHostToDevice));
-
         {
-            fast_feedback::output<float_type> output{ox, oy, oz, 0};
-            CU_CHECK(cudaMemcpy(&data->output, &output, sizeof(output), cudaMemcpyHostToDevice));
-
-            fast_feedback::input<float_type> input{ix, iy, iz, 0, 0};
-            CU_CHECK(cudaMemcpy(&data->input, &input, sizeof(input), cudaMemcpyHostToDevice));
+            device_data _data{cpers, fast_feedback::config_runtime<float_type>{},
+                              fast_feedback::input<float_type>{ix, iy, iz, 0, 0},
+                              fast_feedback::output<float_type>{ox, oy, oz, 0},
+                              candidates, candidate_length};
+            CU_CHECK(cudaMemcpy(data, &_data, sizeof(_data), cudaMemcpyHostToDevice));
         }
     }
 
@@ -362,7 +399,7 @@ namespace gpu {
         auto state_id = instance.state;
         gpu_state::copy_crt(state_id, conf_rt);
         gpu_state::copy_in(state_id, instance.cpers, in);
-        gpu_index<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get());
+        gpu_index<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get(), indexer_args<float_type>{0u});
         gpu_state::copy_out(state_id, out);
     }
 

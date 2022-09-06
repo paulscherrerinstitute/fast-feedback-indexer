@@ -41,18 +41,23 @@ namespace fast_feedback {
     };
 
     // Configuration setting for the fast feedback indexer runtime state
+    // These are used to determine GPU kernel grid sizes and calculation thresholds
     // Memory must be pinned in order to be used as an argument for indexing
     template <typename float_type=float>
     struct config_runtime final {
-        float_type angular_step=.02;    // step through sample space [0..pi, 0..pi] with this angular step (radians)
+        float_type angular_step=.02;            // step through sample space [0..pi, 0..pi] with this angular step (radians)
+        float_type length_threshold=.01;        // threshold for determining equal vector length (|va| - threshold < |vb| < |va| + threshold)
     };
 
     // Configuration setting for the fast feedback indexer persistent state
+    // The persistent state determines static GPU memory consumtion
+    // Changing these parameters will cause reallocation of memory on the GPU
     template <typename float_type=float>
     struct config_persistent final {
-        unsigned max_output_cells=1;    // maximum number of output unit cells
-        unsigned max_input_cells=1;     // maximum number of input unit cells, (must be before max_spots in memory, see copy_in())
-        unsigned max_spots=200;         // maximum number of input spots, (must be after max_input_cells in memory, see copy_in())
+        unsigned max_output_cells=1;        // maximum number of output unit cells
+        unsigned max_input_cells=1;         // maximum number of input unit cells, (must be before max_spots in memory, see copy_in())
+        unsigned max_spots=200;             // maximum number of input spots, (must be after max_input_cells in memory, see copy_in())
+        unsigned num_candidate_vectors=30;  // number of candidate vectors (per input cell vector)
     };
 
     // Exception type for fast feedback indexer
