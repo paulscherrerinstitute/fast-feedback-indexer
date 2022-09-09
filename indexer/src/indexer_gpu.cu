@@ -1,3 +1,6 @@
+#ifndef __USE_XOPEN
+#define __USE_XOPEN // for <cmath> M_PI
+#endif
 #include <iostream>
 #include <atomic>
 #include <mutex>
@@ -7,16 +10,24 @@
 #include <map>
 #include <memory>
 #include <chrono>
+#include <cmath>    // for M_PI    
 #include "exception.h"
 #include "log.h"
 #include "indexer_gpu.h"
 #include "cuda_runtime.h"
+#include <cub/cub.cuh>
 
 using logger::stanza;
 
 namespace {
 
     constexpr char INDEXER_GPU_DEVICE[] = "INDEXER_GPU_DEVICE";
+    constexpr unsigned n_threads = 512; // num cuda threads per block for find_candidates kernel
+
+    template<typename float_type>
+    struct constant final {
+        static constexpr float_type pi = M_PI;
+    };
 
     // Cuda device infos
     struct gpu_device final {
@@ -354,13 +365,29 @@ namespace {
         unsigned num_candidate_groups;  // number of candidate vector groups
     };
 
+    template<typename float_type>
+    struct vec_cand_t final {
+        float_type value;   // objective function value
+        unsigned sample;    // | alpha_index | beta_index |
+    };
+
+    template<typename float_type>
+    using BlockRadixSort = cub::BlockRadixSort<float_type, n_threads, 1, unsigned>;
+
     // -----------------------------------
     //            GPU Kernels
     // -----------------------------------
 
+    struct util final {
+        __device__ __forceinline__ static void sincos(float angle, float* sine, float* cosine)
+        {
+            return sincosf(angle, sine, cosine);
+        }
+    };
+
     // Dummy kernel for dummy indexer test: copy first input cell to output cell
     template<typename float_type>
-    __global__ void gpu_index(indexer_device_data<float_type>* data, [[maybe_unused]] indexer_args<float_type> args)
+    __global__ void gpu_dummy_test(indexer_device_data<float_type>* data, [[maybe_unused]] indexer_args<float_type> args)
     {
         // NOTE: assume max_output_cells is >= 1u
         for (unsigned i=0; i<3u; ++i) {
@@ -369,6 +396,35 @@ namespace {
             data->output.z[i] = data->input.z[i];
         }
         data->output.n_cells = 1u;
+    }
+
+    template<typename float_type>
+    __global__ void gpu_find_candidates(indexer_device_data<float_type>* data, [[maybe_unused]] indexer_args<float_type> args)
+    {
+        const float_type angle = data->crt.angular_step;
+        const unsigned steps = static_cast<unsigned>(constant<float_type>::pi / angle);
+        const unsigned sample = blockDim.x * blockIdx.x + threadIdx.x;
+        const unsigned sample_alpha = sample / steps;
+        const unsigned sample_beta = sample % steps;
+        const float_type alpha = sample_alpha * angle;
+        const float_type beta = sample_beta * angle;
+
+        extern __shared__ double* shared_ptr[];
+        auto sort_ptr = reinterpret_cast<typename BlockRadixSort<float_type>::TempStorage*>(shared_ptr);
+        auto cand_ptr = reinterpret_cast<vec_cand_t<float_type>*>(shared_ptr); // [num_candidate_vectors]
+
+        const float_type r = 1.f;
+        float_type r_, z, x, y;
+        util::sincos(alpha, &z, &r_); r_ *= r; z *= r;
+        util::sincos(beta, &x, &y); x *= r_, y*= r_;
+
+        float_type d[1] = {x};
+        unsigned v[1] = {sample};
+        BlockRadixSort<float_type>(*sort_ptr).Sort(d, v);
+
+        if (threadIdx.x < data->cpers.num_candidate_vectors) {
+            cand_ptr[threadIdx.x] = { *d, *v };
+        }
     }
 }
 
@@ -483,7 +539,12 @@ namespace gpu {
         gpu_state::copy_crt(state_id, conf_rt);
         gpu_state::copy_in(state_id, instance.cpers, in);
         state.start.record();
-        gpu_index<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get(), indexer_args<float_type>{0u});
+
+        constexpr unsigned n_blocks = 1024;
+        const unsigned shared_sz = std::max(instance.cpers.num_candidate_vectors * sizeof(vec_cand_t<float_type>),
+                                            sizeof(typename BlockRadixSort<float_type>::TempStorage));
+        gpu_find_candidates<float_type><<<n_blocks, n_threads, shared_sz, 0>>>(gpu_state::ptr(state_id).get(), indexer_args<float_type>{0u});        
+        gpu_dummy_test<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get(), indexer_args<float_type>{0u});
         state.end.record();
         gpu_state::copy_out(state_id, out);
 
