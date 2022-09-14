@@ -27,6 +27,7 @@ namespace {
     template<typename float_type>
     struct constant final {
         static constexpr float_type pi = M_PI;
+        static constexpr float_type pi2 = M_PI_2;
     };
 
     // Cuda device infos
@@ -205,8 +206,8 @@ namespace {
         fast_feedback::config_runtime<float_type> crt;
         fast_feedback::input<float_type> input;
         fast_feedback::output<float_type> output;
-        compact_vec<float_type>* candidates;    // Candidate vector coordinates, [3 * max_input_cells * num_candidate_vectors]
-        float_type* candidate_length;           // Vector length per candidate vector group
+        float_type* candidate_value;            // Candidate vector objective function values, [3 * max_input_cells * num_candidate_vectors]
+        unsigned* candidate_sample;             // Sample number of candidate vectors, [3 * max_input_cells * num_candidate_vectors]
     };
 
     // Indexer GPU state representation on the Host side
@@ -223,8 +224,8 @@ namespace {
 
         gpu_pointer<content_type> data;                     // indexer_device_data on GPU
         gpu_pointer<float_type> elements;                   // Input/output vector elements of data on GPU
-        gpu_pointer<compact_vec<float_type>> candidates;    // Candidate vectors on GPU
-        gpu_pointer<float_type> candidate_length;           // Vector length per candidate vector group
+        gpu_pointer<float_type> candidate_value;            // Candidate vector objective function values on GPU
+        gpu_pointer<unsigned> candidate_sample;             // Sample number of candidate vectors
 
         // Temporary pinned space to transfer n_input_cells, n_output_cells, n_spots
         fast_feedback::pinned_ptr<config_persistent> tmp;   // Pointer to make move construction simple
@@ -249,12 +250,15 @@ namespace {
         // Create hostside on GPU state representation with
         // d        on GPU state pointer
         // e        on GPU input and output elements pointed to by *d
+        // cv       on GPU candidate vector objective function values
+        // cs       on GPU candidate vector sample numbers
         // x/y/zi   on GPU input pointers d->input.x / y / z
         // x/y/zo   on GPU output pointers d->output.x / y / z
         indexer_gpu_state(gpu_pointer<content_type>&& d, gpu_pointer<float_type>&& e,
-                          gpu_pointer<compact_vec<float_type>>&& c, gpu_pointer<float_type>&& cl,
+                          gpu_pointer<float_type>&& cv, gpu_pointer<unsigned>&& cs,
                           float_type* xi, float_type* yi, float_type* zi, float_type* xo, float_type* yo, float_type* zo)
-            : data{std::move(d)}, elements{std::move(e)}, candidates{std::move(c)}, candidate_length{std::move(cl)},
+            : data{std::move(d)}, elements{std::move(e)},
+              candidate_value{std::move(cv)}, candidate_sample{std::move(cs)},
               ix{xi}, iy{yi}, iz{zi}, ox{xo}, oy{yo}, oz{zo}
         {
             tmp = fast_feedback::alloc_pinned<config_persistent>();
@@ -282,7 +286,9 @@ namespace {
         // Copy runtime configuration to GPU
         static inline void copy_crt(const key_type& state_id, const fast_feedback::config_runtime<float_type>& crt, cudaStream_t stream=0)
         {
-            CU_CHECK(cudaMemcpyAsync(&ptr(state_id)->crt, &crt, sizeof(crt), cudaMemcpyHostToDevice, stream));
+            const auto crt_dp = &ptr(state_id)->crt;
+            logger::debug << stanza << "copy runtime config data: " << &crt << "-->" << crt_dp << '\n';
+            CU_CHECK(cudaMemcpyAsync(crt_dp, &crt, sizeof(crt), cudaMemcpyHostToDevice, stream));
         }
 
         // Copy input data to GPU
@@ -322,7 +328,7 @@ namespace {
                         CU_CHECK(cudaMemcpyAsync(&gpu_state.iz[dst_offset], &input.z[src_offset], spot_sz, cudaMemcpyHostToDevice, stream));
                     }
                 }
-                CU_CHECK(cudaStreamSynchronize(stream));
+                // CU_CHECK(cudaStreamSynchronize(stream));
             }
 
             logger::debug << stanza << "copy in: " << n_cells << " cells, " << n_spots << " spots, elements=" << gpu_state.elements.get() << ": "
@@ -362,7 +368,10 @@ namespace {
 
     template<typename float_type>
     struct indexer_args final {
+        float_type candidate_length;    // candidate vector length for current kernel
+        unsigned candidate_group;       // candidate group for current kernel
         unsigned num_candidate_groups;  // number of candidate vector groups
+        unsigned num_angular_steps;     // M_PI / angular_step
     };
 
     template<typename float_type>
@@ -378,10 +387,19 @@ namespace {
     //            GPU Kernels
     // -----------------------------------
 
-    struct util final {
+    template<typename float_type>
+    struct util final {};
+
+    template<>
+    struct util<float> final {
         __device__ __forceinline__ static void sincos(float angle, float* sine, float* cosine)
         {
             return sincosf(angle, sine, cosine);
+        }
+
+        __device__ __forceinline__ static float cos(float angle)
+        {
+            return cosf(angle);
         }
     };
 
@@ -399,31 +417,68 @@ namespace {
     }
 
     template<typename float_type>
-    __global__ void gpu_find_candidates(indexer_device_data<float_type>* data, [[maybe_unused]] indexer_args<float_type> args)
+    __global__ void gpu_find_candidates(indexer_device_data<float_type>* data, indexer_args<float_type> args)
     {
-        const float_type angle = data->crt.angular_step;
-        const unsigned steps = static_cast<unsigned>(constant<float_type>::pi / angle);
-        const unsigned sample = blockDim.x * blockIdx.x + threadIdx.x;
-        const unsigned sample_alpha = sample / steps;
-        const unsigned sample_beta = sample % steps;
-        const float_type alpha = sample_alpha * angle;
-        const float_type beta = sample_beta * angle;
-
         extern __shared__ double* shared_ptr[];
-        auto sort_ptr = reinterpret_cast<typename BlockRadixSort<float_type>::TempStorage*>(shared_ptr);
-        auto cand_ptr = reinterpret_cast<vec_cand_t<float_type>*>(shared_ptr); // [num_candidate_vectors]
 
-        const float_type r = 1.f;
-        float_type r_, z, x, y;
-        util::sincos(alpha, &z, &r_); r_ *= r; z *= r;
-        util::sincos(beta, &x, &y); x *= r_, y*= r_;
+        const unsigned sample = blockDim.x * blockIdx.x + threadIdx.x;
+        const float_type r = args.candidate_length;
+        float_type v{}; // objective function value for sample vector
 
-        float_type d[1] = {x};
-        unsigned v[1] = {sample};
-        BlockRadixSort<float_type>(*sort_ptr).Sort(d, v);
+        {   // calculate v
+            const unsigned n_steps = args.num_angular_steps;
+            const unsigned i_alpha = sample / n_steps;
+            float_type x, y, z; // sample vector
+            {
+                const unsigned i_beta = sample % n_steps;
+                const float_type angle = data->crt.angular_step;
+                const float_type alpha = i_alpha * angle;
+                const float_type beta = i_beta * angle;
 
-        if (threadIdx.x < data->cpers.num_candidate_vectors) {
-            cand_ptr[threadIdx.x] = { *d, *v };
+                float_type r_;
+                util<float_type>::sincos(alpha, &z, &r_); r_ *= r; z *= r;
+                util<float_type>::sincos(beta, &x, &y); x *= r_, y*= r_;
+            }
+
+            if (i_alpha < n_steps) {
+                const fast_feedback::input<float_type>& in = data->input;
+                const float* sx = in.x;
+                const float* sy = in.y;
+                const float* sz = in.z;
+                const unsigned n_cells = in.n_cells;
+                const unsigned n_spots = in.n_spots;
+                
+                unsigned i = 3 * n_cells;
+                const float_type r2 = r * r;
+                do {
+                    const auto p = x * sx[i] + y * sy[i] + z * sz[i];
+                    v -= util<float_type>::cos(constant<float_type>::pi2 * p / r2);
+                } while (++i < n_spots);
+            }
+        }
+
+        const unsigned num_candidate_vectors = data->cpers.num_candidate_vectors;
+        {   // sort within block {objective function value, sample} ascending by objective function value
+            float_type key[1] = {v};
+            unsigned val[1] = {sample};
+            {
+                auto sort_ptr = reinterpret_cast<typename BlockRadixSort<float_type>::TempStorage*>(shared_ptr);
+                BlockRadixSort<float_type>(*sort_ptr).Sort(key, val);
+            }
+            __syncthreads();    // protect sort_ptr[] (it's in the same memory as cand_ptr)
+            {   // store top candidate vectors into cand_ptr
+                auto cand_ptr = reinterpret_cast<vec_cand_t<float_type>*>(shared_ptr); // [num_candidate_vectors]
+                if (threadIdx.x < num_candidate_vectors) {
+                    cand_ptr[threadIdx.x] = { *key, *val };
+                }
+            }
+        }
+        __syncthreads();    // wait for cand_ptr[]
+        {   // merge block result into global 
+            auto value_ptr = &data->candidate_value[args.candidate_group * num_candidate_vectors];
+            auto sample_ptr = &data->candidate_sample[args.candidate_group * num_candidate_vectors];
+
+            // TODO: aquire merge permission, then merge
         }
     }
 }
@@ -443,8 +498,8 @@ namespace gpu {
         const auto& cpers = instance.cpers;
 
         device_data* data = nullptr;
-        compact_vec<float_type>* candidates = nullptr;
-        float_type* candidate_length = nullptr;
+        float_type* candidate_value = nullptr;
+        unsigned* candidate_sample = nullptr;
         float* elements = nullptr;
         float* ix;
         float* iy;
@@ -464,15 +519,15 @@ namespace gpu {
 
             {
                 std::size_t vector_dimension = 3 * cpers.num_candidate_vectors * cpers.max_input_cells;
-                CU_CHECK(cudaMalloc(&candidates, vector_dimension * sizeof(compact_vec<float_type>)));
+                CU_CHECK(cudaMalloc(&candidate_value, vector_dimension * sizeof(float_type)));
             }
-            gpu_pointer<compact_vec<float_type>> candidate_ptr{candidates};
+            gpu_pointer<float_type> candidate_value_ptr{candidate_value};
 
             {
-                std::size_t vector_dimension = 3 * cpers.max_input_cells;
-                CU_CHECK(cudaMalloc(&candidate_length, vector_dimension * sizeof(float_type)));
+                std::size_t vector_dimension = 3 * cpers.num_candidate_vectors * cpers.max_input_cells;
+                CU_CHECK(cudaMalloc(&candidate_sample, vector_dimension * sizeof(unsigned)));
             }
-            gpu_pointer<float_type> candidate_length_ptr{candidate_length};
+            gpu_pointer<unsigned> candidate_sample_ptr{candidate_sample};
 
             std::size_t dim = 3 * cpers.max_output_cells;
             ox = elements;
@@ -487,20 +542,21 @@ namespace gpu {
             {
                 std::lock_guard<std::mutex> state_lock{gpu_state::state_update};
                 gpu_state::ref(state_id) = gpu_state{std::move(data_ptr), std::move(element_ptr),
-                                                     std::move(candidate_ptr), std::move(candidate_length_ptr),
+                                                     std::move(candidate_value_ptr), std::move(candidate_sample_ptr),
                                                      ix, iy, iz, ox, oy, oz};
             }
 
-            logger::debug << stanza << "init id=" << state_id << ", elements=" << elements << ", candidates=" << candidates << '\n'
+            logger::debug << stanza << "init id=" << state_id << ", elements=" << elements << '\n'
                           << stanza << "     ox=" << ox << ", oy=" << oy << ", oz=" << oz << '\n'
-                          << stanza << "     ix=" << ix << ", iy=" << iy << ", iz=" << iz << '\n';
+                          << stanza << "     ix=" << ix << ", iy=" << iy << ", iz=" << iz << '\n'
+                          << stanza << "     candval=" << candidate_value << ", candsmpl=" << candidate_sample << '\n';
         }
 
         {
             device_data _data{cpers, fast_feedback::config_runtime<float_type>{},
                               fast_feedback::input<float_type>{ix, iy, iz, 0, 0},
                               fast_feedback::output<float_type>{ox, oy, oz, 0},
-                              candidates, candidate_length};
+                              candidate_value, candidate_sample};
             CU_CHECK(cudaMemcpy(data, &_data, sizeof(_data), cudaMemcpyHostToDevice));
         }
     }
@@ -535,19 +591,73 @@ namespace gpu {
             state.start.init();
             state.end.init();
         }
+
+        // Check input
+        const auto n_cells = std::min(in.n_cells, instance.cpers.max_input_cells);
+        logger::debug << stanza << "n_cells = " << n_cells << ", n_spots = " << in.n_spots << '\n';
+        if (n_cells <= 0u)
+            throw FF_EXCEPTION("no given input cells");
+        if (in.n_spots <= 0u)
+            throw FF_EXCEPTION("no spots");
+        if (conf_rt.angular_step <= float_type{})
+            throw FF_EXCEPTION("nonpositive angular step");
+        if (conf_rt.angular_step < constant<float_type>::pi / std::numeric_limits<uint16_t>::max())
+            throw FF_EXCEPTION("angular step too small");
         
-        gpu_state::copy_crt(state_id, conf_rt);
-        gpu_state::copy_in(state_id, instance.cpers, in);
-        state.start.record();
+        // Extra indexer arguments
+        indexer_args<float_type> extra_args;
 
-        constexpr unsigned n_blocks = 1024;
-        const unsigned shared_sz = std::max(instance.cpers.num_candidate_vectors * sizeof(vec_cand_t<float_type>),
-                                            sizeof(typename BlockRadixSort<float_type>::TempStorage));
-        gpu_find_candidates<float_type><<<n_blocks, n_threads, shared_sz, 0>>>(gpu_state::ptr(state_id).get(), indexer_args<float_type>{0u});        
-        gpu_dummy_test<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get(), indexer_args<float_type>{0u});
-        state.end.record();
-        gpu_state::copy_out(state_id, out);
+        // Calculate input vector groups
+        std::vector<float_type> candidate_length(3 * n_cells, float_type{});
+        for (unsigned i=0u; i<candidate_length.size(); ++i) {
+            const auto x = in.x[i];
+            const auto y = in.y[i];
+            const auto z = in.z[i];
+            candidate_length[i] = std::sqrt(x*x + y*y + z*z);
+        }
+        {   // Only keep elements that differ by more than length_threshold
+            std::sort(std::begin(candidate_length), std::end(candidate_length), std::greater<float_type>{});
 
+            if (logger::level_active<logger::l_debug>()) {
+                logger::debug << stanza << "candidate_length =";
+                for (const auto& e : candidate_length)
+                    logger::debug << ' ' << e;
+                logger::debug << ", threshold = " << conf_rt.length_threshold << '\n';                
+            }
+            
+            unsigned i=0, j=1;
+            do {
+                if ((candidate_length[i] - candidate_length[j]) < conf_rt.length_threshold) {
+                    logger::debug << stanza << "  ignore " << candidate_length[j] << '\n';
+                } else if (++i != j) {
+                    candidate_length[i] = candidate_length[j];
+                }
+            } while(++j != candidate_length.size());
+            extra_args.num_candidate_groups = i + 1;
+            logger::debug << stanza << "n_candidate_groups = " << extra_args.num_candidate_groups << '\n';
+        }
+        {   // call kernel
+            extra_args.num_angular_steps = constant<float_type>::pi / conf_rt.angular_step;
+            const unsigned n_samples = extra_args.num_angular_steps * extra_args.num_angular_steps;
+            const unsigned n_blocks = (n_samples + n_threads - 1) / n_threads;
+            const unsigned shared_sz = std::max(instance.cpers.num_candidate_vectors * sizeof(vec_cand_t<float_type>),
+                                                sizeof(typename BlockRadixSort<float_type>::TempStorage));
+
+            if (n_samples < instance.cpers.num_candidate_vectors)
+                throw FF_EXCEPTION("fewer samples than required candidate vectors");
+
+            gpu_state::copy_crt(state_id, conf_rt);
+            gpu_state::copy_in(state_id, instance.cpers, in);
+            state.start.record();
+            for (unsigned i=0; i<extra_args.num_candidate_groups; ++i) {
+                extra_args.candidate_length = candidate_length[i];
+                extra_args.candidate_group = i;
+                gpu_find_candidates<float_type><<<n_blocks, n_threads, shared_sz, 0>>>(gpu_state::ptr(state_id).get(), extra_args);
+            }
+            gpu_dummy_test<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get(), extra_args);
+            state.end.record();
+            gpu_state::copy_out(state_id, out);
+        }
         if (timing) {
             end = clock::now();
             duration elapsed = end - start;

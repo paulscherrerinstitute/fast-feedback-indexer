@@ -46,7 +46,7 @@ namespace fast_feedback {
     template <typename float_type=float>
     struct config_runtime final {
         float_type angular_step=.02;            // step through sample space [0..pi, 0..pi] with this angular step (radians)
-        float_type length_threshold=.01;        // threshold for determining equal vector length (|va| - threshold < |vb| < |va| + threshold)
+        float_type length_threshold=.001;      // threshold for determining equal vector length (|va| - threshold < |vb| < |va| + threshold)
     };
 
     // Configuration setting for the fast feedback indexer persistent state
