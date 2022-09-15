@@ -1,11 +1,13 @@
 ### Performance issues
 
 * Keep memory for each coordinate dimension separate to avoid a stride of 3 elements in GPU kernels
+* Consider replacing sort + merge top in gpu_find_candidates with partitioning algorithms
+* unsigned as data type for a block sequentializer in device is most likely inadequate, what is fastest?
 
 ### Dependencies
 
 * Minimize indexer API include dependencies, try to rely on standard C++17 only
-* Minimize linkage dependencies, try to rely on standard C++177 and CUDA runtime only
+* Minimize linkage dependencies, try to rely on standard C++17 and CUDA runtime only
 
 ### Memory handling
 

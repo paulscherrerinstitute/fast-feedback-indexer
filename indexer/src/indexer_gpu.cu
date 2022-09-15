@@ -15,6 +15,7 @@
 #include "log.h"
 #include "indexer_gpu.h"
 #include "cuda_runtime.h"
+#include <cooperative_groups.h>
 #include <cub/cub.cuh>
 
 using logger::stanza;
@@ -208,6 +209,8 @@ namespace {
         fast_feedback::output<float_type> output;
         float_type* candidate_value;            // Candidate vector objective function values, [3 * max_input_cells * num_candidate_vectors]
         unsigned* candidate_sample;             // Sample number of candidate vectors, [3 * max_input_cells * num_candidate_vectors]
+        unsigned seq_block;                     // Sequentializer for thread blocks (explicit init to 0, set to 0 in kernel after use)
+                                                // TODO: use an array of per kernel sequentializers once kernels run in parallel
     };
 
     // Indexer GPU state representation on the Host side
@@ -403,6 +406,102 @@ namespace {
         }
     };
 
+    // acquire block sequentializer in busy wait loop
+    __device__ __forceinline__ void seq_acquire(unsigned& seq)
+    {
+        while (atomicCAS(&seq, 0u, 1u) != 0u);
+    }
+
+    // release block sequentializer
+    __device__ __forceinline__ void seq_release(unsigned& seq)
+    {
+        __stwt(&seq, 0u);
+    }
+
+    // single threaded merge of block local sorted candidate vector array into global sorted candidate vector array
+    template<typename float_type>
+    __device__ __forceinline__ void merge_top(float_type* top_val, unsigned* top_sample, vec_cand_t<float_type>* cand, unsigned n_cand)
+    {
+        // ---- python equivalent ----
+        // def a_top(A, B):
+        //     if A[-1] <= B[0]:
+        //         return
+        //     if B[-1] <= A[0]:
+        //         A[:] = B[:]
+        //         return
+        //     a, b0, b1, b2 = 0, 0, len(B)-1, len(B)-1
+        //     while a < len(A):
+        //         val = A[a]
+        //         if b1 < b2:
+        //             if val < B[b1]:
+        //                 B[b1] = val; b1 -= 1
+        //             if B[b0] < B[b2]:
+        //                 A[a] = B[b0]; b0 += 1
+        //             else:
+        //                 A[a] = B[b2]; b2 -= 1
+        //         else:
+        //             if val > B[b0]:
+        //                 if val < B[b1]:
+        //                     B[b1] = val; b1 -= 1
+        //                 else:
+        //                     A[a:] = B[b0:b0+len(A)-a]
+        //                     return
+        //                 A[a] = B[b0]; b0 += 1
+        //         a += 1
+        // ----------------------------
+        if (top_val[n_cand-1] <= cand[0].value)
+            return;
+
+        if (cand[n_cand-1].value <= top_val[0]) {
+            for (unsigned i=0; i<n_cand; ++i) {
+                top_val[i] = cand[i].value;
+                top_sample[i] = cand[i].sample;
+            }
+            return;
+        }
+
+        unsigned top = 0;
+        unsigned cand0 = 0;
+        unsigned cand1 = n_cand - 1;
+        unsigned cand2 = n_cand - 1;
+
+        while (top < n_cand) {
+            auto val = top_val[top];
+            if (cand1 < cand2) {
+                if (val < cand[cand1].value) {
+                    cand[cand1].value = val;
+                    cand[cand1].sample = top_sample[top];
+                    --cand1;
+                }
+                if (cand[cand0].value < cand[cand2].value) {
+                    top_val[top] = cand[cand0].value;
+                    top_sample[top] = cand[cand0].sample;
+                    ++cand0;
+                } else {
+                    top_val[top] = cand[cand2].value;
+                    top_sample[top] = cand[cand2].sample;
+                    --cand2;
+                }
+            } else if (val > cand[cand0].value) {
+                if (val > cand[cand0].value) {
+                    cand[cand1].value = val;
+                    cand[cand1].sample = top_sample[top];
+                    --cand1;
+                } else {
+                    for (; top<n_cand; ++top, ++cand0) {
+                        top_val[top] = cand[cand0].value;
+                        top_sample[top] = cand[cand0].sample;
+                    }
+                    return;
+                }
+                top_val[top] = cand[cand0].value;
+                top_sample[top] = cand[cand0].sample;
+                ++cand0;
+            }
+            ++top;
+        }
+    }
+
     // Dummy kernel for dummy indexer test: copy first input cell to output cell
     template<typename float_type>
     __global__ void gpu_dummy_test(indexer_device_data<float_type>* data, [[maybe_unused]] indexer_args<float_type> args)
@@ -421,7 +520,7 @@ namespace {
     {
         extern __shared__ double* shared_ptr[];
 
-        const unsigned sample = blockDim.x * blockIdx.x + threadIdx.x;
+        unsigned sample = blockDim.x * blockIdx.x + threadIdx.x;
         const float_type r = args.candidate_length;
         float_type v{}; // objective function value for sample vector
 
@@ -459,26 +558,31 @@ namespace {
 
         const unsigned num_candidate_vectors = data->cpers.num_candidate_vectors;
         {   // sort within block {objective function value, sample} ascending by objective function value
+            auto block = cooperative_groups::this_thread_block();
             float_type key[1] = {v};
             unsigned val[1] = {sample};
             {
                 auto sort_ptr = reinterpret_cast<typename BlockRadixSort<float_type>::TempStorage*>(shared_ptr);
                 BlockRadixSort<float_type>(*sort_ptr).Sort(key, val);
             }
-            __syncthreads();    // protect sort_ptr[] (it's in the same memory as cand_ptr)
-            {   // store top candidate vectors into cand_ptr
-                auto cand_ptr = reinterpret_cast<vec_cand_t<float_type>*>(shared_ptr); // [num_candidate_vectors]
-                if (threadIdx.x < num_candidate_vectors) {
-                    cand_ptr[threadIdx.x] = { *key, *val };
-                }
-            }
+            v = *key;
+            sample = *val;
+            block.sync();   // protect sort_ptr[] (it's in the same memory as cand_ptr)
         }
-        __syncthreads();    // wait for cand_ptr[]
-        {   // merge block result into global 
-            auto value_ptr = &data->candidate_value[args.candidate_group * num_candidate_vectors];
-            auto sample_ptr = &data->candidate_sample[args.candidate_group * num_candidate_vectors];
+        if (threadIdx.x < num_candidate_vectors) {  // store top candidate vectors into cand_ptr
+            auto active = cooperative_groups::coalesced_threads();
+            auto cand_ptr = reinterpret_cast<vec_cand_t<float_type>*>(shared_ptr); // [num_candidate_vectors]
+            cand_ptr[threadIdx.x] = { v, sample };
+            active.sync();  // wait for cand_ptr
 
-            // TODO: aquire merge permission, then merge
+            if (threadIdx.x == 0) { // merge block result into global 
+                auto value_ptr = &data->candidate_value[args.candidate_group * num_candidate_vectors];
+                auto sample_ptr = &data->candidate_sample[args.candidate_group * num_candidate_vectors];
+
+                seq_acquire(data->seq_block);
+                merge_top(value_ptr, sample_ptr, cand_ptr, num_candidate_vectors);
+                seq_release(data->seq_block);
+            }
         }
     }
 }
@@ -556,7 +660,7 @@ namespace gpu {
             device_data _data{cpers, fast_feedback::config_runtime<float_type>{},
                               fast_feedback::input<float_type>{ix, iy, iz, 0, 0},
                               fast_feedback::output<float_type>{ox, oy, oz, 0},
-                              candidate_value, candidate_sample};
+                              candidate_value, candidate_sample, 0};
             CU_CHECK(cudaMemcpy(data, &_data, sizeof(_data), cudaMemcpyHostToDevice));
         }
     }
