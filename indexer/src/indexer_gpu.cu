@@ -15,7 +15,7 @@
 #include "log.h"
 #include "indexer_gpu.h"
 #include "cuda_runtime.h"
-#include <cooperative_groups.h>
+//#include <cooperative_groups.h>
 #include <cub/cub.cuh>
 
 using logger::stanza;
@@ -24,6 +24,7 @@ namespace {
 
     constexpr char INDEXER_GPU_DEVICE[] = "INDEXER_GPU_DEVICE";
     constexpr unsigned n_threads = 512; // num cuda threads per block for find_candidates kernel
+    constexpr unsigned warp_size = 32;  // number of threads in a warp
 
     template<typename float_type>
     struct constant final {
@@ -558,7 +559,6 @@ namespace {
 
         const unsigned num_candidate_vectors = data->cpers.num_candidate_vectors;
         {   // sort within block {objective function value, sample} ascending by objective function value
-            auto block = cooperative_groups::this_thread_block();
             float_type key[1] = {v};
             unsigned val[1] = {sample};
             {
@@ -567,22 +567,26 @@ namespace {
             }
             v = *key;
             sample = *val;
-            block.sync();   // protect sort_ptr[] (it's in the same memory as cand_ptr)
+            __syncthreads();    // protect sort_ptr[] (it's in the same memory as cand_ptr)
         }
-        if (threadIdx.x < num_candidate_vectors) {  // store top candidate vectors into cand_ptr
-            auto active = cooperative_groups::coalesced_threads();
-            auto cand_ptr = reinterpret_cast<vec_cand_t<float_type>*>(shared_ptr); // [num_candidate_vectors]
+
+        auto cand_ptr = reinterpret_cast<vec_cand_t<float_type>*>(shared_ptr); // [num_candidate_vectors]
+        if (threadIdx.x < num_candidate_vectors)    // store top candidate vectors into cand_ptr
             cand_ptr[threadIdx.x] = { v, sample };
-            active.sync();  // wait for cand_ptr
 
-            if (threadIdx.x == 0) { // merge block result into global 
-                auto value_ptr = &data->candidate_value[args.candidate_group * num_candidate_vectors];
-                auto sample_ptr = &data->candidate_sample[args.candidate_group * num_candidate_vectors];
+        if (num_candidate_vectors < warp_size) {    // wait for cand_ptr
+            if (threadIdx.x < warp_size)
+                __syncwarp();
+        } else
+            __syncthreads();
 
-                seq_acquire(data->seq_block);
-                merge_top(value_ptr, sample_ptr, cand_ptr, num_candidate_vectors);
-                seq_release(data->seq_block);
-            }
+        if (threadIdx.x == 0) { // merge block local into global result
+            auto value_ptr = &data->candidate_value[args.candidate_group * num_candidate_vectors];
+            auto sample_ptr = &data->candidate_sample[args.candidate_group * num_candidate_vectors];
+
+            seq_acquire(data->seq_block);
+            merge_top(value_ptr, sample_ptr, cand_ptr, num_candidate_vectors);
+            seq_release(data->seq_block);
         }
     }
 }
