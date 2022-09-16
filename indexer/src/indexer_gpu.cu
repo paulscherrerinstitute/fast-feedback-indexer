@@ -10,13 +10,13 @@
 #include <map>
 #include <memory>
 #include <chrono>
+#include <algorithm>
 #include <cmath>    // for M_PI    
 #include "exception.h"
 #include "log.h"
 #include "indexer_gpu.h"
 #include "cuda_runtime.h"
-//#include <cooperative_groups.h>
-#include <cub/cub.cuh>
+#include <cub/block/block_radix_sort.cuh>
 
 using logger::stanza;
 
@@ -341,6 +341,14 @@ namespace {
                           << input.z << "-->" << gpu_state.iz << '\n';
         }
 
+        static inline void init_cand(const key_type& state_id, const config_persistent& cpers, cudaStream_t stream=0)
+        {
+            const auto max_cand = 3u * cpers.num_candidate_vectors * cpers.max_input_cells;
+            const auto& gpu_state = ref(state_id);
+
+            CU_CHECK(cudaMemsetAsync(gpu_state.candidate_value.get(), 0, max_cand * sizeof(float_type), stream));
+        }
+
         // Copy output data from GPU
         static inline void copy_out(const key_type& state_id, fast_feedback::output<float_type>& output, cudaStream_t stream=0)
         {
@@ -416,6 +424,7 @@ namespace {
     // release block sequentializer
     __device__ __forceinline__ void seq_release(unsigned& seq)
     {
+        __threadfence();
         __stwt(&seq, 0u);
     }
 
@@ -484,7 +493,7 @@ namespace {
                     --cand2;
                 }
             } else if (val > cand[cand0].value) {
-                if (val > cand[cand0].value) {
+                if (val < cand[cand1].value) {
                     cand[cand1].value = val;
                     cand[cand1].sample = top_sample[top];
                     --cand1;
@@ -514,6 +523,18 @@ namespace {
             data->output.z[i] = data->input.z[i];
         }
         data->output.n_cells = 1u;
+
+        // Print out candidate vectors
+        const unsigned ncg = args.num_candidate_groups;
+        const unsigned ncv = data->cpers.num_candidate_vectors;
+        const float_type* cv = data->candidate_value;
+
+        for (unsigned i=0; i<ncg; ++i, cv+=ncv) {
+            printf("cg%u:", i);
+            for (unsigned j=0; j<ncv; ++j)
+                printf(" %0.2f", cv[j]);
+            printf("\n");
+        }
     }
 
     template<typename float_type>
@@ -523,7 +544,7 @@ namespace {
 
         unsigned sample = blockDim.x * blockIdx.x + threadIdx.x;
         const float_type r = args.candidate_length;
-        float_type v{}; // objective function value for sample vector
+        float_type v = 0.f; // objective function value for sample vector
 
         {   // calculate v
             const unsigned n_steps = args.num_angular_steps;
@@ -756,14 +777,15 @@ namespace gpu {
 
             gpu_state::copy_crt(state_id, conf_rt);
             gpu_state::copy_in(state_id, instance.cpers, in);
+            gpu_state::init_cand(state_id, instance.cpers);
             state.start.record();
             for (unsigned i=0; i<extra_args.num_candidate_groups; ++i) {
                 extra_args.candidate_length = candidate_length[i];
                 extra_args.candidate_group = i;
                 gpu_find_candidates<float_type><<<n_blocks, n_threads, shared_sz, 0>>>(gpu_state::ptr(state_id).get(), extra_args);
             }
-            gpu_dummy_test<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get(), extra_args);
             state.end.record();
+            gpu_dummy_test<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get(), extra_args);
             gpu_state::copy_out(state_id, out);
         }
         if (timing) {

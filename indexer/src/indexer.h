@@ -45,7 +45,7 @@ namespace fast_feedback {
     // Memory must be pinned in order to be used as an argument for indexing
     template <typename float_type=float>
     struct config_runtime final {
-        float_type angular_step=.02;            // step through sample space [0..pi, 0..pi] with this angular step (radians)
+        float_type angular_step=.01;           // step through sample space [0..pi, 0..pi] with this angular step (radians)
         float_type length_threshold=.001;      // threshold for determining equal vector length (|va| - threshold < |vb| < |va| + threshold)
     };
 
