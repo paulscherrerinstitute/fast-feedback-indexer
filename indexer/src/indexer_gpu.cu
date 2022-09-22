@@ -28,8 +28,9 @@ namespace {
 
     template<typename float_type>
     struct constant final {
-        static constexpr float_type pi = M_PI;
-        static constexpr float_type pi2 = M_PI_2;
+        // static constexpr float_type pi = M_PI;
+        // static constexpr float_type pi2 = M_PI_2;
+        static constexpr float_type dl = 0.7639320225002102;    // for spiral sample points on a half sphere
     };
 
     // Cuda device infos
@@ -383,7 +384,6 @@ namespace {
         float_type candidate_length;    // candidate vector length for current kernel
         unsigned candidate_group;       // candidate group for current kernel
         unsigned num_candidate_groups;  // number of candidate vector groups
-        unsigned num_angular_steps;     // M_PI / angular_step
     };
 
     template<typename float_type>
@@ -396,7 +396,7 @@ namespace {
     using BlockRadixSort = cub::BlockRadixSort<float_type, n_threads, 1, unsigned>;
 
     // -----------------------------------
-    //            GPU Kernels
+    //            GPU Auxiliary
     // -----------------------------------
 
     template<typename float_type>
@@ -412,6 +412,36 @@ namespace {
         __device__ __forceinline__ static float cos(float angle)
         {
             return cosf(angle);
+        }
+
+        __device__ __forceinline__ static float sqrt(float x)
+        {
+            return sqrtf(x);
+        }
+        
+        __device__ __forceinline__ static float rem(float x, float y)
+        {
+            return remainderf(x, y);
+        }
+
+        __device__ __forceinline__ static float norm(float x, float y, float z)
+        {   // sqrt(x*x + y*y + z*z)
+            return norm3df(x, y, z);
+        }
+
+        __device__ __forceinline__ static float fma(float x, float y, float z)
+        {   // x * y + z
+            return fmaf(x, y, z);
+        }
+
+        __device__ __forceinline__ static void sincospi(float a, float* sinp, float* cosp)
+        {
+            sincospif(a, sinp, cosp);
+        }
+
+        __device__ __forceinline__ static float cospi(float a)
+        {
+            return cospif(a);
         }
     };
 
@@ -512,6 +542,36 @@ namespace {
         }
     }
 
+    // Calculate sample point on half unit sphere
+    // sample_idx   index of sample point 0..n_samples
+    // n_samples    number of sampling points
+    // x, y, z      sample point coordinates on half unit sphere
+    template<typename float_type>
+    __device__ __forceinline__ void sample_point(const unsigned sample_idx, const unsigned n_samples,
+                                                 float_type& x, float_type& y, float_type& z)
+    {
+        // Python equivalent:
+        // N = n_samples
+        // dl = (3. - np.sqrt(5.)) # ~2.39996323 / pi
+        // dz = 1. / N
+        // z = (1. - .5 * dz) - np.arange(0, N, dtype=float) * dz
+        // r = np.sqrt(1. - z * z)
+        // l = np.arange(0, N, dtype=float) * dl
+        // x = np.cos(np.pi * l) * r
+        // y = np.sin(np.pi * l) * r
+        const float_type dz = 1.f / static_cast<float_type>(n_samples);
+        z = util<float_type>::fma(-dz, sample_idx, float_type{1.} - float_type{.5} * dz);
+        const float_type r_xy = util<float_type>::sqrt(util<float_type>::fma(-z, z, 1.));
+        const float_type l = constant<float_type>::dl * static_cast<float_type>(sample_idx);
+        util<float_type>::sincospi(l, &y, &x);
+        x *= r_xy;
+        y *= r_xy;
+    }
+
+    // -----------------------------------
+    //            GPU Kernels
+    // -----------------------------------
+
     // Dummy kernel for dummy indexer test: copy first input cell to output cell
     template<typename float_type>
     __global__ void gpu_dummy_test(indexer_device_data<float_type>* data, [[maybe_unused]] indexer_args<float_type> args)
@@ -527,13 +587,26 @@ namespace {
         // Print out candidate vectors
         const unsigned ncg = args.num_candidate_groups;
         const unsigned ncv = data->cpers.num_candidate_vectors;
-        const float_type* cv = data->candidate_value;
+        const float_type* const cvp = data->candidate_value;
+        const unsigned ns = data->crt.num_sample_points;
+        const unsigned* const csp = data->candidate_sample;
 
-        for (unsigned i=0; i<ncg; ++i, cv+=ncv) {
+        for (unsigned i=0; i<ncg; ++i) {
             printf("cg%u:", i);
+            auto cv = &cvp[i * ncv];
             for (unsigned j=0; j<ncv; ++j)
                 printf(" %0.2f", cv[j]);
             printf("\n");
+        }
+
+        for (unsigned i=0; i<ncg; ++i) {
+            auto cv = &cvp[i * ncv];
+            auto cs = &csp[i * ncv];
+            const float_type v = *cv;
+            const unsigned s = *cs;
+            float_type x, y, z;     // unit length sample vector
+            sample_point(s, ns, x, y, z);
+            printf("%u: v=[%f, %f, %f] # %f\n", i, x, y, z, v);
         }
     }
 
@@ -543,38 +616,25 @@ namespace {
         extern __shared__ double* shared_ptr[];
 
         unsigned sample = blockDim.x * blockIdx.x + threadIdx.x;
+        const unsigned n_samples = data->crt.num_sample_points;
         const float_type r = args.candidate_length;
-        float_type v = 0.f; // objective function value for sample vector
+        float_type v = 0.;  // objective function value for sample vector
 
-        {   // calculate v
-            const unsigned n_steps = args.num_angular_steps;
-            const unsigned i_alpha = sample / n_steps;
-            float_type x, y, z; // sample vector
-            {
-                const unsigned i_beta = sample % n_steps;
-                const float_type angle = data->crt.angular_step;
-                const float_type alpha = i_alpha * angle;
-                const float_type beta = i_beta * angle;
+        if (sample < n_samples) {   // calculate v
+            float_type x, y, z;     // unit length sample vector
+            sample_point(sample, n_samples, x, y, z);
 
-                float_type r_;
-                util<float_type>::sincos(alpha, &z, &r_); r_ *= r; z *= r;
-                util<float_type>::sincos(beta, &x, &y); x *= r_, y*= r_;
-            }
-
-            if (i_alpha < n_steps) {
-                const fast_feedback::input<float_type>& in = data->input;
-                const float* sx = in.x;
-                const float* sy = in.y;
-                const float* sz = in.z;
-                const unsigned n_cells = in.n_cells;
-                const unsigned n_spots = in.n_spots;
-                
-                unsigned i = 3 * n_cells;
-                const float_type r2 = r * r;
-                do {
-                    const auto p = x * sx[i] + y * sy[i] + z * sz[i];
-                    v -= util<float_type>::cos(constant<float_type>::pi2 * p / r2);
-                } while (++i < n_spots);
+            const fast_feedback::input<float_type>& in = data->input;
+            const unsigned n_cells = in.n_cells;
+            const unsigned n_spots = in.n_spots;
+            const float_type* sx = &in.x[3u * n_cells];
+            const float_type* sy = &in.y[3u * n_cells];
+            const float_type* sz = &in.z[3u * n_cells];
+            
+            for (unsigned i=0u; i<n_spots; ++i) {
+                const float_type dp = x * sx[i] + y * sy[i] + z * sz[i];
+                const float_type dv = util<float_type>::cospi(float_type{2.} * dp / r);
+                v -= dv;
             }
         }
 
@@ -728,10 +788,8 @@ namespace gpu {
             throw FF_EXCEPTION("no given input cells");
         if (in.n_spots <= 0u)
             throw FF_EXCEPTION("no spots");
-        if (conf_rt.angular_step <= float_type{})
-            throw FF_EXCEPTION("nonpositive angular step");
-        if (conf_rt.angular_step < constant<float_type>::pi / std::numeric_limits<uint16_t>::max())
-            throw FF_EXCEPTION("angular step too small");
+        if (conf_rt.num_sample_points < 1u)
+            throw FF_EXCEPTION("nonpositive number of sample points");
         
         // Extra indexer arguments
         indexer_args<float_type> extra_args;
@@ -766,8 +824,7 @@ namespace gpu {
             logger::debug << stanza << "n_candidate_groups = " << extra_args.num_candidate_groups << '\n';
         }
         {   // call kernel
-            extra_args.num_angular_steps = constant<float_type>::pi / conf_rt.angular_step;
-            const unsigned n_samples = extra_args.num_angular_steps * extra_args.num_angular_steps;
+            const unsigned n_samples = conf_rt.num_sample_points;
             const unsigned n_blocks = (n_samples + n_threads - 1) / n_threads;
             const unsigned shared_sz = std::max(instance.cpers.num_candidate_vectors * sizeof(vec_cand_t<float_type>),
                                                 sizeof(typename BlockRadixSort<float_type>::TempStorage));
@@ -785,6 +842,9 @@ namespace gpu {
                 gpu_find_candidates<float_type><<<n_blocks, n_threads, shared_sz, 0>>>(gpu_state::ptr(state_id).get(), extra_args);
             }
             state.end.record();
+            for (unsigned i=0; i<extra_args.num_candidate_groups; ++i) {
+                std::cout << i << ": l=" << candidate_length[i] << '\n';
+            }
             gpu_dummy_test<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get(), extra_args);
             gpu_state::copy_out(state_id, out);
         }

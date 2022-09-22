@@ -45,8 +45,8 @@ namespace fast_feedback {
     // Memory must be pinned in order to be used as an argument for indexing
     template <typename float_type=float>
     struct config_runtime final {
-        float_type angular_step=.01;           // step through sample space [0..pi, 0..pi] with this angular step (radians)
-        float_type length_threshold=.001;      // threshold for determining equal vector length (|va| - threshold < |vb| < |va| + threshold)
+        float_type length_threshold=.001;   // threshold for determining equal vector length (|va| - threshold < |vb| < |va| + threshold)
+        unsigned num_sample_points=100000u; // number of sample points on half sphere for finding vector candidates
     };
 
     // Configuration setting for the fast feedback indexer persistent state
