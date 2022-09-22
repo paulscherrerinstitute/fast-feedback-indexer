@@ -2,6 +2,8 @@
 
 Develop an indexer for fast feedback
 
+*Status*: not working yet
+
 ### Build Dependencies
 
 * C++17 compatible compiler
