@@ -51,7 +51,7 @@ int main (int argc, char *argv[])
             iss >> cpers.num_candidate_vectors;
             if (! iss)
                 throw std::runtime_error("unable to parse second argument: number of kept candidate vectors");
-            std::cout << "n_samples=" << cpers.num_candidate_vectors << '\n';
+            std::cout << "n_candidates=" << cpers.num_candidate_vectors << '\n';
         }
 
         SimpleData<float, raise> data(argv[1]);         // read simple data file
