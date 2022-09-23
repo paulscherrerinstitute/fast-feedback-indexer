@@ -30,13 +30,14 @@ namespace fast_feedback {
     // Output data consists of the (x,y,z) reciprocal space
     // coordinates of the found unit cell vectors [0..3*n_cells[
     //
-    // The coordinate arrays must be of size
-    // 3*n_cells at least
+    // The coordinate arrays must be of size 3*n_cells at least,
+    // the score array at least of size n_cells
     template <typename float_type=float>
     struct output final {
         float_type* x;      // x coordinates, pinned memory
         float_type* y;      // y coordinates, pinned memory
         float_type* z;      // z coordinates, pinned memory
+        float_type* score;  // per cell score, pinned memory
         unsigned n_cells;   // number of unit cells
     };
 
@@ -45,7 +46,7 @@ namespace fast_feedback {
     // Memory must be pinned in order to be used as an argument for indexing
     template <typename float_type=float>
     struct config_runtime final {
-        float_type length_threshold=.001;   // threshold for determining equal vector length (|va| - threshold < |vb| < |va| + threshold)
+        float_type length_threshold=1e-6;   // threshold for determining equal vector length (|va| - threshold < |vb| < |va| + threshold)
         unsigned num_sample_points=100000u; // number of sample points on half sphere for finding vector candidates
     };
 
