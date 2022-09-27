@@ -23,8 +23,8 @@ using logger::stanza;
 namespace {
 
     constexpr char INDEXER_GPU_DEVICE[] = "INDEXER_GPU_DEVICE";
-    constexpr unsigned n_threads = 512; // num cuda threads per block for find_candidates kernel
-    constexpr unsigned warp_size = 32;  // number of threads in a warp
+    constexpr unsigned n_threads = 1024;    // num cuda threads per block for find_candidates kernel
+    constexpr unsigned warp_size = 32;      // number of threads in a warp
 
     template<typename float_type>
     struct constant final {
@@ -398,12 +398,6 @@ namespace {
     template<> indexer_gpu_state<float>::map_type indexer_gpu_state<float>::dev_ptr{};
 
     template<typename float_type>
-    struct indexer_args final {
-        unsigned candidate_group;       // candidate group for current kernel
-        unsigned num_candidate_groups;  // number of candidate vector groups
-    };
-
-    template<typename float_type>
     struct vec_cand_t final {
         float_type value;   // objective function value
         unsigned sample;    // | alpha_index | beta_index |
@@ -590,10 +584,15 @@ namespace {
     // -----------------------------------
 
     // Dummy kernel for dummy indexer test: copy first input cell to output cell
+    // gridDim.x = num candidate groups
     template<typename float_type>
-    __global__ void gpu_dummy_test(indexer_device_data<float_type>* data, [[maybe_unused]] indexer_args<float_type> args)
+    __global__ void gpu_dummy_test(indexer_device_data<float_type>* data)
     {
         // NOTE: assume max_output_cells is >= 1u
+        if (blockIdx.x != 0)
+            return;
+        printf("blocks: %u\n", unsigned(gridDim.x));
+
         for (unsigned i=0; i<3u; ++i) {
             data->output.x[i] = data->input.x[i];
             data->output.y[i] = data->input.y[i];
@@ -602,7 +601,7 @@ namespace {
         data->output.n_cells = 1u;
 
         // Print out candidate vectors
-        const unsigned ncg = args.num_candidate_groups;
+        const unsigned ncg = gridDim.x;
         const unsigned ncv = data->cpers.num_candidate_vectors;
         const float_type* const cvp = data->candidate_value;
         const unsigned ns = data->crt.num_sample_points;
@@ -627,14 +626,16 @@ namespace {
         }
     }
 
+    // sample = blockDim.x * blockIdx.x + threadIdx.x
+    // candidate group = blockIdx.y
     template<typename float_type>
-    __global__ void gpu_find_candidates(indexer_device_data<float_type>* data, indexer_args<float_type> args)
+    __global__ void gpu_find_candidates(indexer_device_data<float_type>* data)
     {
         extern __shared__ double* shared_ptr[];
 
         unsigned sample = blockDim.x * blockIdx.x + threadIdx.x;
         const unsigned n_samples = data->crt.num_sample_points;
-        const unsigned c_group = args.candidate_group;
+        const unsigned c_group = blockIdx.y;
         const float_type r = data->candidate_length[c_group];
         float_type v = 0.;  // objective function value for sample vector
 
@@ -680,8 +681,8 @@ namespace {
             __syncthreads();
 
         if (threadIdx.x == 0) { // merge block local into global result
-            auto value_ptr = &data->candidate_value[args.candidate_group * num_candidate_vectors];
-            auto sample_ptr = &data->candidate_sample[args.candidate_group * num_candidate_vectors];
+            auto value_ptr = &data->candidate_value[c_group * num_candidate_vectors];
+            auto sample_ptr = &data->candidate_sample[c_group * num_candidate_vectors];
 
             seq_acquire(data->seq_block[c_group]);
             merge_top(value_ptr, sample_ptr, cand_ptr, num_candidate_vectors);
@@ -848,10 +849,8 @@ namespace gpu {
         if (conf_rt.num_sample_points < instance.cpers.num_candidate_vectors)
             throw FF_EXCEPTION("fewer sample points than required candidate vectors");
         
-        // Extra indexer arguments
-        indexer_args<float_type> extra_args;
-
-        // Calculate input vector groups
+        // Calculate input vector candidate groups
+        unsigned n_cand_groups = 0u;
         std::vector<unsigned> candidate_idx(3 * n_cells_in);
         std::vector<float_type> candidate_length(3 * n_cells_in, float_type{});
         for (unsigned i=0u; i<candidate_length.size(); ++i) {
@@ -879,13 +878,13 @@ namespace gpu {
                     candidate_length[i] = candidate_length[j];
                 }
             } while(++j != candidate_length.size());
-            extra_args.num_candidate_groups = i + 1;
+            n_cand_groups = i + 1;
             for (unsigned i=0u; i<candidate_idx.size(); ++i) {
                 const auto x = in.x[i];
                 const auto y = in.y[i];
                 const auto z = in.z[i];
                 float_type length = std::sqrt(x*x + y*y + z*z);
-                auto it = std::lower_bound(std::cbegin(candidate_length), std::cbegin(candidate_length)+extra_args.num_candidate_groups, length,
+                auto it = std::lower_bound(std::cbegin(candidate_length), std::cbegin(candidate_length) + n_cand_groups, length,
                                         [l_threshold](const float_type& a, const float_type& l) -> bool {
                                                 return (a - l) >= l_threshold;
                                         });
@@ -895,22 +894,19 @@ namespace gpu {
                 logger::debug << stanza << "candidate_idx =";
                 for (const auto& e : candidate_idx)
                     logger::debug << ' ' << e;
-                logger::debug << ", n_cand_groups = " << extra_args.num_candidate_groups << '\n';
+                logger::debug << ", n_cand_groups = " << n_cand_groups << '\n';
             }
         }
         {   // find vector candidates
             const unsigned n_samples = conf_rt.num_sample_points;
-            const unsigned n_blocks = (n_samples + n_threads - 1) / n_threads;
+            const dim3 n_blocks((n_samples + n_threads - 1) / n_threads, n_cand_groups);
             const unsigned shared_sz = std::max(instance.cpers.num_candidate_vectors * sizeof(vec_cand_t<float_type>),
                                                 sizeof(typename BlockRadixSort<float_type>::TempStorage));
             gpu_state::copy_crt(state_id, conf_rt);
             gpu_state::copy_in(state_id, instance.cpers, in);
-            gpu_state::init_cand(state_id, extra_args.num_candidate_groups, instance.cpers, candidate_length);
+            gpu_state::init_cand(state_id, n_cand_groups, instance.cpers, candidate_length);
             state.start.record();
-            for (unsigned i=0; i<extra_args.num_candidate_groups; ++i) {
-                extra_args.candidate_group = i;
-                gpu_find_candidates<float_type><<<n_blocks, n_threads, shared_sz, 0>>>(gpu_state::ptr(state_id).get(), extra_args);
-            }
+            gpu_find_candidates<float_type><<<n_blocks, n_threads, shared_sz, 0>>>(gpu_state::ptr(state_id).get());
         }
         {   // find cells
             const unsigned n_samples = (1.5 * std::sqrt(conf_rt.num_sample_points) + n_threads - 1.) / n_threads;
@@ -920,7 +916,7 @@ namespace gpu {
             gpu_state::init_score(state_id, instance.cpers);
             gpu_find_cells<float_type><<<n_blocks, n_threads, shared_sz, 0>>>(gpu_state::ptr(state_id).get());
             state.end.record();
-            gpu_dummy_test<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get(), extra_args);
+            gpu_dummy_test<float_type><<<n_cand_groups, 1, 0, 0>>>(gpu_state::ptr(state_id).get());
             gpu_state::copy_out(state_id, out);
         }
         if (timing) {
