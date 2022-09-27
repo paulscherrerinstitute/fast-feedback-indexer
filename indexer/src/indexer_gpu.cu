@@ -212,7 +212,6 @@ namespace {
         float_type* candidate_length;           // Candidate vector groups length, [3 * max_input_cells]
         float_type* candidate_value;            // Candidate vector objective function values, [3 * max_input_cells * num_candidate_vectors]
         unsigned* candidate_sample;             // Sample number of candidate vectors, [3 * max_input_cells * num_candidate_vectors]
-        float_type* cell_score;                 // Per output cell score, [max_output_cells]
         unsigned* seq_block;                    // Per candidate vector group sequentializer for thread blocks (explicit init to 0, set to 0 in kernel after use)
     };
 
@@ -233,21 +232,21 @@ namespace {
         gpu_pointer<float_type> candidate_length;           // Candidate vector groups length
         gpu_pointer<float_type> candidate_value;            // Candidate vectors objective function values on GPU
         gpu_pointer<unsigned> candidate_sample;             // Sample number of candidate vectors
-        gpu_pointer<float_type> cell_score;                 // Cells objective function value
         gpu_pointer<unsigned> seq_block;                    // Thread block sequentializers
 
         // Temporary pinned space to transfer n_input_cells, n_output_cells, n_spots
         fast_feedback::pinned_ptr<config_persistent> tmp;   // Pointer to make move construction simple
 
-        // Input coordinates on GPU pointing into elements
+        // Input cell coordinates on GPU pointing into elements
         float_type* ix;
         float_type* iy;
         float_type* iz;
 
-        // Output coordinates on GPU pointing into elements
+        // Output cell coordinates and scores on GPU pointing into elements
         float_type* ox;
         float_type* oy;
         float_type* oz;
+        float_type* cell_score;
 
         // Timings
         gpu_event<cudaEventDefault> start;
@@ -267,12 +266,16 @@ namespace {
         // x/y/zo   on GPU output pointers d->output.x / y / z
         indexer_gpu_state(gpu_pointer<content_type>&& d, gpu_pointer<float_type>&& e,
                           gpu_pointer<float_type>&& cl, gpu_pointer<float_type>&& cv, gpu_pointer<unsigned>&& cs,
-                          gpu_pointer<float_type>&& score, gpu_pointer<unsigned>&& sb,
-                          float_type* xi, float_type* yi, float_type* zi, float_type* xo, float_type* yo, float_type* zo)
+                          gpu_pointer<unsigned>&& sb,
+                          float_type* xi, float_type* yi, float_type* zi,
+                          float_type* xo, float_type* yo, float_type* zo,
+                          float_type* scores)
             : data{std::move(d)}, elements{std::move(e)},
               candidate_length{std::move(cl)}, candidate_value{std::move(cv)}, candidate_sample{std::move(cs)},
-              cell_score{std::move(score)}, seq_block{std::move(sb)},
-              ix{xi}, iy{yi}, iz{zi}, ox{xo}, oy{yo}, oz{zo}
+              seq_block{std::move(sb)},
+              ix{xi}, iy{yi}, iz{zi},
+              ox{xo}, oy{yo}, oz{zo},
+              cell_score{scores}
         {
             tmp = fast_feedback::alloc_pinned<config_persistent>();
         }
@@ -364,7 +367,7 @@ namespace {
             const auto n_cells = cpers.max_output_cells;
             const auto& gpu_state = ref(state_id);
 
-            CU_CHECK(cudaMemsetAsync(gpu_state.cell_score.get(), 0, n_cells * sizeof(float_type), stream));
+            CU_CHECK(cudaMemsetAsync(gpu_state.cell_score, 0, n_cells * sizeof(float_type), stream));
         }
 
         // Copy output data from GPU
@@ -383,7 +386,7 @@ namespace {
                 CU_CHECK(cudaMemcpyAsync(output.x, gpu_state.ox, cell_sz, cudaMemcpyDeviceToHost, stream));
                 CU_CHECK(cudaMemcpyAsync(output.y, gpu_state.oy, cell_sz, cudaMemcpyDeviceToHost, stream));
                 CU_CHECK(cudaMemcpyAsync(output.z, gpu_state.oz, cell_sz, cudaMemcpyDeviceToHost, stream));
-                CU_CHECK(cudaMemcpyAsync(output.score, gpu_state.cell_score.get(), output.n_cells * sizeof(float_type), cudaMemcpyDeviceToHost, stream));
+                CU_CHECK(cudaMemcpyAsync(output.score, gpu_state.cell_score, output.n_cells * sizeof(float_type), cudaMemcpyDeviceToHost, stream));
                 CU_CHECK(cudaStreamSynchronize(stream));
             }
 
@@ -716,15 +719,15 @@ namespace gpu {
         float_type* candidate_length = nullptr;
         float_type* candidate_value = nullptr;
         unsigned* candidate_sample = nullptr;
-        float_type* scores = nullptr;
         unsigned* sequentializers = nullptr;
-        float* elements = nullptr;
-        float* ix;
-        float* iy;
-        float* iz;
-        float* ox;
-        float* oy;
-        float* oz;
+        float_type* elements = nullptr;
+        float_type* ix;
+        float_type* iy;
+        float_type* iz;
+        float_type* ox;
+        float_type* oy;
+        float_type* oz;
+        float_type* scores = nullptr;
         {
             CU_CHECK(cudaMalloc(&data, sizeof(device_data)));
             gpu_pointer<device_data> data_ptr{data};
@@ -740,8 +743,8 @@ namespace gpu {
             }
 
             {
-                std::size_t vector_dimension = 3 * (cpers.max_output_cells + cpers.max_input_cells) + cpers.max_spots;
-                CU_CHECK(cudaMalloc(&elements, 3 * vector_dimension * sizeof(float_type)));
+                std::size_t vector_dimension = 10 * cpers.max_output_cells + 9 * cpers.max_input_cells + 3 * cpers.max_spots;
+                CU_CHECK(cudaMalloc(&elements, vector_dimension * sizeof(float_type)));
             }
             gpu_pointer<float_type> element_ptr{elements};
 
@@ -763,14 +766,11 @@ namespace gpu {
             }
             gpu_pointer<unsigned> candidate_sample_ptr{candidate_sample};
 
-            {
-                std::size_t vector_dimension = cpers.max_output_cells;
-                CU_CHECK(cudaMalloc(&scores, vector_dimension * sizeof(float_type)));
-            }
-            gpu_pointer<float_type> score_ptr{scores};
+            std::size_t dim = cpers.max_output_cells;
+            scores = elements;
 
-            std::size_t dim = 3 * cpers.max_output_cells;
-            ox = elements;
+            ox = elements + dim;
+            dim = 3 * cpers.max_output_cells;
             oy = ox + dim;
             oz = oy + dim;
 
@@ -783,8 +783,10 @@ namespace gpu {
                 std::lock_guard<std::mutex> state_lock{gpu_state::state_update};
                 gpu_state::ref(state_id) = gpu_state{std::move(data_ptr), std::move(element_ptr),
                                                      std::move(candidate_length_ptr), std::move(candidate_value_ptr), std::move(candidate_sample_ptr),
-                                                     std::move(score_ptr), std::move(sequentializers_ptr),
-                                                     ix, iy, iz, ox, oy, oz};
+                                                     std::move(sequentializers_ptr),
+                                                     ix, iy, iz,
+                                                     ox, oy, oz,
+                                                     scores};
             }
 
             logger::debug << stanza << "init id=" << state_id << ", elements=" << elements << '\n'
@@ -796,9 +798,9 @@ namespace gpu {
         {
             device_data _data{cpers, fast_feedback::config_runtime<float_type>{},
                               fast_feedback::input<float_type>{ix, iy, iz, 0, 0},
-                              fast_feedback::output<float_type>{ox, oy, oz, 0},
+                              fast_feedback::output<float_type>{ox, oy, oz, scores, 0},
                               candidate_length, candidate_value, candidate_sample,
-                              scores, sequentializers};
+                              sequentializers};
             CU_CHECK(cudaMemcpy(data, &_data, sizeof(_data), cudaMemcpyHostToDevice));
         }
     }
