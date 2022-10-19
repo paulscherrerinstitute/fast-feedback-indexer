@@ -1,3 +1,28 @@
+/*
+Copyright 2022 Paul Scherrer Institute
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software
+   without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS
+BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+DAMAGE.
+
+------------------------
+
+Author: hans-christian.stadler@psi.ch
+*/
+
 #ifndef __USE_XOPEN
 #define __USE_XOPEN // for <cmath> M_PI
 #endif
@@ -11,7 +36,8 @@
 #include <memory>
 #include <chrono>
 #include <algorithm>
-#include <cmath>    // for M_PI amongst others    
+#include <cmath>    // for M_PI amongst others
+#include <cfloat>   // for FLT_EPSILON and others
 #include "exception.h"
 #include "log.h"
 #include "indexer_gpu.h"
@@ -29,8 +55,9 @@ namespace {
     template<typename float_type>
     struct constant final {
         // static constexpr float_type pi = M_PI;
-        // static constexpr float_type pi2 = M_PI_2;
+        static constexpr float_type pi2 = M_PI_2;
         static constexpr float_type dl = 0.7639320225002102;    // for spiral sample points on a half sphere
+        static constexpr float_type eps = FLT_EPSILON;
     };
 
     // Cuda device infos
@@ -214,6 +241,7 @@ namespace {
         unsigned* candidate_sample;             // Sample number of candidate vectors, [3 * max_input_cells * num_candidate_vectors]
         unsigned* cellvec_to_cand;              // Input cell vector to candidate group mapping, [3 * max_input_cells]
         unsigned* seq_block;                    // Per candidate vector group sequentializer for thread blocks (explicit init to 0, set to 0 in kernel after use)
+                                                //     First sequentializer is also used for candidate cell search
     };
 
     // Indexer GPU state representation on the Host side
@@ -408,7 +436,15 @@ namespace {
     template<typename float_type>
     struct vec_cand_t final {
         float_type value;   // objective function value
-        unsigned sample;    // | alpha_index | beta_index |
+        unsigned sample;    // sample point index
+    };
+
+    template<typename float_type>
+    struct cell_cand_t final {
+        float_type value;   // objective function value
+        unsigned vsample;   // sample point index
+        unsigned rsample;   // sample rotation angle index
+        unsigned cell_vec;  // cell vector index
     };
 
     template<typename float_type>
@@ -423,6 +459,11 @@ namespace {
 
     template<>
     struct util<float> final {
+        __device__ __forceinline__ static float abs(float val)
+        {
+            return fabsf(val);
+        }
+
         __device__ __forceinline__ static void sincos(float angle, float* sine, float* cosine)
         {
             return sincosf(angle, sine, cosine);
@@ -451,6 +492,11 @@ namespace {
         __device__ __forceinline__ static float norm(float x, float y, float z)
         {   // sqrt(x*x + y*y + z*z)
             return norm3df(x, y, z);
+        }
+
+        __device__ __forceinline__ static float rnorm(float x, float y, float z)
+        {   // 1 / sqrt(x*x + y*y + z*z)
+            return rnorm3df(x, y, z);
         }
 
         __device__ __forceinline__ static float fma(float x, float y, float z)
@@ -482,9 +528,85 @@ namespace {
         __stwt(&seq, 0u);
     }
 
+    // a 🞄 a
+    template<typename float_type>
+    __device__ __forceinline__ float_type norm2(const float_type a[3])
+    {
+        return util<float_type>::fma(a[0], a[0], util<float_type>::fma(a[1], a[1], a[2] * a[2]));
+    }
+
+    // a 🞄 b
+    template<typename float_type>
+    __device__ __forceinline__ float_type dot(const float_type a[3], const float_type b[3])
+    {
+        return util<float_type>::fma(a[0], b[0], util<float_type>::fma(a[1], b[1], a[2] * b[2]));
+    }
+
+    // a = b X c
+    template<typename float_type>
+    __device__ __forceinline__ void cross(float_type a[3], const float_type b[3], const float_type c[3])
+    {
+        a[0] = util<float_type>::fma(b[1], c[2], -b[2] * c[1]);
+        a[1] = util<float_type>::fma(b[2], c[0], -b[0] * c[2]);
+        a[2] = util<float_type>::fma(b[0], c[1], -b[1] * c[0]);
+    }
+
+    // a = (a + l * b); a /= |a|
+    template<typename float_type>
+    __device__ __forceinline__ void add_unify(float_type a[3], const float_type b[3], const float_type l)
+    {
+        for (unsigned i=0u; i<3u; i++)
+            a[i] = util<float_type>::fma(l, b[i], a[i]);
+        const float_type f = util<float_type>::rnorm(a[0], a[1], a[2]);
+        for (unsigned i=0u; i<3u; i++)
+            a[i] *= f;
+    }
+
+    // a = 2 * (a 🞄 b) * b - a
+    // pre: |b| == 1
+    template<typename float_type>
+    __device__ __forceinline__ void mirror(float_type a[3], float_type b[3])
+    {
+        // const float_type p2 = float_type{2.f} * dot(a, b);
+        const float_type p2 = float_type{2.f} * dot(a, b);
+        for (unsigned i=0u; i<3u; i++)
+            a[i] = util<float_type>::fma(p2, b[i], -a[i]);
+    }
+
+    // laz = a 🞄 z
+    // x = a - laz * z
+    // x /= |x|
+    // laxy = a 🞄 x
+    // pre: |z| == 1
+    template<typename float_type>
+    __device__ __forceinline__ void project_unify(float_type x[3], const float_type a[3], const float_type z[3],
+                                                  float_type &laz, float_type &laxy)
+    {
+        laz = dot(a, z);
+        for (unsigned i=0u; i<3u; i++)
+            x[i] = util<float_type>::fma(-laz, z[i], a[i]);
+        const float_type f = util<float_type>::rnorm(x[0], x[1], x[2]);
+        for (unsigned i=0u; i<3u; i++)
+            x[i] *= f;
+        laxy = dot(a, x);
+    }
+
+    // a = laz * z + (cos(alpha) * x + sin(alpha) * y) * laxy
+    template<typename float_type>
+    __device__ __forceinline__ void rotate(float_type a[3],
+                                           const float_type x[3], const float_type y[3], const float_type z[3],
+                                           const float_type laz, const float_type laxy,
+                                           const float_type alpha)
+    {
+        float_type s, c;
+        util<float_type>::sincos(alpha, &s, &c);
+        for (unsigned i=0u; i<3u; i++)
+            a[i] = util<float_type>::fma(laz, z[i], (util<float_type>::fma(c, x[i], s * y[i]) * laxy));
+    }
+
     // single threaded merge of block local sorted candidate vector array into global sorted candidate vector array
     template<typename float_type>
-    __device__ __forceinline__ void merge_top(float_type* top_val, unsigned* top_sample, vec_cand_t<float_type>* cand, unsigned n_cand)
+    __device__ __forceinline__ void merge_top_vecs(float_type* top_val, unsigned* top_sample, vec_cand_t<float_type>* cand, unsigned n_cand)
     {
         // ---- python equivalent ----
         // def a_top(A, B):
@@ -566,13 +688,87 @@ namespace {
         }
     }
 
-    // Calculate sample point on half unit sphere
+    // Single threaded merge of block local sorted candidate cell array into global sorted output cell array.
+    // Misuse output cell vector as storage for { score[i]=value, x[i]=vsample, y[i]=rsample, z[i]=cell_vector_index }
+    // Run a separate kernel to expand vsample, rsample, cell_vector_index into cell vectors
+    template<typename float_type>
+    __device__ __forceinline__ void merge_top_cells(fast_feedback::output<float_type>& out, cell_cand_t<float_type>* cand, unsigned n_cand)
+    {
+        if (out.score[n_cand-1] <= cand[0].value)
+            return;
+
+        if (cand[n_cand-1].value <= out.score[0]) {
+            for (unsigned i=0; i<n_cand; ++i) {
+                out.score[i] = cand[i].value;
+                *reinterpret_cast<unsigned*>(&out.x[3u * i]) = cand[i].vsample;
+                *reinterpret_cast<unsigned*>(&out.y[3u * i]) = cand[i].rsample;
+                *reinterpret_cast<unsigned*>(&out.z[3u * i]) = cand[i].cell_vec;
+            }
+            return;
+        }
+
+        unsigned top = 0;
+        unsigned cand0 = 0;
+        unsigned cand1 = n_cand - 1;
+        unsigned cand2 = n_cand - 1;
+
+        while (top < n_cand) {
+            auto val = out.score[top];
+            if (cand1 < cand2) {
+                if (val < cand[cand1].value) {
+                    cand[cand1].value = val;
+                    cand[cand1].vsample = *reinterpret_cast<unsigned*>(&out.x[3u * top]);
+                    cand[cand1].rsample = *reinterpret_cast<unsigned*>(&out.y[3u * top]);
+                    cand[cand1].cell_vec = *reinterpret_cast<unsigned*>(&out.z[3u * top]);
+                    --cand1;
+                }
+                if (cand[cand0].value < cand[cand2].value) {
+                    out.score[top] = cand[cand0].value;
+                    *reinterpret_cast<unsigned*>(&out.x[3u * top]) = cand[cand0].vsample;
+                    *reinterpret_cast<unsigned*>(&out.y[3u * top]) = cand[cand0].rsample;
+                    *reinterpret_cast<unsigned*>(&out.z[3u * top]) = cand[cand0].cell_vec;
+                    ++cand0;
+                } else {
+                    out.score[top] = cand[cand2].value;
+                    *reinterpret_cast<unsigned*>(&out.x[3u * top]) = cand[cand2].vsample;
+                    *reinterpret_cast<unsigned*>(&out.y[3u * top]) = cand[cand2].rsample;
+                    *reinterpret_cast<unsigned*>(&out.z[3u * top]) = cand[cand2].cell_vec;
+                    --cand2;
+                }
+            } else if (val > cand[cand0].value) {
+                if (val < cand[cand1].value) {
+                    cand[cand1].value = val;
+                    cand[cand1].vsample = *reinterpret_cast<unsigned*>(&out.x[3u * top]);
+                    cand[cand1].rsample = *reinterpret_cast<unsigned*>(&out.y[3u * top]);
+                    cand[cand1].cell_vec = *reinterpret_cast<unsigned*>(&out.z[3u * top]);
+                    --cand1;
+                } else {
+                    for (; top<n_cand; ++top, ++cand0) {
+                        out.score[top] = cand[cand0].value;
+                        *reinterpret_cast<unsigned*>(&out.x[3u * top]) = cand[cand0].vsample;
+                        *reinterpret_cast<unsigned*>(&out.y[3u * top]) = cand[cand0].rsample;
+                        *reinterpret_cast<unsigned*>(&out.z[3u * top]) = cand[cand0].cell_vec;
+                    }
+                    return;
+                }
+                out.score[top] = cand[cand0].value;
+                *reinterpret_cast<unsigned*>(&out.x[3u * top]) = cand[cand0].vsample;
+                *reinterpret_cast<unsigned*>(&out.y[3u * top]) = cand[cand0].rsample;
+                *reinterpret_cast<unsigned*>(&out.z[3u * top]) = cand[cand0].cell_vec;
+                ++cand0;
+            }
+            ++top;
+        }
+    }
+
+    // Calculate sample point on half unit sphere multiplied by factor
     // sample_idx   index of sample point 0..n_samples
     // n_samples    number of sampling points
-    // x, y, z      sample point coordinates on half unit sphere
+    // v            sample point coordinates on half unit sphere multiplied by factor
+    // factor       multiplication factor
     template<typename float_type>
     __device__ __forceinline__ void sample_point(const unsigned sample_idx, const unsigned n_samples,
-                                                 float_type& x, float_type& y, float_type& z)
+                                                 float_type v[3], const float_type factor=float_type{1.})
     {
         // Python equivalent:
         // N = n_samples
@@ -583,49 +779,185 @@ namespace {
         // l = np.arange(0, N, dtype=float) * dl
         // x = np.cos(np.pi * l) * r
         // y = np.sin(np.pi * l) * r
-        const float_type dz = 1.f / static_cast<float_type>(n_samples);
-        z = util<float_type>::fma(-dz, sample_idx, float_type{1.} - float_type{.5} * dz);
-        const float_type r_xy = util<float_type>::sqrt(util<float_type>::fma(-z, z, 1.));
+        float_type& x = v[0];
+        float_type& y = v[1];
+        float_type& z = v[2];
+        const float_type dz = float_type{1.} / static_cast<float_type>(n_samples);
+        z = util<float_type>::fma(-dz, sample_idx, util<float_type>::fma(float_type{-.5}, dz, float_type{1.}));
+        const float_type r_xy = factor * util<float_type>::sqrt(util<float_type>::fma(-z, z, 1.));
         const float_type l = constant<float_type>::dl * static_cast<float_type>(sample_idx);
         util<float_type>::sincospi(l, &y, &x);
         x *= r_xy;
         y *= r_xy;
+        z *= factor;
     }
 
-    // Calculate angles for sample point on half unit sphere, see sample_point()
-    // sample_idx   index of sample point 0..n_samples
-    // n_samples    number of sampling points
-    // alpha        tilt angle from z-axis [0 - pi/2[
-    // beta         counter clockwise rotation ouround z-axis from x-axis [0 - 2*pi[
+    // Get sample cell vectors a, b, and unified c
+    // z            sample cell vector c scaled to unit length
+    // a            sample cell vector a
+    // b            sample cell vector b
+    // cx           input cell vectors x coordinates
+    // cy           input cell vectors y coordinates
+    // cz           input cell vectors z coordinates
+    // vlength      length of sample cell vector c
+    // vsample      sample point index of sample cell vector c [0 .. n_vsamples[
+    // n_vsamples   number of sample points on the half sphere
+    // rsample      sample rotation angle index of sample cell [0 .. n_rsamples[
+    // n_rsamples   number of sample angles around sample cell vector c
+    // cell_vec     input cell vector index [0 .. 3*n_input_cells[
     template<typename float_type>
-    __device__ __forceinline__ void sample_angles(const unsigned sample_idx, const unsigned n_samples,
-                                                  float_type& alpha, float_type& beta)
+    __device__ __forceinline__ void sample_cell(float_type z[3], float_type a[3], float_type b[3],
+                                                const float_type* cx, const float_type* cy, const float_type* cz,                                                
+                                                const float_type vlength,
+                                                const unsigned vsample, const unsigned n_vsamples,
+                                                const unsigned rsample, const unsigned n_rsamples,
+                                                const unsigned cell_vec)
     {
-        const float_type dz = 1.f / static_cast<float_type>(n_samples);
-        const float_type z = util<float_type>::fma(-dz, sample_idx, float_type{1.} - float_type{.5} * dz);
-        alpha = util<float_type>::acos(z);
-        const float_type l = constant<float_type>::dl * static_cast<float_type>(sample_idx);
-        beta = util<float_type>::rem(l, float_type{2.});
+        // if ((blockIdx.x == 0) && (blockIdx.y == 0) && (blockIdx.z == 0) && (threadIdx.x == 0))
+        //     printf("sample_cell\n");
+        const unsigned cell_base = cell_vec / 3u;
+        float_type t[3] = { cx[cell_vec], cy[cell_vec], cz[cell_vec] };
+        sample_point(vsample, n_vsamples, z);
+        // Align cell to sample vector z by mirroring on z + t
+        add_unify(t, z, vlength);
+        unsigned idx = cell_base + (cell_vec + 1u) % 3u;
+        a[0] = cx[idx]; a[1] = cy[idx]; a[2] = cz[idx];
+        idx = cell_base + (cell_vec + 2u) % 3u;
+        b[0] = cx[idx]; b[1] = cy[idx]; b[2] = cz[idx];
+        // if ((blockIdx.x == 0) && (blockIdx.y == 0) && (blockIdx.z == 0) && (threadIdx.x == 0))
+        //     printf("-- orig z=%f %f %f, a=%f %f %f, b=%f %f %f\n", z[0], z[1], z[2], a[0], a[1], a[2], b[0], b[1], b[2]);
+
+        mirror(a, t);
+        mirror(b, t);
+        // if ((blockIdx.x == 0) && (blockIdx.y == 0) && (blockIdx.z == 0) && (threadIdx.x == 0))
+        //     printf("-- mirror t=%f %f %f, a=%f %f %f, b=%f %f %f\n", t[0], t[1], t[2], a[0], a[1], a[2], b[0], b[1], b[2]);
+
+        // Basis perpendicular to z and projections of a/b to z, xy
+        float_type x[3], laz, laxy;         // unit vector x, length of a projected to z and xy plane ⊥ v
+        float_type y[3], lbz, lbxy;         // unit vector y, length of b projected to z and xy plane ⊥ v
+        project_unify(x, a, z, laz, laxy);
+        project_unify(t, b, z, lbz, lbxy);
+        cross(y, z, x);
+        // if ((blockIdx.x == 0) && (blockIdx.y == 0) && (blockIdx.z == 0) && (threadIdx.x == 0))
+        //     printf("-- base z=%f %f %f, x=%f %f %f, y=%f %f %f, laz=%f, laxy=%f, lbz=%f, lbxy=%f\n", z[0], z[1], z[2], x[0], x[1], x[2], y[0], y[1], y[2], laz, laxy, lbz, lbxy);
+
+        // Rotation around z for a, b
+        float_type delta = util<float_type>::acos(dot(t, x));                   // angle delta between axy and bxy vectors
+        if (dot(t, y) < .0f)
+            delta = -delta;
+        float_type alpha = rsample * constant<float_type>::pi2 / n_rsamples;    // sample angle
+        rotate(a, x, y, z, laz, laxy, alpha);
+        rotate(b, x, y, z, lbz, lbxy, alpha + delta);
+        // if ((blockIdx.x == 0) && (blockIdx.y == 0) && (blockIdx.z == 0) && (threadIdx.x == 0))
+        //     printf("-- rotate a=%f %f %f, b=%f %f %f, alpha=%f, delta=%f\n", a[0], a[1], a[2], b[0], b[1], b[2], alpha, delta);
     }
 
-    // Minimum of 3 values
-    // Returns the index of the minimum value
+    // sum(s ∈ spots | s 🞄 v >= eps) -cospi(2 * |s|² / s 🞄 v)
+    // v        sample vector
+    // s{x,y,z} spot coordinate pointers [n_spots]
+    // n_spots  number of spots
     template<typename float_type>
-    __device__ __forceinline__ std::uint8_t min3(const float_type v0, const float_type v1, const float_type v2)
+    __device__ __forceinline__ float_type sample1(const float_type v[3],
+                                                  const float_type *sx, const float_type *sy, const float_type *sz,
+                                                  const unsigned n_spots)
     {
-        if (v0 <= v1) {
-            if (v0 <= v2)
-                return 0u;
-        } else {
-            if (v1 <= v2)
-                return 1u;
+        float_type sval = float_type{0.f};
+        for (unsigned i=0u; i<n_spots; i++) {
+            const float_type s[3] = { sx[i], sy[i], sz[i] };
+            const float_type dp = dot(v, s);
+            if (util<float_type>::abs(dp) >= constant<float_type>::eps) {
+                const float_type n2 = norm2(s);
+                const float_type dv = util<float_type>::fma(.5f, util<float_type>::cospi(float_type{2.f} * n2 / dp), .5f);
+                sval -= dv;
+            }
         }
-        return 2u;
+        return sval;
+    }
+
+    // sum(s ∈ spots | s 🞄 v >= eps) -cospi(2 * |s|² / s 🞄 vi) for i in [1,2]
+    // v1, v2   sample vectors
+    // s{x,y,z} spot coordinate pointers [n_spots]
+    // n_spots  number of spots
+    template<typename float_type>
+    __device__ __forceinline__ float_type sample2(const float_type v1[3], const float_type v2[3],
+                                                  const float_type *sx, const float_type *sy, const float_type *sz,
+                                                  const unsigned n_spots)
+    {
+        // if ((blockIdx.x == 0) && (blockIdx.y == 0) && (blockIdx.z == 0) && (threadIdx.x == 0))
+        //     printf("sample2\n");
+
+        float_type sval = float_type{0.f};
+        for (unsigned i=0u; i<n_spots; i++) {
+            const float_type s[3] = { sx[i], sy[i], sz[i] };
+            const float_type n2x2 = float_type{2.f} * norm2(s);
+            {   // handle v1
+                const float_type dp = dot(v1, s);
+                if (util<float_type>::abs(dp) >= constant<float_type>::eps) {
+                    const float_type dv = util<float_type>::fma(.5f, util<float_type>::cospi(n2x2 / dp), .5f);
+                    sval -= dv;
+                }
+            }
+            {   // handle v2
+                const float_type dp = dot(v2, s);
+                if (util<float_type>::abs(dp) >= constant<float_type>::eps) {
+                    const float_type dv = util<float_type>::fma(.5f, util<float_type>::cospi(n2x2 / dp), .5f);
+                    sval -= dv;
+                }
+            }
+        }
+        return sval;
     }
 
     // -----------------------------------
     //            GPU Kernels
     // -----------------------------------
+
+    template<typename float_type>
+    __global__ void gpu_debug_ouput(indexer_device_data<float_type>* data, const unsigned kind)
+    {
+        printf("### debug\n");
+        if (kind == 0u) {
+            // Print out candidate vectors
+            const unsigned ncv = data->cpers.num_candidate_vectors;
+            const float_type* const cvp = data->candidate_value;
+            const unsigned ns = data->crt.num_sample_points;
+            const unsigned* const csp = data->candidate_sample;
+
+            unsigned ncg = 0u;
+            const unsigned n_cells_in  = data->input.n_cells;
+            for (unsigned i=0; i<n_cells_in; ++i) {
+                printf("input cell%u cgi:", i);
+                for (unsigned j=3*i; j<3*i+3; ++j) {
+                    unsigned cg = data->cellvec_to_cand[j];
+                    printf(" %u", cg);
+                    if (cg > ncg)
+                        ncg = cg;
+                }
+                printf("\n");
+            }
+
+            for (unsigned i=0; i<=ncg; ++i) {
+                printf("cg%u:", i);
+                auto cv = &cvp[i * ncv];
+                for (unsigned j=0; j<ncv; ++j)
+                    printf(" %0.2f", cv[j]);
+                printf("\n");
+            }
+        }
+
+        const fast_feedback::output<float_type>& out = data->output;
+        const unsigned n_cells_out  = data->cpers.max_output_cells;
+        for (unsigned i=0; i<n_cells_out; ++i) {
+            printf("output cell%u s=%f:\n", i, out.score[i]);
+            for (unsigned j=3*i; j<3*i+3; ++j) {
+                if (kind == 0u)
+                    printf(" %f  %f  %f\n", out.x[j], out.y[j], out.z[j]);
+                else
+                    printf(" %u  %u  %u\n", (unsigned)out.x[j], (unsigned)out.y[j], (unsigned)out.z[j]);
+            }
+        }
+        printf("###\n");
+    }
 
     // Dummy kernel for dummy indexer test: copy first input cell to output cell
     // gridDim.x = num candidate groups
@@ -672,9 +1004,9 @@ namespace {
             auto cs = &csp[i * ncv];
             const float_type v = *cv;
             const unsigned s = *cs;
-            float_type x, y, z;     // unit length sample vector
-            sample_point(s, ns, x, y, z);
-            printf("%u: v=[%f, %f, %f] # %f\n", i, x, y, z, v);
+            float_type sv[3];       // unit length sample vector
+            sample_point(s, ns, sv);
+            printf("%u: v=[%f, %f, %f] # %f\n", i, sv[0], sv[1], sv[2], v);
         }
     }
 
@@ -688,12 +1020,12 @@ namespace {
         unsigned sample = blockDim.x * blockIdx.x + threadIdx.x;
         const unsigned n_samples = data->crt.num_sample_points;
         const unsigned c_group = blockIdx.y;
-        const float_type r = data->candidate_length[c_group];
         float_type v = 0.;  // objective function value for sample vector
 
         if (sample < n_samples) {   // calculate v
-            float_type x, y, z;     // unit length sample vector
-            sample_point(sample, n_samples, x, y, z);
+            const float_type r = data->candidate_length[c_group];
+            float_type sv[3];       // sample vector
+            sample_point(sample, n_samples, sv, r);
 
             const unsigned spot_offset = 3 * data->cpers.max_input_cells;
             const fast_feedback::input<float_type>& in = data->input;
@@ -702,14 +1034,9 @@ namespace {
             const float_type* sy = &in.y[spot_offset];
             const float_type* sz = &in.z[spot_offset];
             
-            for (unsigned i=0u; i<n_spots; ++i) {
-                const float_type dp = x * sx[i] + y * sy[i] + z * sz[i];
-                const float_type dv = util<float_type>::cospi(float_type{2.} * dp / r);
-                v -= dv;
-            }
+            v = sample1(sv, sx, sy, sz, n_spots);
         }
 
-        const unsigned num_candidate_vectors = data->cpers.num_candidate_vectors;
         {   // sort within block {objective function value, sample} ascending by objective function value
             float_type key[1] = {v};
             unsigned val[1] = {sample};
@@ -722,6 +1049,7 @@ namespace {
             __syncthreads();    // protect sort_ptr[] (it's in the same memory as cand_ptr)
         }
 
+        const unsigned num_candidate_vectors = data->cpers.num_candidate_vectors;
         auto cand_ptr = reinterpret_cast<vec_cand_t<float_type>*>(shared_ptr); // [num_candidate_vectors]
         if (threadIdx.x < num_candidate_vectors)    // store top candidate vectors into cand_ptr
             cand_ptr[threadIdx.x] = { v, sample };
@@ -737,46 +1065,126 @@ namespace {
             auto sample_ptr = &data->candidate_sample[c_group * num_candidate_vectors];
 
             seq_acquire(data->seq_block[c_group]);
-            merge_top(value_ptr, sample_ptr, cand_ptr, num_candidate_vectors);
+            merge_top_vecs(value_ptr, sample_ptr, cand_ptr, num_candidate_vectors);
             seq_release(data->seq_block[c_group]);
+        }
+
+        // clear output cell scores
+        if (sample < data->cpers.max_output_cells) {
+            data->output.score[sample] = float_type{.0f};
         }
     }
 
-    // sample = blockDim.x * blockIdx.x + threadIdx.x
-    // input cell = blockIdx.y
+    // sample rotation angle index = blockDim.x * blockIdx.x + threadIdx.x
+    // input cell vector index = blockIdx.y
+    // sample vector index = blockIdx.z
     template<typename float_type>
-    __global__ void gpu_find_cells(indexer_device_data<float_type>* data, unsigned n_samples)
+    __global__ void gpu_find_cells(indexer_device_data<float_type>* data)
     {
-        const fast_feedback::input<float_type>& in = data->input;
-        const unsigned cell_base = 3 * blockIdx.y;
-        const float_type* cx = &in.x[cell_base];
-        const float_type* cy = &in.y[cell_base];
-        const float_type* cz = &in.z[cell_base];
-        const unsigned* v2c = &data->cellvec_to_cand[cell_base];
-        const unsigned spot_offset = 3 * data->cpers.max_input_cells;
-        const float_type* sx = &in.x[spot_offset];
-        const float_type* sy = &in.y[spot_offset];
-        const float_type* sz = &in.z[spot_offset];
-        const unsigned n_spots = in.n_spots;
-        const unsigned cand_step = data->cpers.num_candidate_vectors;
-        const unsigned* cs[3] = {&data->candidate_sample[v2c[0] * cand_step],
-                                 &data->candidate_sample[v2c[1] * cand_step],
-                                 &data->candidate_sample[v2c[2] * cand_step]};
-        const float_type* cv[3] = {&data->candidate_value[v2c[0] * cand_step],
-                                   &data->candidate_value[v2c[1] * cand_step],
-                                   &data->candidate_value[v2c[2] * cand_step]};
-        const float_type* cl[3] = {&data->candidate_length[v2c[0]],
-                                   &data->candidate_length[v2c[1]],
-                                   &data->candidate_length[v2c[2]]};
-        unsigned sample = blockDim.x * blockIdx.x + threadIdx.x;
+        extern __shared__ double* shared_ptr[];
 
-        auto best_vec = min3(*cv[0], *cv[1], *cv[2]);
-        float_type alpha, beta;
-        sample_angles(*cs[best_vec], data->crt.num_sample_points, alpha, beta);
-        if (sample == 0u) {
-            printf("vec to value/length/sample (best=%u, alpha=%f, beta=%f): %0.2f/%0.5f/%u %0.2f/%0.5f/%u %0.2f/%0.5f/%u\n",
-                   best_vec, alpha, beta, *cv[0], *cl[0], *cs[0], *cv[1], *cl[1], *cs[1], *cv[2], *cl[2], *cs[2]);
+        // if ((blockIdx.x == 0) && (blockIdx.y == 0) && (blockIdx.z == 0) && (threadIdx.x == 0))
+        //     printf("gpu_find_cells\n");
+
+        const unsigned n_vsamples = data->crt.num_sample_points;
+        unsigned rsample = blockIdx.x * blockDim.x + threadIdx.x;
+        const unsigned cell_vec = blockIdx.y;
+        const unsigned cand = blockIdx.z;
+        const unsigned cand_grp = data->cellvec_to_cand[cell_vec];
+        const unsigned n_cand = data->cpers.num_candidate_vectors;
+        const unsigned vsample = data->candidate_sample[cand_grp * n_cand + cand];
+        float_type vabc=.0f;    // accumulated sample values for a, b, c cell vectors
+
+        { // calculate vabc for vsample/rsample/
+            const fast_feedback::input<float_type>& in = data->input;
+            const unsigned n_rsamples = gridDim.x * blockDim.x;
+            const float_type vlength = data->candidate_length[cand_grp];
+            float_type z[3], a[3], b[3];
+
+            sample_cell(z, a, b, in.x, in.y, in.z, vlength, vsample, n_vsamples, rsample, n_rsamples, cell_vec);
+
+            const unsigned n_spots = in.n_spots;
+            const unsigned spot_offset = 3u * data->cpers.max_input_cells;
+            const float_type* sx = &in.x[spot_offset];
+            const float_type* sy = &in.y[spot_offset];
+            const float_type* sz = &in.z[spot_offset];
+            vabc = sample2(a, b, sx, sy, sz, n_spots);
+            
+            const float_type vvalue = data->candidate_value[cand_grp * n_cand + cand];
+            vabc += vvalue;
+            // if ((blockIdx.x == 0) && (blockIdx.y == 0) && (blockIdx.z == 0) && (threadIdx.x == 0))
+            //     printf("-- vabc=%f\n", vabc);
         }
+
+        // Get best output cells for block
+        {   // sort within block {objective function value, sample} ascending by objective function value
+            float_type key[1] = {vabc};
+            unsigned val[1] = {rsample};
+            {
+                auto sort_ptr = reinterpret_cast<typename BlockRadixSort<float_type>::TempStorage*>(shared_ptr);
+                BlockRadixSort<float_type>(*sort_ptr).Sort(key, val);
+            }
+            vabc = *key;
+            rsample = *val;
+            __syncthreads();                // protect sort_ptr[] (it's in the same memory as cand_ptr)
+        }
+        // if ((blockIdx.x == 0) && (blockIdx.y == 0) && (blockIdx.z == 0) && (threadIdx.x == 0))
+        //     printf("-- sorted vabc=%f\n", vabc);
+
+        const unsigned n_output_cells = data->cpers.max_output_cells;
+        auto cand_ptr = reinterpret_cast<cell_cand_t<float_type>*>(shared_ptr); // [max_output_cells]
+        if (threadIdx.x < n_output_cells)   // store top candidate cells into cand_ptr
+            cand_ptr[threadIdx.x] = { vabc, vsample, rsample, cell_vec };
+
+        if (n_output_cells < warp_size) {   // wait for cand_ptr
+            if (threadIdx.x < warp_size)
+                __syncwarp();
+        } else
+            __syncthreads();
+
+        if (threadIdx.x == 0) {             // merge block local into global result
+            seq_acquire(data->seq_block[0]);
+            merge_top_cells(data->output, cand_ptr, n_output_cells);
+            seq_release(data->seq_block[0]);
+        }
+    }
+
+    // expand {cand, rsample, cell_vec} to coordinates of unit cell vectors
+    // threadIdx.x = output cell index
+    // n_rsamples   number of rotation angle samples
+    template<typename float_type>
+    __global__ void gpu_expand_cells(indexer_device_data<float_type>* data, const unsigned n_rsamples)
+    {
+        const unsigned n_vsamples = data->crt.num_sample_points;
+        const fast_feedback::input<float_type>& in = data->input;
+        fast_feedback::output<float_type>& out = data->output;
+        float_type* ox = out.x;
+        float_type* oy = out.y;
+        float_type* oz = out.z;
+        const unsigned cell_base = 3u * threadIdx.x;
+        const unsigned vsample = *reinterpret_cast<unsigned*>(&ox[cell_base]);
+        const unsigned rsample = *reinterpret_cast<unsigned*>(&oy[cell_base]);
+        const unsigned cell_vec = *reinterpret_cast<unsigned*>(&oz[cell_base]);
+        const unsigned cand_grp = data->cellvec_to_cand[cell_vec];
+        const float_type vlength = data->candidate_length[cand_grp];
+        float_type z[3], a[3], b[3];
+
+        sample_cell(z, a, b, in.x, in.y, in.z, vlength, vsample, n_vsamples, rsample, n_rsamples, cell_vec);
+        z[0] *= vlength;
+        z[1] *= vlength;
+        z[3] *= vlength;
+
+        ox[cell_base] = z[0];
+        ox[cell_base + 1u] = a[0];
+        ox[cell_base + 2u] = b[0];
+        oy[cell_base] = z[1];
+        oy[cell_base + 1u] = a[1];
+        oy[cell_base + 2u] = b[1];
+        oz[cell_base] = z[2];
+        oz[cell_base + 1u] = a[2];
+        oz[cell_base + 2u] = b[2];
+        if (threadIdx.x == 0)
+            out.n_cells = blockDim.x;
     }
 
 } // anonymous namespace
@@ -939,6 +1347,8 @@ namespace gpu {
             throw FF_EXCEPTION("nonpositive number of candidate vectors");
         if (conf_rt.num_sample_points < instance.cpers.num_candidate_vectors)
             throw FF_EXCEPTION("fewer sample points than required candidate vectors");
+        if (n_cells_out > instance.cpers.num_candidate_vectors)
+            throw FF_EXCEPTION("fewer candidate vectors than output cells");
         
         // Calculate input vector candidate groups
         unsigned n_cand_groups = 0u;
@@ -1000,14 +1410,18 @@ namespace gpu {
             gpu_find_candidates<float_type><<<n_blocks, n_threads, shared_sz, 0>>>(gpu_state::ptr(state_id).get());
         }
         {   // find cells
-            const unsigned n_samples = (1.5 * std::sqrt(conf_rt.num_sample_points) + n_threads - 1.) / n_threads;
-            const dim3 n_blocks(n_samples, n_cells_in);
-            const unsigned shared_sz = n_cells_out * 4u * sizeof(float_type);    // score, x, y, z
+            const unsigned n_xblocks = (1.5 * std::sqrt(conf_rt.num_sample_points) + n_threads - 1.) / n_threads;
+            const dim3 n_blocks(n_xblocks, 3 * n_cells_in, instance.cpers.num_candidate_vectors);
+            const unsigned shared_sz = std::max(n_cells_out * sizeof(cell_cand_t<float_type>),
+                                                sizeof(typename BlockRadixSort<float_type>::TempStorage));     
 
-            gpu_state::init_score(state_id, instance.cpers);
-            gpu_find_cells<float_type><<<n_blocks, n_threads, shared_sz, 0>>>(gpu_state::ptr(state_id).get(), n_samples);
+            // gpu_state::init_score(state_id, instance.cpers);
+            // gpu_debug_ouput<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get(), 0u);
+            gpu_find_cells<float_type><<<n_blocks, n_threads, shared_sz, 0>>>(gpu_state::ptr(state_id).get());
+            // gpu_debug_ouput<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get(), 1u);
+            gpu_expand_cells<float_type><<<1, n_cells_out, 0, 0>>>(gpu_state::ptr(state_id).get(), n_xblocks * n_threads);
             state.end.record();
-            gpu_dummy_test<float_type><<<n_cand_groups, 1, 0, 0>>>(gpu_state::ptr(state_id).get());
+            //gpu_dummy_test<float_type><<<n_cand_groups, 1, 0, 0>>>(gpu_state::ptr(state_id).get());
             gpu_state::copy_out(state_id, out);
         }
         if (timing) {
