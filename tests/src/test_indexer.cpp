@@ -28,6 +28,8 @@ Author: hans-christian.stadler@psi.ch
 #include <stdexcept>
 #include <vector>
 #include <array>
+#include <Eigen/Core>
+#include <Eigen/LU>
 #include "simple_data.h"
 #include "indexer.h"
 
@@ -80,7 +82,7 @@ int main (int argc, char *argv[])
             i++;            
         }
 
-        std::array<float, 3*3> buf;                     // output coordinate container
+        std::array<float, 4*3> buf;                     // output coordinate container
         fast_feedback::config_runtime<float> crt{};     // default runtime config
         fast_feedback::indexer indexer;                 // indexer object with default config
 
@@ -91,22 +93,50 @@ int main (int argc, char *argv[])
         fast_feedback::memory_pin pin_crt{fast_feedback::memory_pin::on(crt)};  // pin runtime config memory
 
         fast_feedback::input<float> in{x.data(), y.data(), z.data(), 1u, i-3u}; // create indexer input object
-        fast_feedback::output<float> out{&buf[0], &buf[3], &buf[6], 0u};        // create indexer output object
+        fast_feedback::output<float> out{&buf[0], &buf[3], &buf[6], &buf[9]};   // create indexer output object
 
         indexer.index(in, out, crt);                                            // run indexer
 
-        auto success = true;
-        for (unsigned i=0; i<3; ++i) {  // dummy indexing kernel copied first input cell to output cell
-            if (out.x[i] != in.x[i])
-                success = false;
-            if (out.y[i] != in.y[i])
-                success = false;
-            if (out.z[i] != in.z[i])
-                success = false;
-            std::cout << "output" << i << ": " << out.x[i] << ", " << out.y[i] << ", " << out.z[i] << '\n';
+        constexpr float max_score = -200.0f;            // maximum acceptable output score
+        std::cout << "score: " << out.score[0];
+        if (out.score[0] > max_score) {
+            std::cout << " > " << max_score << " => bad\n";
+            throw std::runtime_error("output score above maximum acceptable");
+        } else {
+            std::cout << " <= " << max_score << " => ok\n";
+        }
+        
+        constexpr float delta = .2f;                    // it's a match if spot indices are all around delta from an integer
+        constexpr unsigned n_matches = 20u;             // accept output cell if it matches so many spots
+        unsigned spots_matched = 0u;
+        Eigen::Matrix<float, 3, 3> B;                   // unit cell base
+        B << out.x[0], out.x[1], out.x[2],
+             out.y[0], out.y[1], out.y[2],
+             out.z[0], out.z[1], out.z[2];
+        std::cout << "cell:\n" << B << '\n';
+        Eigen::Matrix<float, 3, 1> s;                   // spot
+
+        for (const auto& spot : data.spots) {          // check for spots that match
+            s << spot.x, spot.y, spot.z;
+            auto m = B.inverse() * s;
+            std::cout << "spot: " << s[0] << ' ' << s[1] << ' ' << s[2] << " --> " << m[0] << ' ' << m[1] << ' ' << m[2]; 
+            int i = 0;
+            while (i<3) {
+                if (std::abs(m[i] - std::round(m[i])) > delta)
+                    break;
+                i++;
+            }
+            if (i == 3) {
+                spots_matched++;
+                std::cout << " match\n";
+            } else {
+                std::cout << '\n';
+            }
         }
 
-        std::cout << "Test " << ( success ? "OK" : "failed" ) << ".\n";
+        std::cout << "=> " << spots_matched << " matches.\n";
+
+        std::cout << "Test " << ( (spots_matched >= n_matches) ? "OK" : "failed" ) << ".\n";
 
     } catch (std::exception& ex) {
         std::cerr << "Test failed: " << ex.what() << '\n' << failure;

@@ -1,4 +1,3 @@
-
 /*
 Copyright 2022 Paul Scherrer Institute
 

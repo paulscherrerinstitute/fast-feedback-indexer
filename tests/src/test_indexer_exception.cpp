@@ -30,7 +30,7 @@ Author: hans-christian.stadler@psi.ch
 namespace {
     fast_feedback::exception create_copy()
     {
-        return fast_feedback::exception(FF_EXCEPTION("12"));
+        return fast_feedback::exception(FF_EXCEPTION("12"));    // <-- this line number
     }
 
     fast_feedback::exception move_assign_copy()
@@ -51,7 +51,7 @@ int main(int, char *argv[])
     std::string fname{ex.file_name};
     std::string failed{"Test failed: "};
 
-    if (ex.line_number == 8) {
+    if (ex.line_number == 33) { // <-- put line number here
         if (fname.find("test_indexer_exception.cpp") != std::string::npos) {
             if (msg == "1234") {
                 std::cout << "Test OK.\n";
