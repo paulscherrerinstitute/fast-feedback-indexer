@@ -59,25 +59,41 @@ int main (int argc, char *argv[])
     using namespace simple_data;
 
     try {
-        if (argc <= 3)
-            throw std::runtime_error("missing arguments <file name> <number of kept candidate vectors> <number of half sphere sample points>");
+        if (argc <= 5)
+            throw std::runtime_error("missing arguments <file name> <max number of spots> <max number of output cells> <number of kept candidate vectors> <number of half sphere sample points>");
 
         fast_feedback::config_runtime<float> crt{};         // default runtime config
         {
-            std::istringstream iss(argv[3]);
+            std::istringstream iss(argv[5]);
             iss >> crt.num_sample_points;
             if (! iss)
-                throw std::runtime_error("unable to parse second argument: number of half sphere sample points");
+                throw std::runtime_error("unable to parse fifth argument: number of half sphere sample points");
             std::cout << "n_samples=" << crt.num_sample_points << '\n';
         }
 
         fast_feedback::config_persistent<float> cpers{};    // default persistent config
         {
-            std::istringstream iss(argv[2]);
-            iss >> cpers.num_candidate_vectors;
-            if (! iss)
-                throw std::runtime_error("unable to parse second argument: number of kept candidate vectors");
-            std::cout << "n_candidates=" << cpers.num_candidate_vectors << '\n';
+            {
+                std::istringstream iss(argv[2]);
+                iss >> cpers.max_spots;
+                if (! iss)
+                    throw std::runtime_error("unable to parse second argument: max number of spots");
+                std::cout << "max_spots=" << cpers.max_spots << '\n';
+            }
+            {
+                std::istringstream iss(argv[3]);
+                iss >> cpers.max_output_cells;
+                if (! iss)
+                    throw std::runtime_error("unable to parse third argument: max number of output cells");
+                std::cout << "max_output_cells=" << cpers.max_output_cells << '\n';
+            }
+            {
+                std::istringstream iss(argv[4]);
+                iss >> cpers.num_candidate_vectors;
+                if (! iss)
+                    throw std::runtime_error("unable to parse fourth argument: number of kept candidate vectors");
+                std::cout << "n_candidates=" << cpers.num_candidate_vectors << '\n';
+            }
         }
 
         SimpleData<float, raise> data(argv[1]);         // read simple data file
@@ -100,7 +116,7 @@ int main (int argc, char *argv[])
             i++;            
         }
 
-        std::array<float, 4*3> buf;                     // output coordinate container
+        std::vector<float> buf(4*cpers.max_output_cells); // output coordinate container
         fast_feedback::indexer indexer{cpers};          // indexer object
 
         fast_feedback::memory_pin pin_x{x};             // pin input coordinate containers
@@ -114,9 +130,12 @@ int main (int argc, char *argv[])
 
         indexer.index(in, out, crt);                                            // run indexer
 
-        std::cout << "cell_score=" << out.score[0] << '\n';
-        for (unsigned i=0u; i<3u; i++)
-            std::cout << "output" << i << ": " << out.x[i] << ", " << out.y[i] << ", " << out.z[i] << '\n';
+        for (unsigned j=0u; j<out.n_cells; j++) {
+            std::cout << j << ":cell_score=" << out.score[0] << '\n';
+            unsigned b = 3u * j;
+            for (unsigned i=0u; i<3u; i++)
+                std::cout << j << ":output" << i << ": " << out.x[b+i] << ", " << out.y[b+i] << ", " << out.z[b+i] << '\n';
+        }
 
     } catch (std::exception& ex) {
         std::cerr << "indexing failed: " << ex.what() << '\n' << failure;
