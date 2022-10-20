@@ -57,7 +57,7 @@ namespace {
         // static constexpr float_type pi = M_PI;
         static constexpr float_type pi2 = M_PI_2;
         static constexpr float_type dl = 0.7639320225002102;    // for spiral sample points on a half sphere
-        static constexpr float_type eps = FLT_EPSILON;
+        // static constexpr float_type eps = FLT_EPSILON;
     };
 
     // Cuda device infos
@@ -761,14 +761,12 @@ namespace {
         }
     }
 
-    // Calculate sample point on half unit sphere multiplied by factor
+    // Calculate sample point on half unit sphere
     // sample_idx   index of sample point 0..n_samples
     // n_samples    number of sampling points
     // v            sample point coordinates on half unit sphere multiplied by factor
-    // factor       multiplication factor
     template<typename float_type>
-    __device__ __forceinline__ void sample_point(const unsigned sample_idx, const unsigned n_samples,
-                                                 float_type v[3], const float_type factor=float_type{1.})
+    __device__ __forceinline__ void sample_point(const unsigned sample_idx, const unsigned n_samples, float_type v[3])
     {
         // Python equivalent:
         // N = n_samples
@@ -784,12 +782,11 @@ namespace {
         float_type& z = v[2];
         const float_type dz = float_type{1.} / static_cast<float_type>(n_samples);
         z = util<float_type>::fma(-dz, sample_idx, util<float_type>::fma(float_type{-.5}, dz, float_type{1.}));
-        const float_type r_xy = factor * util<float_type>::sqrt(util<float_type>::fma(-z, z, 1.));
+        const float_type r_xy = util<float_type>::sqrt(util<float_type>::fma(-z, z, 1.));
         const float_type l = constant<float_type>::dl * static_cast<float_type>(sample_idx);
         util<float_type>::sincospi(l, &y, &x);
         x *= r_xy;
         y *= r_xy;
-        z *= factor;
     }
 
     // Get sample cell vectors a, b, and unified c
@@ -852,29 +849,28 @@ namespace {
         //     printf("-- rotate a=%f %f %f, b=%f %f %f, alpha=%f, delta=%f\n", a[0], a[1], a[2], b[0], b[1], b[2], alpha, delta);
     }
 
-    // sum(s ∈ spots | s 🞄 v >= eps) -cospi(2 * |s|² / s 🞄 v)
-    // v        sample vector
+    // sum(s ∈ spots | s 🞄 v >= eps) -cos(2π * s 🞄 v / vlength)
+    // v        unit vector in sample vector direction, |v| == 1
+    // vlength  sample vector length
     // s{x,y,z} spot coordinate pointers [n_spots]
     // n_spots  number of spots
     template<typename float_type>
-    __device__ __forceinline__ float_type sample1(const float_type v[3],
+    __device__ __forceinline__ float_type sample1(const float_type v[3], const float_type vlength,
                                                   const float_type *sx, const float_type *sy, const float_type *sz,
                                                   const unsigned n_spots)
     {
         float_type sval = float_type{0.f};
+        const float_type t_vl = float_type{2.f} / vlength;
         for (unsigned i=0u; i<n_spots; i++) {
             const float_type s[3] = { sx[i], sy[i], sz[i] };
             const float_type dp = dot(v, s);
-            if (util<float_type>::abs(dp) >= constant<float_type>::eps) {
-                const float_type n2 = norm2(s);
-                const float_type dv = util<float_type>::fma(.5f, util<float_type>::cospi(float_type{2.f} * n2 / dp), .5f);
-                sval -= dv;
-            }
+            const float_type dv = util<float_type>::fma(.5f, util<float_type>::cospi(t_vl * dp), .5f);
+            sval -= dv;
         }
         return sval;
     }
 
-    // sum(s ∈ spots | s 🞄 v >= eps) -cospi(2 * |s|² / s 🞄 vi) for i in [1,2]
+    // sum(s ∈ spots) -cos(2π * s 🞄 vi / |vi|²) for i in [1,2]
     // v1, v2   sample vectors
     // s{x,y,z} spot coordinate pointers [n_spots]
     // n_spots  number of spots
@@ -887,23 +883,22 @@ namespace {
         //     printf("sample2\n");
 
         float_type sval = float_type{0.f};
+        const float_type t_v1l2 = float_type{2.f} / norm2(v1);
+        const float_type t_v2l2 = float_type{2.f} / norm2(v2);
         for (unsigned i=0u; i<n_spots; i++) {
+            float_type t;
             const float_type s[3] = { sx[i], sy[i], sz[i] };
-            const float_type n2x2 = float_type{2.f} * norm2(s);
             {   // handle v1
                 const float_type dp = dot(v1, s);
-                if (util<float_type>::abs(dp) >= constant<float_type>::eps) {
-                    const float_type dv = util<float_type>::fma(.5f, util<float_type>::cospi(n2x2 / dp), .5f);
-                    sval -= dv;
-                }
+                const float_type dv = util<float_type>::fma(.5f, util<float_type>::cospi(t_v1l2 * dp), .5f);
+                t = -dv;
             }
             {   // handle v2
                 const float_type dp = dot(v2, s);
-                if (util<float_type>::abs(dp) >= constant<float_type>::eps) {
-                    const float_type dv = util<float_type>::fma(.5f, util<float_type>::cospi(n2x2 / dp), .5f);
-                    sval -= dv;
-                }
+                const float_type dv = util<float_type>::fma(.5f, util<float_type>::cospi(t_v2l2 * dp), .5f);
+                t -= dv;
             }
+            sval += t;
         }
         return sval;
     }
@@ -959,57 +954,6 @@ namespace {
         printf("###\n");
     }
 
-    // Dummy kernel for dummy indexer test: copy first input cell to output cell
-    // gridDim.x = num candidate groups
-    template<typename float_type>
-    __global__ void gpu_dummy_test(indexer_device_data<float_type>* data)
-    {
-        // NOTE: assume max_output_cells is >= 1u
-        if (blockIdx.x != 0)
-            return;
-        printf("blocks: %u\n", unsigned(gridDim.x));
-
-        for (unsigned i=0; i<3u; ++i) {
-            data->output.x[i] = data->input.x[i];
-            data->output.y[i] = data->input.y[i];
-            data->output.z[i] = data->input.z[i];
-        }
-        data->output.n_cells = 1u;
-
-        // Print out candidate vectors
-        const unsigned ncg = gridDim.x;
-        const unsigned ncv = data->cpers.num_candidate_vectors;
-        const float_type* const cvp = data->candidate_value;
-        const unsigned ns = data->crt.num_sample_points;
-        const unsigned* const csp = data->candidate_sample;
-
-        const unsigned n_cells_in  = data->input.n_cells;
-        for (unsigned i=0; i<n_cells_in; ++i) {
-            printf("cell%u cgi:", i);
-            for (unsigned j=3*i; j<3*i+3; ++j)
-                printf(" %u", data->cellvec_to_cand[j]);
-            printf("\n");
-        }
-
-        for (unsigned i=0; i<ncg; ++i) {
-            printf("cg%u:", i);
-            auto cv = &cvp[i * ncv];
-            for (unsigned j=0; j<ncv; ++j)
-                printf(" %0.2f", cv[j]);
-            printf("\n");
-        }
-
-        for (unsigned i=0; i<ncg; ++i) {
-            auto cv = &cvp[i * ncv];
-            auto cs = &csp[i * ncv];
-            const float_type v = *cv;
-            const unsigned s = *cs;
-            float_type sv[3];       // unit length sample vector
-            sample_point(s, ns, sv);
-            printf("%u: v=[%f, %f, %f] # %f\n", i, sv[0], sv[1], sv[2], v);
-        }
-    }
-
     // sample = blockDim.x * blockIdx.x + threadIdx.x
     // candidate group = blockIdx.y
     template<typename float_type>
@@ -1022,10 +966,10 @@ namespace {
         const unsigned c_group = blockIdx.y;
         float_type v = 0.;  // objective function value for sample vector
 
-        if (sample < n_samples) {   // calculate v
-            const float_type r = data->candidate_length[c_group];
-            float_type sv[3];       // sample vector
-            sample_point(sample, n_samples, sv, r);
+        if (sample < n_samples) {                                   // calculate v
+            const float_type sl = data->candidate_length[c_group];  // sample vector length
+            float_type sv[3];                                       // unit vector in sample direction
+            sample_point(sample, n_samples, sv);
 
             const unsigned spot_offset = 3 * data->cpers.max_input_cells;
             const fast_feedback::input<float_type>& in = data->input;
@@ -1034,7 +978,7 @@ namespace {
             const float_type* sy = &in.y[spot_offset];
             const float_type* sz = &in.z[spot_offset];
             
-            v = sample1(sv, sx, sy, sz, n_spots);
+            v = sample1(sv, sl, sx, sy, sz, n_spots);
         }
 
         {   // sort within block {objective function value, sample} ascending by objective function value
@@ -1416,12 +1360,13 @@ namespace gpu {
                                                 sizeof(typename BlockRadixSort<float_type>::TempStorage));     
 
             // gpu_state::init_score(state_id, instance.cpers);
-            // gpu_debug_ouput<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get(), 0u);
+            if (logger::level_active<logger::l_debug>())
+                gpu_debug_ouput<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get(), 0u);
             gpu_find_cells<float_type><<<n_blocks, n_threads, shared_sz, 0>>>(gpu_state::ptr(state_id).get());
-            // gpu_debug_ouput<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get(), 1u);
+            if (logger::level_active<logger::l_debug>())
+                gpu_debug_ouput<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get(), 1u);
             gpu_expand_cells<float_type><<<1, n_cells_out, 0, 0>>>(gpu_state::ptr(state_id).get(), n_xblocks * n_threads);
             state.end.record();
-            //gpu_dummy_test<float_type><<<n_cand_groups, 1, 0, 0>>>(gpu_state::ptr(state_id).get());
             gpu_state::copy_out(state_id, out);
         }
         if (timing) {
