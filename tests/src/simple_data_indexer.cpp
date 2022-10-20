@@ -114,18 +114,13 @@ int main (int argc, char *argv[])
 
         indexer.index(in, out, crt);                                            // run indexer
 
-        for (unsigned i=0u; i<out.n_cells; ++i) {
-            auto off = 3u * i;
-            Eigen::Matrix<float, 3, 3> A;
-            A << out.x[off + 0], out.x[off + 1], out.x[off + 2],
-                 out.y[off + 0], out.y[off + 1], out.y[off + 2],
-                 out.z[off + 0], out.z[off + 1], out.z[off + 2];
-            std::cout << "Cell " << i << " (score " << std::setprecision(2) << std::fixed << out.score[i] << "):\n";
-            std::cout << std::setprecision(4) << std::defaultfloat << A << '\n';
-        }
+        std::cout << "cell_score=" << out.score[0] << '\n';
+        for (unsigned i=0u; i<3u; i++)
+            std::cout << "output" << i << ": " << out.x[i] << ", " << out.y[i] << ", " << out.z[i] << '\n';
 
-        std::cout << "done\n" << success;
     } catch (std::exception& ex) {
-        std::cerr << "Indexing failed: " << ex.what() << '\n' << failure;
+        std::cerr << "indexing failed: " << ex.what() << '\n' << failure;
     }
+
+    std::cout << success;
 }
