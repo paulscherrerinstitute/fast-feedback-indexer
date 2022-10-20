@@ -437,8 +437,8 @@ namespace {
             CU_CHECK(cudaStreamSynchronize(stream));
             output.n_cells = pinned_tmp.max_output_cells;
 
-            if (output.n_cells > 0) {
-                const auto cell_sz = 3 * output.n_cells * sizeof(float_type);
+            if (output.n_cells > 0u) {
+                const auto cell_sz = 3u * output.n_cells * sizeof(float_type);
                 CU_CHECK(cudaMemcpyAsync(output.x, gpu_state.ox, cell_sz, cudaMemcpyDeviceToHost, stream));
                 CU_CHECK(cudaMemcpyAsync(output.y, gpu_state.oy, cell_sz, cudaMemcpyDeviceToHost, stream));
                 CU_CHECK(cudaMemcpyAsync(output.z, gpu_state.oz, cell_sz, cudaMemcpyDeviceToHost, stream));
@@ -449,7 +449,8 @@ namespace {
             logger::debug << stanza << "copy out: " << output.n_cells << " cells, elements=" << gpu_state.elements.get() << ": "
                           << gpu_state.ox << "-->" << output.x << ", "
                           << gpu_state.oy << "-->" << output.y << ", "
-                          << gpu_state.oz << "-->" << output.z << '\n';
+                          << gpu_state.oz << "-->" << output.z << ", "
+                          << gpu_state.cell_score << "-->" << output.score << '\n';
         }
     };
 
@@ -721,7 +722,7 @@ namespace {
             return;
 
         if (cand[n_cand-1].value <= out.score[0]) {
-            for (unsigned i=0; i<n_cand; ++i) {
+            for (unsigned i=0u; i<n_cand; i++) {
                 out.score[i] = cand[i].value;
                 *reinterpret_cast<unsigned*>(&out.x[3u * i]) = cand[i].vsample;
                 *reinterpret_cast<unsigned*>(&out.y[3u * i]) = cand[i].rsample;
@@ -833,8 +834,6 @@ namespace {
                                                 const unsigned rsample, const unsigned n_rsamples,
                                                 const unsigned cell_vec)
     {
-        // if ((blockIdx.x == 0) && (blockIdx.y == 0) && (blockIdx.z == 0) && (threadIdx.x == 0))
-        //     printf("sample_cell\n");
         const unsigned cell_base = cell_vec / 3u;
         float_type t[3] = { cx[cell_vec], cy[cell_vec], cz[cell_vec] };
         sample_point(vsample, n_vsamples, z);
@@ -844,23 +843,14 @@ namespace {
         a[0] = cx[idx]; a[1] = cy[idx]; a[2] = cz[idx];
         idx = cell_base + (cell_vec + 2u) % 3u;
         b[0] = cx[idx]; b[1] = cy[idx]; b[2] = cz[idx];
-        // if ((blockIdx.x == 0) && (blockIdx.y == 0) && (blockIdx.z == 0) && (threadIdx.x == 0))
-        //     printf("-- orig z=%f %f %f, a=%f %f %f, b=%f %f %f\n", z[0], z[1], z[2], a[0], a[1], a[2], b[0], b[1], b[2]);
-
         mirror(a, t);
         mirror(b, t);
-        // if ((blockIdx.x == 0) && (blockIdx.y == 0) && (blockIdx.z == 0) && (threadIdx.x == 0))
-        //     printf("-- mirror t=%f %f %f, a=%f %f %f, b=%f %f %f\n", t[0], t[1], t[2], a[0], a[1], a[2], b[0], b[1], b[2]);
-
         // Basis perpendicular to z and projections of a/b to z, xy
         float_type x[3], laz, laxy;         // unit vector x, length of a projected to z and xy plane ⊥ v
         float_type y[3], lbz, lbxy;         // unit vector y, length of b projected to z and xy plane ⊥ v
         project_unify(x, a, z, laz, laxy);
         project_unify(t, b, z, lbz, lbxy);
         cross(y, z, x);
-        // if ((blockIdx.x == 0) && (blockIdx.y == 0) && (blockIdx.z == 0) && (threadIdx.x == 0))
-        //     printf("-- base z=%f %f %f, x=%f %f %f, y=%f %f %f, laz=%f, laxy=%f, lbz=%f, lbxy=%f\n", z[0], z[1], z[2], x[0], x[1], x[2], y[0], y[1], y[2], laz, laxy, lbz, lbxy);
-
         // Rotation around z for a, b
         float_type delta = util<float_type>::acos(dot(t, x));                   // angle delta between axy and bxy vectors
         if (dot(t, y) < .0f)
@@ -868,8 +858,6 @@ namespace {
         float_type alpha = rsample * constant<float_type>::pi2 / n_rsamples;    // sample angle
         rotate(a, x, y, z, laz, laxy, alpha);
         rotate(b, x, y, z, lbz, lbxy, alpha + delta);
-        // if ((blockIdx.x == 0) && (blockIdx.y == 0) && (blockIdx.z == 0) && (threadIdx.x == 0))
-        //     printf("-- rotate a=%f %f %f, b=%f %f %f, alpha=%f, delta=%f\n", a[0], a[1], a[2], b[0], b[1], b[2], alpha, delta);
     }
 
     // sum(s ∈ spots | s 🞄 v >= eps) -cos(2π * s 🞄 v / vlength)
@@ -902,9 +890,6 @@ namespace {
                                                   const float_type *sx, const float_type *sy, const float_type *sz,
                                                   const unsigned n_spots)
     {
-        // if ((blockIdx.x == 0) && (blockIdx.y == 0) && (blockIdx.z == 0) && (threadIdx.x == 0))
-        //     printf("sample2\n");
-
         float_type sval = float_type{0.f};
         const float_type t_v1l2 = float_type{2.f} / norm2(v1);
         const float_type t_v2l2 = float_type{2.f} / norm2(v2);
@@ -931,12 +916,13 @@ namespace {
     // -----------------------------------
 
     // single thread kernel
-    // kind 0-candidate vectors + output cells
-    //      1-output cells
+    // kind 0-candidate vectors + output cells (float)
+    //      1-output cells (unsigned)
+    //      2-output cells (float)
     template<typename float_type>
     __global__ void gpu_debug_out(indexer_device_data<float_type>* data, const unsigned kind)
     {
-        printf("### debug\n");
+        printf("### INDEXER_GPU_DEBUG\n");
         if (kind == 0u) {
             // Print out candidate vectors
             const unsigned ncv = data->cpers.num_candidate_vectors;
@@ -969,13 +955,18 @@ namespace {
 
         const fast_feedback::output<float_type>& out = data->output;
         const unsigned n_cells_out  = data->cpers.max_output_cells;
+        printf("output n_cells=%u\n", out.n_cells);
         for (unsigned i=0; i<n_cells_out; ++i) {
             printf("output cell%u s=%f:\n", i, out.score[i]);
             for (unsigned j=3*i; j<3*i+3; ++j) {
-                if (kind == 0u)
+                if (kind == 0u) {
+                    printf(" %u  %u  %u\n",
+                        *reinterpret_cast<unsigned*>(&out.x[j]),
+                        *reinterpret_cast<unsigned*>(&out.y[j]),
+                        *reinterpret_cast<unsigned*>(&out.z[j]));
+                } else {
                     printf(" %f  %f  %f\n", out.x[j], out.y[j], out.z[j]);
-                else
-                    printf(" %u  %u  %u\n", (unsigned)out.x[j], (unsigned)out.y[j], (unsigned)out.z[j]);
+                }
             }
         }
         printf("###\n");
@@ -1054,9 +1045,6 @@ namespace {
     {
         extern __shared__ double* shared_ptr[];
 
-        // if ((blockIdx.x == 0) && (blockIdx.y == 0) && (blockIdx.z == 0) && (threadIdx.x == 0))
-        //     printf("gpu_find_cells\n");
-
         const unsigned n_vsamples = data->crt.num_sample_points;
         unsigned rsample = blockIdx.x * blockDim.x + threadIdx.x;
         const unsigned cell_vec = blockIdx.y;
@@ -1083,8 +1071,6 @@ namespace {
             
             const float_type vvalue = data->candidate_value[cand_grp * n_cand + cand];
             vabc += vvalue;
-            // if ((blockIdx.x == 0) && (blockIdx.y == 0) && (blockIdx.z == 0) && (threadIdx.x == 0))
-            //     printf("-- vabc=%f\n", vabc);
         }
 
         // Get best output cells for block
@@ -1099,8 +1085,6 @@ namespace {
             rsample = *val;
             __syncthreads();                // protect sort_ptr[] (it's in the same memory as cand_ptr)
         }
-        // if ((blockIdx.x == 0) && (blockIdx.y == 0) && (blockIdx.z == 0) && (threadIdx.x == 0))
-        //     printf("-- sorted vabc=%f\n", vabc);
 
         const unsigned n_output_cells = data->cpers.max_output_cells;
         auto cand_ptr = reinterpret_cast<cell_cand_t<float_type>*>(shared_ptr); // [max_output_cells]
@@ -1117,6 +1101,9 @@ namespace {
             seq_acquire(data->seq_block[0]);
             merge_top_cells(data->output, cand_ptr, n_output_cells);
             seq_release(data->seq_block[0]);
+
+            if ((blockIdx.x == 0) && (blockIdx.y == 0) && (blockIdx.z == 0))
+                data->output.n_cells = n_output_cells;
         }
     }
 
@@ -1141,21 +1128,16 @@ namespace {
         float_type z[3], a[3], b[3];
 
         sample_cell(z, a, b, in.x, in.y, in.z, vlength, vsample, n_vsamples, rsample, n_rsamples, cell_vec);
-        z[0] *= vlength;
-        z[1] *= vlength;
-        z[3] *= vlength;
 
-        ox[cell_base] = z[0];
+        ox[cell_base] = z[0] * vlength;
         ox[cell_base + 1u] = a[0];
         ox[cell_base + 2u] = b[0];
-        oy[cell_base] = z[1];
+        oy[cell_base] = z[1] * vlength;
         oy[cell_base + 1u] = a[1];
         oy[cell_base + 2u] = b[1];
-        oz[cell_base] = z[2];
+        oz[cell_base] = z[2] * vlength;
         oz[cell_base + 1u] = a[2];
         oz[cell_base + 2u] = b[2];
-        if (threadIdx.x == 0)
-            out.n_cells = blockDim.x;
     }
 
 } // anonymous namespace
@@ -1320,6 +1302,10 @@ namespace gpu {
             throw FF_EXCEPTION("fewer sample points than required candidate vectors");
         if (n_cells_out > instance.cpers.num_candidate_vectors)
             throw FF_EXCEPTION("fewer candidate vectors than output cells");
+        if (n_cells_out > n_threads)
+            throw FF_EXCEPTION("fewer threads in a block than output cells");
+        if (instance.cpers.num_candidate_vectors > n_threads)
+            throw FF_EXCEPTION("fewer threads in a block than candidate vectors");
         
         // Calculate input vector candidate groups
         unsigned n_cand_groups = 0u;
@@ -1393,6 +1379,8 @@ namespace gpu {
             if (gpu_debug_output)
                 gpu_debug_out<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get(), 1u);
             gpu_expand_cells<float_type><<<1, n_cells_out, 0, 0>>>(gpu_state::ptr(state_id).get(), n_xblocks * n_threads);
+            if (gpu_debug_output)
+                gpu_debug_out<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get(), 2u);
             state.end.record();
             gpu_state::copy_out(state_id, out);
         }

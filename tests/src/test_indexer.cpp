@@ -82,7 +82,7 @@ int main (int argc, char *argv[])
             i++;            
         }
 
-        std::array<float, 4*3> buf;                     // output coordinate container
+        std::array<float, 10> buf;                      // output coordinate/score container
         fast_feedback::config_runtime<float> crt{};     // default runtime config
         fast_feedback::indexer indexer;                 // indexer object with default config
 

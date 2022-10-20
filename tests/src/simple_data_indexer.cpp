@@ -116,7 +116,7 @@ int main (int argc, char *argv[])
             i++;            
         }
 
-        std::vector<float> buf(4*cpers.max_output_cells); // output coordinate container
+        std::vector<float> buf(10u*cpers.max_output_cells); // output coordinate container
         fast_feedback::indexer indexer{cpers};          // indexer object
 
         fast_feedback::memory_pin pin_x{x};             // pin input coordinate containers
@@ -126,12 +126,13 @@ int main (int argc, char *argv[])
         fast_feedback::memory_pin pin_crt{fast_feedback::memory_pin::on(crt)};  // pin runtime config memory
 
         fast_feedback::input<float> in{x.data(), y.data(), z.data(), 1u, i-3u}; // create indexer input object
-        fast_feedback::output<float> out{&buf[0], &buf[3], &buf[6], &buf[9]};   // create indexer output object
+        fast_feedback::output<float> out{&buf[0], &buf[3u*cpers.max_output_cells],
+                                         &buf[6u*cpers.max_output_cells], &buf[9u*cpers.max_output_cells]}; // create indexer output object
 
         indexer.index(in, out, crt);                                            // run indexer
 
         for (unsigned j=0u; j<out.n_cells; j++) {
-            std::cout << j << ":cell_score=" << out.score[0] << '\n';
+            std::cout << j << ":cell_score=" << out.score[j] << '\n';
             unsigned b = 3u * j;
             for (unsigned i=0u; i<3u; i++)
                 std::cout << j << ":output" << i << ": " << out.x[b+i] << ", " << out.y[b+i] << ", " << out.z[b+i] << '\n';
