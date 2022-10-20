@@ -49,6 +49,7 @@ using logger::stanza;
 namespace {
 
     constexpr char INDEXER_GPU_DEVICE[] = "INDEXER_GPU_DEVICE";
+    constexpr char INDEXER_GPU_DEBUG[] = "INDEXER_GPU_DEBUG";
     constexpr unsigned n_threads = 1024;    // num cuda threads per block for find_candidates kernel
     constexpr unsigned warp_size = 32;      // number of threads in a warp
 
@@ -72,6 +73,7 @@ namespace {
     std::vector<gpu_device> gpu_device::list;
 
     int gpu_device_number;  // Used gpu device, TODO: allow multiple GPU devices
+    bool gpu_debug_output;  // Print gpu debug output if true
 
     // Exception for cuda related errors
     struct cuda_exception final : public fast_feedback::exception {
@@ -149,6 +151,27 @@ namespace {
                     CU_CHECK(cudaSetDevice(dev));
                     CU_CHECK(cudaGetDevice(&gpu_device_number));
                 }
+
+                char* debug_string = std::getenv(INDEXER_GPU_DEBUG);
+                if (debug_string != nullptr) {
+                    const std::vector<std::string> accepted = {"1", "true", "yes", "on", "0", "false", "no", "off"}; // [4] == "0"
+                    unsigned i;
+                    for (i=0u; i<accepted.size(); i++) {
+                        if (accepted[i] == debug_string) {
+                            gpu_debug_output = (i < 4);                                                              // [4] == "0"
+                            break;
+                        }
+                    }
+                    if (i >= accepted.size()) {
+                        std::ostringstream oss;
+                        oss << "illegal value for " << INDEXER_GPU_DEBUG << ": \"" << debug_string << "\" (use one of";
+                        for (const auto& s : accepted)
+                            oss << " \"" << s << '\"';
+                        oss << ')';
+                        throw FF_EXCEPTION(oss.str());
+                    }
+                } else
+                    gpu_debug_output = false;
             }
 
             logger::info << stanza << "using GPU device " << gpu_device_number << '\n';
@@ -907,8 +930,11 @@ namespace {
     //            GPU Kernels
     // -----------------------------------
 
+    // single thread kernel
+    // kind 0-candidate vectors + output cells
+    //      1-output cells
     template<typename float_type>
-    __global__ void gpu_debug_ouput(indexer_device_data<float_type>* data, const unsigned kind)
+    __global__ void gpu_debug_out(indexer_device_data<float_type>* data, const unsigned kind)
     {
         printf("### debug\n");
         if (kind == 0u) {
@@ -934,8 +960,9 @@ namespace {
             for (unsigned i=0; i<=ncg; ++i) {
                 printf("cg%u:", i);
                 auto cv = &cvp[i * ncv];
+                auto cs = &csp[i * ncv];
                 for (unsigned j=0; j<ncv; ++j)
-                    printf(" %0.2f", cv[j]);
+                    printf(" %0.2f/%u", (float)cv[j], cs[j]);
                 printf("\n");
             }
         }
@@ -1360,11 +1387,11 @@ namespace gpu {
                                                 sizeof(typename BlockRadixSort<float_type>::TempStorage));     
 
             // gpu_state::init_score(state_id, instance.cpers);
-            if (logger::level_active<logger::l_debug>())
-                gpu_debug_ouput<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get(), 0u);
+            if (gpu_debug_output)
+                gpu_debug_out<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get(), 0u);
             gpu_find_cells<float_type><<<n_blocks, n_threads, shared_sz, 0>>>(gpu_state::ptr(state_id).get());
-            if (logger::level_active<logger::l_debug>())
-                gpu_debug_ouput<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get(), 1u);
+            if (gpu_debug_output)
+                gpu_debug_out<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get(), 1u);
             gpu_expand_cells<float_type><<<1, n_cells_out, 0, 0>>>(gpu_state::ptr(state_id).get(), n_xblocks * n_threads);
             state.end.record();
             gpu_state::copy_out(state_id, out);

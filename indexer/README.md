@@ -40,9 +40,14 @@
 * Threads should be able to use their private indexer in parallel
 * Logger must be thread safe. Currently log output from different threads can get mingled (if required implement per thread log cache, e.g. ostringstream, with coordinated flushing to final destination)
 
+### Logging
+
+Logging output steered by *INDEXER_LOG_LEVEL* goes to stdlog (the same as stderr), except logging output from the GPU device steered by *INDEXER_GPU_DEBUG*, which goes to stdout.
+
 ### Environment Variables
 
 Steer program startup arguments with environment variables. If required, cli args parsing can be introduced as well.
 
 * *INDEXER_GPU_DEVICE* (int): The GPU cuda device number to use for indexing
 * *INDEXER_LOG_LEVEL* (string): The log level for the indexer {"fatal", "error", "warn", "info", "debug"}
+* *INDEXER_GPU_DEBUG* (string): Print gpu kernel debug output to stdout {"1", "true", "yes", "on", "0", "false", "no", "off"}
