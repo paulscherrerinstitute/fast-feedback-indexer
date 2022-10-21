@@ -1296,12 +1296,10 @@ namespace gpu {
             throw FF_EXCEPTION("no output cells");
         if (in.n_spots <= 0u)
             throw FF_EXCEPTION("no spots");
-        if (instance.cpers.num_candidate_vectors <= 1u)
+        if (instance.cpers.num_candidate_vectors < 1u)
             throw FF_EXCEPTION("nonpositive number of candidate vectors");
         if (conf_rt.num_sample_points < instance.cpers.num_candidate_vectors)
             throw FF_EXCEPTION("fewer sample points than required candidate vectors");
-        if (n_cells_out > instance.cpers.num_candidate_vectors)
-            throw FF_EXCEPTION("fewer candidate vectors than output cells");
         if (n_cells_out > n_threads)
             throw FF_EXCEPTION("fewer threads in a block than output cells");
         if (instance.cpers.num_candidate_vectors > n_threads)
