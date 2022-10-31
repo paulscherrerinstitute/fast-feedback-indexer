@@ -56,8 +56,10 @@ namespace {
     template<typename float_type>
     struct constant final {
         // static constexpr float_type pi = M_PI;
-        static constexpr float_type pi2 = M_PI_2;
-        static constexpr float_type dl = 0.7639320225002102;    // for spiral sample points on a half sphere
+        #pragma nv_diag_suppress 177 // suppress unused warning
+        [[maybe_unused]] static constexpr float_type pi2 = M_PI_2;
+        #pragma nv_diag_suppress 177 // supress unused warning
+        [[maybe_unused]] static constexpr float_type dl = 0.76393202250021030359082633126873; // 3 - sqrt(5), for spiral sample points on a half sphere
         // static constexpr float_type eps = FLT_EPSILON;
     };
 
@@ -801,16 +803,31 @@ namespace {
         // l = np.arange(0, N, dtype=float) * dl
         // x = np.cos(np.pi * l) * r
         // y = np.sin(np.pi * l) * r
-        float_type& x = v[0];
-        float_type& y = v[1];
-        float_type& z = v[2];
-        const float_type dz = float_type{1.} / static_cast<float_type>(n_samples);
-        z = util<float_type>::fma(-dz, sample_idx, util<float_type>::fma(float_type{-.5}, dz, float_type{1.}));
-        const float_type r_xy = util<float_type>::sqrt(util<float_type>::fma(-z, z, 1.));
-        const float_type l = constant<float_type>::dl * static_cast<float_type>(sample_idx);
-        util<float_type>::sincospi(l, &y, &x);
+
+        // Numerically problematic:
+        // float_type& x = v[0];
+        // float_type& y = v[1];
+        // float_type& z = v[2];
+        // const float_type dz = float_type{1.} / static_cast<float_type>(n_samples);
+        // z = util<float_type>::fma(-dz, sample_idx, util<float_type>::fma(float_type{-.5}, dz, float_type{1.}));
+        // const float_type r_xy = util<float_type>::sqrt(util<float_type>::fma(-z, z, 1.));
+        // const float_type l = constant<float_type>::dl * static_cast<float_type>(sample_idx);
+        // util<float_type>::sincospi(l, &y, &x);
+        // x *= r_xy;
+        // y *= r_xy;
+
+        double x, y, z;
+        double sample_d = static_cast<double>(sample_idx);
+        const double dz = double{1.} / static_cast<double>(n_samples);
+        z = fma(-dz, sample_d, fma(double{-.5}, dz, double{1.})); // (double{1.} - double{.5} * dz) - sample_d * dz;
+        const double r_xy = sqrt(fma(-z, z, double{1.}));
+        const double l = constant<double>::dl * sample_d;
+        sincospi(l, &y, &x);
         x *= r_xy;
         y *= r_xy;
+        v[0] = static_cast<float_type>(x);
+        v[1] = static_cast<float_type>(y);
+        v[2] = static_cast<float_type>(z);
     }
 
     // Get sample cell vectors a, b, and unified c
