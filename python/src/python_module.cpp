@@ -60,11 +60,11 @@ namespace {
     {
         using std::numeric_limits;
 
-        constexpr const char* kw[] = {"handle", "length_threshold", "num_sample_points", "n_cells", "data", nullptr};
+        constexpr const char* kw[] = {"handle", "length_threshold", "num_sample_points", "n_output_cells", "n_input_cells", "data", nullptr};
         double length_threshold;
-        long handle, num_sample_points, n_cells;
+        long handle, num_sample_points, n_output_cells, n_input_cells;
         PyArrayObject* ndarray;
-        if (PyArg_ParseTupleAndKeywords(args, kwds, "ldllO!", (char**)kw, &handle, &length_threshold, &num_sample_points, &n_cells, &PyArray_Type, &ndarray) == 0)
+        if (PyArg_ParseTupleAndKeywords(args, kwds, "ldlllO!", (char**)kw, &handle, &length_threshold, &num_sample_points, &n_output_cells, &n_input_cells, &PyArray_Type, &ndarray) == 0)
             return nullptr;
 
         if (handle < 0 || handle > numeric_limits<unsigned>::max()) {
@@ -77,8 +77,13 @@ namespace {
             return nullptr;
         }
 
-        if (n_cells < 0 || n_cells > numeric_limits<unsigned>::max()) {
-            PyErr_SetString(PyExc_ValueError, "n_cells out of bounds for an unsigned integer");
+        if (n_output_cells < 0 || n_output_cells > numeric_limits<unsigned>::max()) {
+            PyErr_SetString(PyExc_ValueError, "n_output_cells out of bounds for an unsigned integer");
+            return nullptr;
+        }
+
+        if (n_input_cells < 0 || n_input_cells > numeric_limits<unsigned>::max()) {
+            PyErr_SetString(PyExc_ValueError, "n_input_cells out of bounds for an unsigned integer");
             return nullptr;
         }
 
@@ -114,7 +119,7 @@ namespace {
             }
         }
 
-        if (3*n_cells >= n_vecs) {
+        if (3*n_input_cells >= n_vecs) {
             PyErr_SetString(PyExc_RuntimeError, "not enough data for n_cells plus spots");
             return nullptr;
         }
@@ -127,7 +132,7 @@ namespace {
             return nullptr;
         }
 
-        unsigned n_out = indexer->cpers.max_output_cells;
+        unsigned n_out = std::min((unsigned)n_output_cells, indexer->cpers.max_output_cells);
 
         PyArrayObject* result;
         {
@@ -168,7 +173,7 @@ namespace {
             fast_feedback::memory_pin pin_out{out_data, (std::size_t)out_bytes};
             fast_feedback::memory_pin pin_in{in_data, (std::size_t)in_bytes};
 
-            const fast_feedback::input<float> input{&in_data[0], &in_data[n_vecs], &in_data[2*n_vecs], (unsigned)n_cells, (unsigned)(n_vecs - 3*n_cells)};
+            const fast_feedback::input<float> input{&in_data[0], &in_data[n_vecs], &in_data[2*n_vecs], (unsigned)n_input_cells, (unsigned)(n_vecs - 3*n_input_cells)};
             fast_feedback::output<float> output{&out_data[0], &out_data[3*n_out], &out_data[6*n_out], &score_data[0], n_out};
 
             indexer->index(input, output, crt);
