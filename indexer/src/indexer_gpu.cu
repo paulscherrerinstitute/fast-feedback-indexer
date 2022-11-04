@@ -356,6 +356,20 @@ namespace {
             return ref(id).data;
         }
 
+        // State exists
+        static inline bool exists(const key_type& id)
+        {
+            std::lock_guard<std::mutex> state_lock{state_update};
+            return dev_ptr.find(id) != std::end(dev_ptr);
+        }
+
+        // Drop state
+        static inline void drop(const key_type& id)
+        {
+            std::lock_guard<std::mutex> state_lock{state_update};
+            dev_ptr.erase(id);
+        }
+
         // Copy runtime configuration to GPU
         static inline void copy_crt(const key_type& state_id, const fast_feedback::config_runtime<float_type>& crt, cudaStream_t stream=0)
         {
@@ -1168,9 +1182,11 @@ namespace gpu {
         using device_data = indexer_device_data<float_type>;
 
         cuda_init();
-        drop<float_type>(instance); // drop state if any
 
         const auto state_id = instance.state;
+        if (gpu_state::exists(state_id))
+            throw FF_EXCEPTION("instance illegal reinitialisation");
+
         const auto& cpers = instance.cpers;
 
         device_data* data = nullptr;
@@ -1278,8 +1294,8 @@ namespace gpu {
     {
         using gpu_state = indexer_gpu_state<float_type>;
 
-        CU_CHECK_INIT;
-        gpu_state::dev_ptr.erase(instance.state);
+        cuda_init();
+        gpu_state::drop(instance.state);
     }
 
     // Run indexer

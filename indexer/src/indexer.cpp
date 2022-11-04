@@ -23,6 +23,7 @@ DAMAGE.
 Author: hans-christian.stadler@psi.ch
 */
 
+#include "exception.h"
 #include "indexer.h"
 #include "indexer_gpu.h"
 
@@ -33,14 +34,19 @@ namespace fast_feedback {
     template <typename float_type>
     void indexer<float_type>::init (indexer<float_type>& instance, const config_persistent<float_type>& conf)
     {
+        if (instance.state == state_id::null)
+            throw FF_EXCEPTION("illegal initialisation of null state");
+        
         instance.cpers = conf;
+        gpu::drop(instance);
         gpu::init(instance);
     }
 
     template <typename float_type>
     void indexer<float_type>::drop (indexer<float_type>& instance)
     {
-        gpu::drop(instance);
+        if (instance.state != state_id::null)
+            gpu::drop(instance);
     }
 
     template <typename float_type>

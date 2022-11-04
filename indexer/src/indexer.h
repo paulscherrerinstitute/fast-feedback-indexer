@@ -94,6 +94,12 @@ namespace fast_feedback {
         using type = unsigned;
         static constexpr type null = 0u;    // instance identity usable to denote object instance without private state
         static std::atomic<type> next;      // monotonically increasing atomic counter
+
+        // Allocate a new state identifier
+        static type alloc() noexcept
+        {
+            return next.fetch_add(1u);
+        }
     };
 
     // Indexer object
@@ -104,7 +110,7 @@ namespace fast_feedback {
         config_persistent<float_type> cpers;    // persistent configuration
         const state_id::type state;             // object instance private state identifier
 
-        // Initialize/reconfigure this instance according to conf
+        // Initialize this instance according to conf
         static void init (indexer<float_type>& instance, const config_persistent<float_type>& conf);
 
         // Drop this instance and its private state
@@ -112,22 +118,22 @@ namespace fast_feedback {
 
         // Create according to c
         explicit inline indexer (const config_persistent<float_type>& c)
-            : state{state_id::next.fetch_add(1u)}
+            : state{state_id::alloc()}
         { init(*this, c); }
 
         // Create with default persistent config
         inline indexer ()
-            : state{state_id::next.fetch_add(1u)}
+            : state{state_id::alloc()}
         { init(*this, config_persistent<float_type>{}); }
 
         // Create according to other.cpers
         inline indexer (const indexer& other)
-            : state{state_id::next.fetch_add(1u)}
+            : state{state_id::alloc()}
         { init(*this, other.cpers); }
 
         // Reconfigure according to other.cpers
         inline indexer& operator= (const indexer& other)
-        { init(*this, other.cpers); return *this; }
+        { drop(*this); init(*this, other.cpers); return *this; }
 
         // Take over others state
         inline indexer (indexer&& other)
@@ -141,13 +147,16 @@ namespace fast_feedback {
         {
             std::swap(cpers, other.cpers);
             std::swap(const_cast<state_id::type&>(state), const_cast<state_id::type&>(other.state));
+            return *this;
         }
 
         // Drop if valid
         inline ~indexer ()
         {
-            if (state != state_id::null)
+            if (state != state_id::null) {
                 drop(*this);
+                const_cast<state_id::type&>(state) = state_id::null;
+            }
         }
 
         // Run indexing according to conf_rt on in data, put result into out data

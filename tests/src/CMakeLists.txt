@@ -5,16 +5,19 @@ project(tests_impl
 # ---- Indexer Tests ----
 
 option(TEST_INDEXER "Enable test code for indexer" OFF)
+option(TEST_INDEXER_SIMPLE "Enable test code for simple indexer test" OFF)
+option(TEST_INDEXER_EXCEPTION "Enable test code for indexer exception test" OFF)
+option(TEST_INDEXER_OBJ "Enable test code for indexer object code" OFF)
+
 if(TEST_ALL)
         set(TEST_INDEXER ON)
 endif(TEST_ALL)
                 
-option(TEST_INDEXER_SIMPLE "Enable test code for simple indexer test" OFF)
-option(TEST_INDEXER_EXCEPTION "Enable test code for indexer exception test" OFF)
 if(TEST_INDEXER)
         set(TEST_INDEXER_SIMPLE ON)
         set(TEST_INDEXER_EXCEPTION ON)
         set(SIMPLE_DATA_INDEXER ON)
+        set(TEST_INDEXER_OBJ ON)
 endif(TEST_INDEXER)
 
 if(TEST_INDEXER_SIMPLE)
@@ -62,6 +65,20 @@ if(SIMPLE_DATA_INDEXER)
                 PRIVATE fast_indexer
                 PRIVATE simple_data)
 endif(SIMPLE_DATA_INDEXER)
+
+if(TEST_INDEXER_OBJ)
+        if(NOT BUILD_FAST_INDEXER)
+                message(FATAL_ERROR "TEST_INDEXER_SIMPLE needs -DBUILD_FAST_INDEXER=1 as a cmake argument")
+        endif()
+        add_executable(test_indexer_obj test_indexer_obj.cpp)
+        target_compile_features(test_indexer_obj PRIVATE cxx_std_17)
+        target_link_libraries(test_indexer_obj
+                PRIVATE fast_indexer)
+
+        add_test(NAME indexer_object COMMAND test_indexer_obj)
+        set_property(TEST indexer_object PROPERTY PASS_REGULAR_EXPRESSION "Test OK")
+        set_property(TEST indexer_object PROPERTY FAIL_REGULAR_EXPRESSION "Test failed")
+endif(TEST_INDEXER_OBJ)
 
 # ---- Data Tests ----
 
