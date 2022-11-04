@@ -90,12 +90,12 @@ int main (int argc, char *argv[])
         fast_feedback::memory_pin pin_y{y};
         fast_feedback::memory_pin pin_z{z};
         fast_feedback::memory_pin pin_buf{buf};         // pin output coordinate container
-        fast_feedback::memory_pin pin_crt{fast_feedback::memory_pin::on(crt)};  // pin runtime config memory
+        fast_feedback::memory_pin pin_crt{fast_feedback::memory_pin::on(crt)};      // pin runtime config memory
 
-        fast_feedback::input<float> in{x.data(), y.data(), z.data(), 1u, i-3u}; // create indexer input object
-        fast_feedback::output<float> out{&buf[0], &buf[3], &buf[6], &buf[9]};   // create indexer output object
+        fast_feedback::input<float> in{x.data(), y.data(), z.data(), 1u, i-3u};     // create indexer input object
+        fast_feedback::output<float> out{&buf[0], &buf[3], &buf[6], &buf[9], 1u};   // create indexer output object
 
-        indexer.index(in, out, crt);                                            // run indexer
+        indexer.index(in, out, crt);                    // run indexer
 
         constexpr float max_score = -200.0f;            // maximum acceptable output score
         std::cout << "score: " << out.score[0];

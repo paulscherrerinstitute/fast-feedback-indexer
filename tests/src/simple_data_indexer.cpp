@@ -127,7 +127,8 @@ int main (int argc, char *argv[])
 
         fast_feedback::input<float> in{x.data(), y.data(), z.data(), 1u, i-3u}; // create indexer input object
         fast_feedback::output<float> out{&buf[0], &buf[3u*cpers.max_output_cells],
-                                         &buf[6u*cpers.max_output_cells], &buf[9u*cpers.max_output_cells]}; // create indexer output object
+                                         &buf[6u*cpers.max_output_cells], &buf[9u*cpers.max_output_cells],
+                                         cpers.max_output_cells};               // create indexer output object
 
         indexer.index(in, out, crt);                                            // run indexer
 

@@ -380,35 +380,40 @@ namespace {
 
         // Copy input data to GPU
         static inline void copy_in(const key_type& state_id, const config_persistent& cpers,
-                                   const fast_feedback::input<float_type>& input, cudaStream_t stream=0)
+                                   const fast_feedback::input<float_type>& input,
+                                   fast_feedback::output<float_type>& output,
+                                   cudaStream_t stream=0)
         {
             const auto& gpu_state = ref(state_id);
             auto& pinned_tmp = const_cast<config_persistent&>(*gpu_state.tmp);
             const auto& device_data = gpu_state.data;
-            const auto n_cells = std::min(input.n_cells, cpers.max_input_cells);
+            const auto n_input_cells = std::min(input.n_cells, cpers.max_input_cells);
             const auto n_spots = std::min(input.n_spots, cpers.max_spots);
+            output.n_cells = std::min(output.n_cells, cpers.max_output_cells);
 
+            pinned_tmp.max_output_cells = output.n_cells;
+            CU_CHECK(cudaMemcpyAsync(&device_data->output.n_cells, &pinned_tmp.max_output_cells, sizeof(output.n_cells), cudaMemcpyHostToDevice, stream));
             // NOTE: the following code assumes consecutive storage of two data members in tmp and in device_data->input
-            pinned_tmp.max_input_cells = n_cells;
+            pinned_tmp.max_input_cells = n_input_cells;
             pinned_tmp.max_spots = n_spots;
-            CU_CHECK(cudaMemcpyAsync(&device_data->input.n_cells, &pinned_tmp.max_input_cells, sizeof(n_cells) + sizeof(n_spots), cudaMemcpyHostToDevice, stream));
+            CU_CHECK(cudaMemcpyAsync(&device_data->input.n_cells, &pinned_tmp.max_input_cells, sizeof(n_input_cells) + sizeof(n_spots), cudaMemcpyHostToDevice, stream));
 
-            if (n_cells + n_spots > 0) {
-                if (n_cells == input.n_cells) {
-                    const auto combi_sz = (3 * n_cells + n_spots) * sizeof(float_type);
+            if (n_input_cells + n_spots > 0u) {
+                if (n_input_cells == input.n_cells) {
+                    const auto combi_sz = (3u * n_input_cells + n_spots) * sizeof(float_type);
                     CU_CHECK(cudaMemcpyAsync(gpu_state.ix, input.x, combi_sz, cudaMemcpyHostToDevice, stream));
                     CU_CHECK(cudaMemcpyAsync(gpu_state.iy, input.y, combi_sz, cudaMemcpyHostToDevice, stream));
                     CU_CHECK(cudaMemcpyAsync(gpu_state.iz, input.z, combi_sz, cudaMemcpyHostToDevice, stream));
                 } else {
-                    const auto dst_offset = 3 * n_cells;
-                    if (n_cells > 0) {
+                    const auto dst_offset = 3u * n_input_cells;
+                    if (n_input_cells > 0u) {
                         const auto cell_sz = dst_offset * sizeof(float_type);
                         CU_CHECK(cudaMemcpyAsync(gpu_state.ix, input.x, cell_sz, cudaMemcpyHostToDevice, stream));
                         CU_CHECK(cudaMemcpyAsync(gpu_state.iy, input.y, cell_sz, cudaMemcpyHostToDevice, stream));
                         CU_CHECK(cudaMemcpyAsync(gpu_state.iz, input.z, cell_sz, cudaMemcpyHostToDevice, stream));
                     }
                     if (n_spots > 0) {
-                        const auto src_offset = input.n_cells;
+                        const auto src_offset = 3u * input.n_cells;
                         const auto spot_sz = n_spots * sizeof(float_type);
                         CU_CHECK(cudaMemcpyAsync(&gpu_state.ix[dst_offset], &input.x[src_offset], spot_sz, cudaMemcpyHostToDevice, stream));
                         CU_CHECK(cudaMemcpyAsync(&gpu_state.iy[dst_offset], &input.y[src_offset], spot_sz, cudaMemcpyHostToDevice, stream));
@@ -417,7 +422,8 @@ namespace {
                 }
             }
 
-            logger::debug << stanza << "copy in: " << n_cells << " cells, " << n_spots << " spots, elements=" << gpu_state.elements.get() << ": "
+            logger::debug << stanza << "copy in: " << n_input_cells << " cells(in), " << output.n_cells << " cells(out), "
+                          << n_spots << " spots, elements=" << gpu_state.elements.get() << ": "
                           << input.x << "-->" << gpu_state.ix << ", "
                           << input.y << "-->" << gpu_state.iy << ", "
                           << input.z << "-->" << gpu_state.iz << '\n';
@@ -1117,8 +1123,8 @@ namespace {
             __syncthreads();                // protect sort_ptr[] (it's in the same memory as cand_ptr)
         }
 
-        const unsigned n_output_cells = data->cpers.max_output_cells;
-        auto cand_ptr = reinterpret_cast<cell_cand_t<float_type>*>(shared_ptr); // [max_output_cells]
+        const unsigned n_output_cells = data->output.n_cells;
+        auto cand_ptr = reinterpret_cast<cell_cand_t<float_type>*>(shared_ptr); // [output.n_cells]
         if (threadIdx.x < n_output_cells)   // store top candidate cells into cand_ptr
             cand_ptr[threadIdx.x] = { vabc, vsample, rsample, cell_vec };
 
@@ -1132,9 +1138,6 @@ namespace {
             seq_acquire(data->seq_block[0]);
             merge_top_cells(data->output, cand_ptr, n_output_cells);
             seq_release(data->seq_block[0]);
-
-            if ((blockIdx.x == 0) && (blockIdx.y == 0) && (blockIdx.z == 0))
-                data->output.n_cells = n_output_cells;
         }
     }
 
@@ -1321,7 +1324,7 @@ namespace gpu {
 
         // Check input/output
         const auto n_cells_in = std::min(in.n_cells, instance.cpers.max_input_cells);
-        const auto n_cells_out = instance.cpers.max_output_cells;
+        const auto n_cells_out = std::min(out.n_cells, instance.cpers.max_output_cells);
         logger::debug << stanza << "n_cells = " << n_cells_in << "(in)/" << n_cells_out << "(out), n_spots = " << in.n_spots << '\n';
         if (n_cells_in <= 0u)
             throw FF_EXCEPTION("no given input cells");
@@ -1392,7 +1395,7 @@ namespace gpu {
             const unsigned shared_sz = std::max(instance.cpers.num_candidate_vectors * sizeof(vec_cand_t<float_type>),
                                                 sizeof(typename BlockRadixSort<float_type>::TempStorage));
             gpu_state::copy_crt(state_id, conf_rt);
-            gpu_state::copy_in(state_id, instance.cpers, in);
+            gpu_state::copy_in(state_id, instance.cpers, in, out);
             gpu_state::init_cand(state_id, n_cand_groups, instance.cpers, candidate_length, candidate_idx);
             state.start.record();
             gpu_find_candidates<float_type><<<n_blocks, n_threads, shared_sz, 0>>>(gpu_state::ptr(state_id).get());

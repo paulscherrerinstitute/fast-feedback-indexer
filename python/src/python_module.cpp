@@ -66,13 +66,121 @@ namespace {
         PyArrayObject* ndarray;
         if (PyArg_ParseTupleAndKeywords(args, kwds, "ldllO!", (char**)kw, &handle, &length_threshold, &num_sample_points, &n_cells, &PyArray_Type, &ndarray) == 0)
             return nullptr;
-        
-        int ndim = PyArray_NDIM(ndarray);
-        std::ostringstream oss;
-        oss << "handle=" << handle << " length_threshold=" << length_threshold << " num_sample_points=" << num_sample_points
-            << " n_cells=" << n_cells << " ndim=" << ndim << '\n';
-        PyErr_SetString(PyExc_RuntimeError, oss.str().c_str());
-        return nullptr;
+
+        if (handle < 0 || handle > numeric_limits<unsigned>::max()) {
+            PyErr_SetString(PyExc_ValueError, "handle out of bounds for an unsigned integer");
+            return nullptr;
+        }
+
+        if (num_sample_points < 0 || num_sample_points > numeric_limits<unsigned>::max()) {
+            PyErr_SetString(PyExc_ValueError, "num_sample_points out of bounds for an unsigned integer");
+            return nullptr;
+        }
+
+        if (n_cells < 0 || n_cells > numeric_limits<unsigned>::max()) {
+            PyErr_SetString(PyExc_ValueError, "n_cells out of bounds for an unsigned integer");
+            return nullptr;
+        }
+
+        if (PyArray_NDIM(ndarray) != 2) {
+            PyErr_SetString(PyExc_RuntimeError, "data array must be 2 dimensional");
+            return nullptr;
+        }
+
+        if (PyArray_TYPE(ndarray) != NPY_FLOAT32) {
+            PyErr_SetString(PyExc_RuntimeError, "only float32 data is supported");
+            return nullptr;
+        }
+
+        npy_intp n_vecs = 0;
+        {
+            auto* shape = PyArray_DIMS(ndarray);
+
+            if (PyArray_ISCARRAY(ndarray)) {
+                if (shape[0] != 3) {
+                    PyErr_SetString(PyExc_RuntimeError, "only shape (3, -1) CARRAY data is supported");
+                    return nullptr;
+                }
+                n_vecs = shape[1];
+            } else if (PyArray_ISFARRAY(ndarray)) {
+                if (shape[1] != 3) {
+                    PyErr_SetString(PyExc_RuntimeError, "only shape (-1, 3) FARRAY data is supported");
+                    return nullptr;
+                }
+                n_vecs = shape[0];
+            } else {
+                PyErr_SetString(PyExc_RuntimeError, "only NPY_ARRAY_CARRAY or NPY_ARRAY_FARRAY data is supported");
+                return nullptr;
+            }
+        }
+
+        if (3*n_cells >= n_vecs) {
+            PyErr_SetString(PyExc_RuntimeError, "not enough data for n_cells plus spots");
+            return nullptr;
+        }
+
+        indexer_t* indexer = nullptr;
+        try {
+            indexer = &indexers.at((unsigned)handle);
+        } catch (std::out_of_range&) {
+            PyErr_SetString(PyExc_RuntimeError, "invalid handle");
+            return nullptr;
+        }
+
+        unsigned n_out = indexer->cpers.max_output_cells;
+
+        PyArrayObject* result;
+        {
+            npy_intp result_dims[] = { 3, 3 * n_out };
+            result = (PyArrayObject*)PyArray_SimpleNew(2, result_dims, NPY_FLOAT32);
+        }
+
+        if (result == nullptr) {
+            PyErr_SetString(PyExc_RuntimeError, "unable to create result array");
+            return nullptr;
+        }
+
+        PyArrayObject* score;
+        {
+            npy_intp score_dim = n_out;
+            score = (PyArrayObject*)PyArray_SimpleNew(1, &score_dim, NPY_FLOAT32);
+        }
+
+        if (score == nullptr) {
+            PyErr_SetString(PyExc_RuntimeError, "unable to create score array");
+            return nullptr;
+        }
+
+        try {
+            float* in_data = (float*)PyArray_DATA(ndarray);
+            npy_intp in_bytes = PyArray_NBYTES(ndarray);
+
+            float* out_data = (float*)PyArray_DATA(result);
+            npy_intp out_bytes = PyArray_NBYTES(result);
+
+            float* score_data = (float*)PyArray_DATA(score);
+            npy_intp score_bytes = PyArray_NBYTES(score);
+
+            fast_feedback::config_runtime<float> crt{(float)length_threshold, (unsigned)num_sample_points};
+
+            fast_feedback::memory_pin pin_crt{fast_feedback::memory_pin::on(crt)};
+            fast_feedback::memory_pin pin_score{score_data, (std::size_t)score_bytes};
+            fast_feedback::memory_pin pin_out{out_data, (std::size_t)out_bytes};
+            fast_feedback::memory_pin pin_in{in_data, (std::size_t)in_bytes};
+
+            const fast_feedback::input<float> input{&in_data[0], &in_data[n_vecs], &in_data[2*n_vecs], (unsigned)n_cells, (unsigned)(n_vecs - 3*n_cells)};
+            fast_feedback::output<float> output{&out_data[0], &out_data[3*n_out], &out_data[6*n_out], &score_data[0], n_out};
+
+            indexer->index(input, output, crt);
+        } catch (std::exception& ex) {
+            PyErr_SetString(PyExc_RuntimeError, ex.what());
+            return nullptr;
+        }
+
+        PyObject* tuple = PyTuple_Pack(2, result, score);
+        if (tuple == nullptr)
+            PyErr_SetString(PyExc_RuntimeError, "unable to create result tuple");
+        return tuple;
     }
 
     PyObject* ffbidx_release_(PyObject *args, PyObject *kwds)
@@ -89,7 +197,7 @@ namespace {
             return nullptr;
         }
 
-        if (indexers.erase(handle) != 1) {
+        if (indexers.erase((unsigned)handle) != 1) {
             PyErr_SetString(PyExc_ValueError, "invalid handle");
             return nullptr;
         }

@@ -17,8 +17,7 @@ if(PYTHON_MODULE)
                 message(FATAL_ERROR "PYTHON_MODULE needs -DBUILD_FAST_INDEXER=1 as a cmake argument")
         endif()
         Python3_add_library(ffbidx MODULE
-                python_module.cpp
-                __init__.py)
+                python_module.cpp)
         target_compile_features(ffbidx PRIVATE cxx_std_17)
         target_include_directories(ffbidx PUBLIC ${Python3_INCLUDE_DIRS} ${Python3_NumPy_INCLUDE_DIRS})
         target_link_libraries(ffbidx

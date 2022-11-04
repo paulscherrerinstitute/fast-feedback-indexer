@@ -63,7 +63,7 @@ namespace fast_feedback {
         float_type* y;      // y coordinates, pinned memory
         float_type* z;      // z coordinates, pinned memory
         float_type* score;  // per cell score, pinned memory
-        unsigned n_cells;   // number of unit cells
+        unsigned n_cells=1u;// number of unit cells
     };
 
     // Configuration setting for the fast feedback indexer runtime state
