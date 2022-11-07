@@ -137,7 +137,7 @@ namespace fast_feedback {
 
         // Take over others state
         inline indexer (indexer&& other)
-            : state(state_id::null), cpers(std::move(other.cpers))
+            : cpers(std::move(other.cpers)), state(state_id::null)
         {
             std::swap(const_cast<state_id::type&>(state), const_cast<state_id::type&>(other.state));
         }

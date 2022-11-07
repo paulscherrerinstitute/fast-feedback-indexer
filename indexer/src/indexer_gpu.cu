@@ -58,7 +58,7 @@ namespace {
         // static constexpr float_type pi = M_PI;
         #pragma nv_diag_suppress 177 // suppress unused warning
         [[maybe_unused]] static constexpr float_type pi2 = M_PI_2;
-        #pragma nv_diag_suppress 177 // supress unused warning
+        #pragma nv_diag_suppress 177 // suppress unused warning
         [[maybe_unused]] static constexpr float_type dl = 0.76393202250021030359082633126873; // 3 - sqrt(5), for spiral sample points on a half sphere
         // static constexpr float_type eps = FLT_EPSILON;
     };
@@ -964,7 +964,6 @@ namespace {
             // Print out candidate vectors
             const unsigned ncv = data->cpers.num_candidate_vectors;
             const float_type* const cvp = data->candidate_value;
-            const unsigned ns = data->crt.num_sample_points;
             const unsigned* const csp = data->candidate_sample;
 
             unsigned ncg = 0u;

@@ -43,7 +43,7 @@ namespace {
     }
 }
 
-int main(int, char *argv[])
+int main(int, char**)
 {
     fast_feedback::exception ex = move_assign_copy() << "34";
 

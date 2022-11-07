@@ -230,9 +230,9 @@ extern "C" {
     }
 
     PyMethodDef ffbidx_methods[] = {
-        {"indexer", (PyCFunction)ffbidx_indexer, METH_VARARGS | METH_KEYWORDS, PyDoc_STR("Get an indexer handle")},
-        {"index", (PyCFunction)ffbidx_index, METH_VARARGS | METH_KEYWORDS, PyDoc_STR("Call indexer")},
-        {"release", (PyCFunction)ffbidx_release, METH_VARARGS | METH_KEYWORDS, PyDoc_STR("Release indexer handle")},
+        {"indexer", (PyCFunction)(void*)ffbidx_indexer, METH_VARARGS | METH_KEYWORDS, PyDoc_STR("Get an indexer handle")},
+        {"index", (PyCFunction)(void*)ffbidx_index, METH_VARARGS | METH_KEYWORDS, PyDoc_STR("Call indexer")},
+        {"release", (PyCFunction)(void*)ffbidx_release, METH_VARARGS | METH_KEYWORDS, PyDoc_STR("Release indexer handle")},
         {NULL, NULL, 0, NULL}
     };
 
@@ -242,6 +242,10 @@ extern "C" {
         .m_doc = PyDoc_STR("Fast feedback indexer"),
         .m_size = -1,
         .m_methods = ffbidx_methods,
+        .m_slots = nullptr,
+        .m_traverse = nullptr,
+        .m_clear = nullptr,
+        .m_free = nullptr
     };
 
     PyMODINIT_FUNC PyInit_ffbidx(void)
