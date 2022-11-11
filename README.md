@@ -2,13 +2,14 @@
 
 Develop an indexer for fast feedback
 
-*Status*: not working yet
+*Status*: Current results based on simple brute force sampling seem to make sense.
 
 ### Build Dependencies
 
 * C++17 compatible compiler
 * indexer needs a compiler compatible CUDA toolkit
 * data/simple/reader needs the Eigen 3.3 library
+* python module needs Python3 and NumPy (also see https://cmake.org/cmake/help/latest/module/FindPython3.html)
 
 ### Build Instructions
 
@@ -22,6 +23,17 @@ Get hold of the Eigen3 library, either by installing it via your distro (e.g. on
 > ctest
 ```
 
+For depositing the python module in /tmp/test use
+```
+> cd build
+> cmake ... -DPYTHON_MODULE=1 ..
+> make
+> cd ..
+> sh pythonlib.sh install
+```
+
 ### Installation Instructions
 
 TODO
+
+*make install* doesn't work
