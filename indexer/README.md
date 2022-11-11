@@ -51,3 +51,10 @@ Steer program startup arguments with environment variables. If required, cli arg
 * *INDEXER_GPU_DEVICE* (int): The GPU cuda device number to use for indexing
 * *INDEXER_LOG_LEVEL* (string): The log level for the indexer {"fatal", "error", "warn", "info", "debug"}
 * *INDEXER_GPU_DEBUG* (string): Print gpu kernel debug output to stdout {"1", "true", "yes", "on", "0", "false", "no", "off"}
+
+### Noteworthy Cmake Variables
+
+* CMAKE_CUDA_ARCHITECTURES: GPU architecture, default \"75;80\"
+   * https://cmake.org/cmake/help/latest/variable/CMAKE_CUDA_ARCHITECTURES.html
+   * https://docs.nvidia.com/cuda/cuda-compiler-driver-nvcc/index.html#gpu-feature-list
+
