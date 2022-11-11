@@ -14,10 +14,12 @@ lib_name=ffbidx.so
 
 install() {
     local build_dir=${CMAKE_BUILD_DIR:-${default_build_dir}}
+    echo "looking for build artefacts in ${build_dir}"
     local lib=${build_dir}/python/src/${lib_name}
     if [ ! -x "${lib}" ]; then
         echo "Failed: no library at ${lib}"
         echo "        build the library and set CMAKE_BUILD_DIR to the build directory"
+        exit 1
     fi
     local dir="${1:-${default_lib_dir}}"
     local dest="${dir}/__init__.so"
@@ -39,7 +41,7 @@ if test -r pythonlib.sh; then
     elif [ "$1" = "remove" ]; then
         remove "$2"
     else
-        echo "Failed: use $0 install|remove [ <python lib dir, default=/tmp/ffbidx> ]"
+        echo "Failed: use $0 install|remove [ <python lib dir, default={default_lib_dir} ]"
     fi
 else
     echo "Failed: execute this command from the top directory of the repository!"

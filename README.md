@@ -23,7 +23,8 @@ Get hold of the Eigen3 library, either by installing it via your distro (e.g. on
 > ctest
 ```
 
-For depositing the python module in /tmp/test use
+For depositing the python module in /tmp/test on a Linux system use
+
 ```
 > cd build
 > cmake ... -DPYTHON_MODULE=1 ..
