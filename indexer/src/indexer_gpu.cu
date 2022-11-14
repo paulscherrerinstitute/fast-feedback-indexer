@@ -1286,7 +1286,7 @@ namespace gpu {
                               candidate_length, candidate_value,
                               candidate_sample, cellvec_to_cand,
                               sequentializers};
-            CU_CHECK(cudaMemcpy(data, &_data, sizeof(_data), cudaMemcpyHostToDevice));
+            CU_CHECK(cudaMemcpyAsync(data, &_data, sizeof(_data), cudaMemcpyHostToDevice, 0));
         }
     }
 
