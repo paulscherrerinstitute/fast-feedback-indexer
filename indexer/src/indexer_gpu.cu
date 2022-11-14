@@ -269,6 +269,103 @@ namespace {
                                                 //     First sequentializer is also used for candidate cell search
     };
 
+    // Cuda stream wrapper
+    struct gpu_stream final {
+        bool ready;                             // Is stream ready = initialized
+        cudaStream_t stream;                    // Cuda stream
+        static std::mutex unused_update;        // Protect unused streams container
+        static std::map<unsigned int, std::vector<gpu_stream>> unused; // Stock of unused streams per flags
+
+        // Return uninitialized stream
+        gpu_stream() noexcept
+            : ready{false}, stream{cudaStream_t{}}
+        {}
+
+        // Initialize stream with existing cuda stream
+        // The cuda stream given as argument will be managed by this object after the call,
+        // which basically means it should not be used afterwards.
+        gpu_stream(cudaStream_t s)
+            : ready{true}, stream{s}
+        {
+            unsigned int flags;
+            CU_CHECK(cudaStreamGetFlags(s, &flags));    // check that the s is initialized
+        }
+
+        // Move s into this
+        gpu_stream(gpu_stream&& s)
+            : ready{false}, stream{cudaStream_t{}}
+        {
+            std::swap(ready, s.ready);
+            std::swap(stream, s.stream);
+        }
+
+        // Move s into this
+        gpu_stream& operator=(gpu_stream&& s)
+        {
+            if (ready) {
+                CU_CHECK(cudaStreamDestroy(stream));
+                ready = false;
+            }
+            std::swap(ready, s.ready);
+            std::swap(stream, s.stream);
+            return *this;
+        }
+
+        gpu_stream(const gpu_stream&) = delete;             // No copying
+        gpu_stream& operator=(const gpu_stream&) = delete;  // No copying
+
+        // Destroy this
+        ~gpu_stream()
+        {
+            release();
+        }
+
+        // Release and unititialize the cuda stream
+        // This is left in uninitialized state
+        void release()
+        {
+            if (ready) {
+                CU_CHECK(cudaStreamDestroy(stream));
+                ready = false;
+            }
+        }
+
+        // (Re)initialize the cuda stream
+        void init(unsigned int flags=cudaStreamDefault)
+        {
+            release();
+            CU_CHECK(cudaStreamCreateWithFlags(&stream, flags));
+            ready = true;
+        }
+
+        // Get an unused gpu_stream from cache
+        static gpu_stream from_cache(unsigned int flags=cudaStreamDefault)
+        {
+            std::lock_guard lock_unused{unused_update};
+            if (unused[flags].empty()) {
+                unused[flags].emplace(std::end(unused[flags]));
+                unused[flags].back().init(flags);
+            }
+            gpu_stream result = std::move(unused[flags].back());
+            unused[flags].pop_back();
+            return result;
+        }
+
+        // Return an initialized gpu_stream to the cache of unused streams
+        static void to_cache(gpu_stream&& s)
+        {
+            unsigned int flags;
+            CU_CHECK(cudaStreamGetFlags(s, &flags));
+            std::lock_guard lock_unused{unused_update};
+            unused[flags].insert(std::end(unused[flags]), std::move(s));
+        }
+
+        operator cudaStream_t&() noexcept { return stream; }    // Cast to cuda stream
+    };
+
+    std::mutex gpu_stream::unused_update;
+    std::map<unsigned int, std::vector<gpu_stream>> gpu_stream::unused;
+
     // Indexer GPU state representation on the Host side
     //
     // Candidate vector group = set of vectors with same length that are candidates for a unit cell vector
