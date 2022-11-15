@@ -96,8 +96,10 @@ int main (int argc, char *argv[])
         fast_feedback::input<float> in{x.data(), y.data(), z.data(), 1u, i-3u};     // create indexer input object
         fast_feedback::output<float> out{&buf[0], &buf[3], &buf[6], &buf[9], 1u};   // create indexer output object
 
-        std::thread parallel([&indexer, &in, &crt, &buf]() {                                  // parallel indexing thread
+        std::thread parallel([&in, &crt, &buf]() {                                  // parallel indexing thread
+            fast_feedback::indexer indexer;
             fast_feedback::output<float> out{&buf[10], &buf[13], &buf[16], &buf[19], 1u};
+
             indexer.index(in, out, crt);
             std::cout << "parallel indexing thread finished\n";
         });

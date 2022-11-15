@@ -275,9 +275,6 @@ namespace {
     struct gpu_stream final {
         bool ready;                             // Is stream ready = initialized
         cudaStream_t stream;                    // Cuda stream
-        static std::mutex unused_update;        // Protect unused streams container
-        static std::map<unsigned int, std::vector<gpu_stream>> unused; // Stock of unused streams per flags
-        static uint64_t max_unused;             // Maximum count of unused streams for statistics
 
         // Return uninitialized stream
         gpu_stream() noexcept
@@ -348,40 +345,8 @@ namespace {
                 CU_CHECK(cudaStreamSynchronize(stream));
         }
 
-        // Get an unused gpu_stream from cache
-        static gpu_stream from_cache(unsigned int flags=cudaStreamDefault)
-        {
-            std::lock_guard lock_unused{unused_update};
-            if (unused[flags].empty()) {
-                unused[flags].emplace(std::end(unused[flags]));
-                unused[flags].back().init(flags);
-            }
-            gpu_stream result = std::move(unused[flags].back());
-            unused[flags].pop_back();
-            return result;
-        }
-
-        // Return an initialized gpu_stream to the cache of unused streams
-        static void to_cache(gpu_stream&& s)
-        {
-            unsigned int flags;
-            CU_CHECK(cudaStreamGetFlags(s, &flags));
-            std::lock_guard lock_unused{unused_update};
-            unused[flags].insert(std::end(unused[flags]), std::move(s));
-            LOG_START(logger::l_debug) {
-                if (max_unused < unused[flags].size()) {
-                    max_unused = unused[flags].size();
-                    logger::debug << stanza << "unused stream cache size: " << max_unused << '\n';
-                }
-            } LOG_END;
-        }
-
         operator cudaStream_t&() noexcept { return stream; }    // Cast to cuda stream
     };
-
-    std::mutex gpu_stream::unused_update;
-    std::map<unsigned int, std::vector<gpu_stream>> gpu_stream::unused;
-    uint64_t gpu_stream::max_unused{};
 
     // Indexer GPU state representation on the Host side
     //
@@ -1525,13 +1490,12 @@ namespace gpu {
                 logger::debug << ", n_cand_groups = " << n_cand_groups << '\n';
             } LOG_END;
         }
-        gpu_stream stream{gpu_stream::from_cache()};    // cuda stream from unused pool
+        gpu_stream& stream = gpu_state::stream(state_id);   // cuda stream from unused pool
         {   // find vector candidates
             const unsigned n_samples = conf_rt.num_sample_points;
             const dim3 n_blocks((n_samples + n_threads - 1) / n_threads, n_cand_groups);
             const unsigned shared_sz = std::max(instance.cpers.num_candidate_vectors * sizeof(vec_cand_t<float_type>),
                                                 sizeof(typename BlockRadixSort<float_type>::TempStorage));
-            gpu_state::stream(state_id).sync(); // sync on initialization
             gpu_state::copy_crt(state_id, conf_rt, stream);
             gpu_state::copy_in(state_id, instance.cpers, in, out, stream);
             gpu_state::init_cand(state_id, n_cand_groups, instance.cpers, candidate_length, candidate_idx, stream);
@@ -1542,9 +1506,7 @@ namespace gpu {
             const unsigned n_xblocks = (1.5 * std::sqrt(conf_rt.num_sample_points) + n_threads - 1.) / n_threads;
             const dim3 n_blocks(n_xblocks, 3 * n_cells_in, instance.cpers.num_candidate_vectors);
             const unsigned shared_sz = std::max(n_cells_out * sizeof(cell_cand_t<float_type>),
-                                                sizeof(typename BlockRadixSort<float_type>::TempStorage));     
-
-            // gpu_state::init_score(state_id, instance.cpers);
+                                                sizeof(typename BlockRadixSort<float_type>::TempStorage));
             if (gpu_debug_output)
                 gpu_debug_out<float_type><<<1, 1, 0, stream>>>(gpu_state::ptr(state_id).get(), 0u);
             gpu_find_cells<float_type><<<n_blocks, n_threads, shared_sz, 0>>>(gpu_state::ptr(state_id).get());
@@ -1564,7 +1526,6 @@ namespace gpu {
                 logger::info << stanza << "kernel_time: " << gpu_timing(state.start, state.end) << "ms\n";
             } LOG_END;
         }
-        gpu_stream::to_cache(std::move(stream));    // return stream to unused pool
     }
 
     // Raw memory pin
