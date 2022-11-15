@@ -4,10 +4,11 @@ project(tests_impl
 
 # ---- Indexer Tests ----
 
-option(TEST_INDEXER "Enable test code for indexer" OFF)
 option(TEST_INDEXER_SIMPLE "Enable test code for simple indexer test" OFF)
 option(TEST_INDEXER_EXCEPTION "Enable test code for indexer exception test" OFF)
 option(TEST_INDEXER_OBJ "Enable test code for indexer object code" OFF)
+option(SIMPLE_DATA_INDEXER "Enable test executable for indexing of simple data" OFF)
+option(REFINED_SIMPLE_DATA_INDEXER "Enable test executable for refined indexing of simple data" OFF)
 
 if(TEST_ALL)
         set(TEST_INDEXER ON)
@@ -16,8 +17,9 @@ endif(TEST_ALL)
 if(TEST_INDEXER)
         set(TEST_INDEXER_SIMPLE ON)
         set(TEST_INDEXER_EXCEPTION ON)
-        set(SIMPLE_DATA_INDEXER ON)
         set(TEST_INDEXER_OBJ ON)
+        set(SIMPLE_DATA_INDEXER ON)
+        set(REFINED_SIMPLE_DATA_INDEXER ON)
 endif(TEST_INDEXER)
 
 if(TEST_INDEXER_SIMPLE)
@@ -52,20 +54,6 @@ if(TEST_INDEXER_EXCEPTION)
         set_property(TEST fast_feedback_exception PROPERTY FAIL_REGULAR_EXPRESSION "Test failed")
 endif(TEST_INDEXER_EXCEPTION)
 
-if(SIMPLE_DATA_INDEXER)
-        if(NOT BUILD_SIMPLE_DATA_READER)
-                message(FATAL_ERROR "SIMPLE_DATA_INDEXER needs -DBUILD_SIMPLE_DATA_READER=1 as a cmake argument")
-        endif()
-        if(NOT BUILD_FAST_INDEXER)
-                message(FATAL_ERROR "SIMPLE_DATA_INDEXER needs -DBUILD_FAST_INDEXER=1 as a cmake argument")
-        endif()
-        add_executable(simple_data_indexer simple_data_indexer.cpp)
-        target_compile_features(test_indexer PRIVATE cxx_std_17)
-        target_link_libraries(simple_data_indexer
-                PRIVATE fast_indexer
-                PRIVATE simple_data)
-endif(SIMPLE_DATA_INDEXER)
-
 if(TEST_INDEXER_OBJ)
         if(NOT BUILD_FAST_INDEXER)
                 message(FATAL_ERROR "TEST_INDEXER_SIMPLE needs -DBUILD_FAST_INDEXER=1 as a cmake argument")
@@ -79,6 +67,34 @@ if(TEST_INDEXER_OBJ)
         set_property(TEST indexer_object PROPERTY PASS_REGULAR_EXPRESSION "Test OK")
         set_property(TEST indexer_object PROPERTY FAIL_REGULAR_EXPRESSION "Test failed")
 endif(TEST_INDEXER_OBJ)
+
+if(SIMPLE_DATA_INDEXER)
+        if(NOT BUILD_SIMPLE_DATA_READER)
+                message(FATAL_ERROR "SIMPLE_DATA_INDEXER needs -DBUILD_SIMPLE_DATA_READER=1 as a cmake argument")
+        endif()
+        if(NOT BUILD_FAST_INDEXER)
+                message(FATAL_ERROR "SIMPLE_DATA_INDEXER needs -DBUILD_FAST_INDEXER=1 as a cmake argument")
+        endif()
+        add_executable(simple_data_indexer simple_data_indexer.cpp)
+        target_compile_features(simple_data_indexer PRIVATE cxx_std_17)
+        target_link_libraries(simple_data_indexer
+                PRIVATE fast_indexer
+                PRIVATE simple_data)
+endif(SIMPLE_DATA_INDEXER)
+
+if(REFINED_SIMPLE_DATA_INDEXER)
+        if(NOT BUILD_SIMPLE_DATA_READER)
+                message(FATAL_ERROR "SIMPLE_DATA_INDEXER needs -DBUILD_SIMPLE_DATA_READER=1 as a cmake argument")
+        endif()
+        if(NOT BUILD_FAST_INDEXER)
+                message(FATAL_ERROR "SIMPLE_DATA_INDEXER needs -DBUILD_FAST_INDEXER=1 as a cmake argument")
+        endif()
+        add_executable(refined_simple_data_indexer refined_simple_data_indexer.cpp)
+        target_compile_features(refined_simple_data_indexer PRIVATE cxx_std_17)
+        target_link_libraries(refined_simple_data_indexer
+                PRIVATE fast_indexer
+                PRIVATE simple_data)
+endif(REFINED_SIMPLE_DATA_INDEXER)
 
 # ---- Data Tests ----
 
