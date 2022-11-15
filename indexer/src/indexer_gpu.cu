@@ -1490,7 +1490,7 @@ namespace gpu {
                 logger::debug << ", n_cand_groups = " << n_cand_groups << '\n';
             } LOG_END;
         }
-        gpu_stream& stream = gpu_state::stream(state_id);   // cuda stream from unused pool
+        gpu_stream& stream = gpu_state::stream(state_id);
         {   // find vector candidates
             const unsigned n_samples = conf_rt.num_sample_points;
             const dim3 n_blocks((n_samples + n_threads - 1) / n_threads, n_cand_groups);
