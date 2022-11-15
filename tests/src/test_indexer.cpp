@@ -28,6 +28,7 @@ Author: hans-christian.stadler@psi.ch
 #include <stdexcept>
 #include <vector>
 #include <array>
+#include <thread>
 #include <Eigen/Core>
 #include <Eigen/LU>
 #include "simple_data.h"
@@ -82,7 +83,7 @@ int main (int argc, char *argv[])
             i++;            
         }
 
-        std::array<float, 10> buf;                      // output coordinate/score container
+        std::array<float, 20> buf;                      // 2x output coordinate/score container
         fast_feedback::config_runtime<float> crt{};     // default runtime config
         fast_feedback::indexer indexer;                 // indexer object with default config
 
@@ -95,7 +96,13 @@ int main (int argc, char *argv[])
         fast_feedback::input<float> in{x.data(), y.data(), z.data(), 1u, i-3u};     // create indexer input object
         fast_feedback::output<float> out{&buf[0], &buf[3], &buf[6], &buf[9], 1u};   // create indexer output object
 
+        std::thread parallel([&indexer, &in, &crt, &buf]() {                                  // parallel indexing thread
+            fast_feedback::output<float> out{&buf[10], &buf[13], &buf[16], &buf[19], 1u};
+            indexer.index(in, out, crt);
+            std::cout << "parallel indexing thread finished\n";
+        });
         indexer.index(in, out, crt);                    // run indexer
+        parallel.join();
 
         constexpr float max_score = -200.0f;            // maximum acceptable output score
         std::cout << "score: " << out.score[0];

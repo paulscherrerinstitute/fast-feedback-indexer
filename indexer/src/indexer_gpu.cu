@@ -338,6 +338,13 @@ namespace {
             ready = true;
         }
 
+        // Sync with cuda stream
+        void sync()
+        {
+            if (ready)
+                CU_CHECK(cudaStreamSynchronize(stream));
+        }
+
         // Get an unused gpu_stream from cache
         static gpu_stream from_cache(unsigned int flags=cudaStreamDefault)
         {
@@ -385,6 +392,7 @@ namespace {
         gpu_pointer<unsigned> candidate_sample;             // Sample number of candidate vectors
         gpu_pointer<unsigned> cellvec_to_cand;              // Input cell vector to candidate group mapping
         gpu_pointer<unsigned> seq_block;                    // Thread block sequentializers
+        gpu_stream init_stream;                             // CUDA stream for initialization
 
         // Temporary pinned space to transfer n_input_cells, n_output_cells, n_spots
         fast_feedback::pinned_ptr<config_persistent> tmp;   // Pointer to make move construction simple
@@ -419,14 +427,14 @@ namespace {
         indexer_gpu_state(gpu_pointer<content_type>&& d, gpu_pointer<float_type>&& e,
                           gpu_pointer<float_type>&& cl, gpu_pointer<float_type>&& cv,
                           gpu_pointer<unsigned>&& cs, gpu_pointer<unsigned>&& v2c,
-                          gpu_pointer<unsigned>&& sb,
+                          gpu_pointer<unsigned>&& sb, gpu_stream&& stream,
                           float_type* xi, float_type* yi, float_type* zi,
                           float_type* xo, float_type* yo, float_type* zo,
                           float_type* scores)
             : data{std::move(d)}, elements{std::move(e)},
               candidate_length{std::move(cl)}, candidate_value{std::move(cv)},
               candidate_sample{std::move(cs)}, cellvec_to_cand{std::move(v2c)},
-              seq_block{std::move(sb)},
+              seq_block{std::move(sb)}, init_stream{std::move(stream)},
               ix{xi}, iy{yi}, iz{zi},
               ox{xo}, oy{yo}, oz{zo},
               cell_score{scores}
@@ -451,6 +459,12 @@ namespace {
         static inline gpu_pointer<content_type>& ptr(const key_type& id)
         {
             return ref(id).data;
+        }
+
+        // Shortcut to cuda stream
+        static inline gpu_stream& stream(const key_type& id)
+        {
+            return ref(id).init_stream;
         }
 
         // State exists
@@ -546,6 +560,7 @@ namespace {
         }
 
         // Copy output data from GPU
+        // This is a blocking call that synchronizes on stream
         static inline void copy_out(const key_type& state_id, fast_feedback::output<float_type>& output, cudaStream_t stream=0)
         {
             const auto& gpu_state = ref(state_id);
@@ -1303,6 +1318,9 @@ namespace gpu {
         float_type* oz;
         float_type* scores;
         {
+            gpu_stream stream;
+            stream.init();      // new cuda stream
+
             CU_CHECK(cudaMalloc(&data, sizeof(device_data)));
             gpu_pointer<device_data> data_ptr{data};
         
@@ -1313,7 +1331,7 @@ namespace gpu {
             gpu_pointer<unsigned> sequentializers_ptr{sequentializers};
             {   // initialize sequentializers
                 std::size_t vector_dimension = 3 * cpers.max_input_cells;
-                CU_CHECK(cudaMemsetAsync(sequentializers, 0, vector_dimension * sizeof(unsigned), 0));
+                CU_CHECK(cudaMemsetAsync(sequentializers, 0, vector_dimension * sizeof(unsigned), stream));
             }
 
             {
@@ -1364,7 +1382,7 @@ namespace gpu {
                 gpu_state::ref(state_id) = gpu_state{std::move(data_ptr), std::move(element_ptr),
                                                      std::move(candidate_length_ptr), std::move(candidate_value_ptr),
                                                      std::move(candidate_sample_ptr), std::move(v2c_ptr),
-                                                     std::move(sequentializers_ptr),
+                                                     std::move(sequentializers_ptr), std::move(stream),
                                                      ix, iy, iz,
                                                      ox, oy, oz,
                                                      scores};
@@ -1383,7 +1401,7 @@ namespace gpu {
                               candidate_length, candidate_value,
                               candidate_sample, cellvec_to_cand,
                               sequentializers};
-            CU_CHECK(cudaMemcpyAsync(data, &_data, sizeof(_data), cudaMemcpyHostToDevice, 0));
+            CU_CHECK(cudaMemcpyAsync(data, &_data, sizeof(_data), cudaMemcpyHostToDevice, gpu_state::stream(state_id)));
         }
     }
 
@@ -1485,16 +1503,18 @@ namespace gpu {
                 logger::debug << ", n_cand_groups = " << n_cand_groups << '\n';
             }
         }
+        gpu_stream stream{gpu_stream::from_cache()};    // cuda stream from unused pool
         {   // find vector candidates
             const unsigned n_samples = conf_rt.num_sample_points;
             const dim3 n_blocks((n_samples + n_threads - 1) / n_threads, n_cand_groups);
             const unsigned shared_sz = std::max(instance.cpers.num_candidate_vectors * sizeof(vec_cand_t<float_type>),
                                                 sizeof(typename BlockRadixSort<float_type>::TempStorage));
-            gpu_state::copy_crt(state_id, conf_rt);
-            gpu_state::copy_in(state_id, instance.cpers, in, out);
-            gpu_state::init_cand(state_id, n_cand_groups, instance.cpers, candidate_length, candidate_idx);
-            state.start.record();
-            gpu_find_candidates<float_type><<<n_blocks, n_threads, shared_sz, 0>>>(gpu_state::ptr(state_id).get());
+            gpu_state::stream(state_id).sync(); // sync on initialization
+            gpu_state::copy_crt(state_id, conf_rt, stream);
+            gpu_state::copy_in(state_id, instance.cpers, in, out, stream);
+            gpu_state::init_cand(state_id, n_cand_groups, instance.cpers, candidate_length, candidate_idx, stream);
+            state.start.record(stream);
+            gpu_find_candidates<float_type><<<n_blocks, n_threads, shared_sz, stream>>>(gpu_state::ptr(state_id).get());
         }
         {   // find cells
             const unsigned n_xblocks = (1.5 * std::sqrt(conf_rt.num_sample_points) + n_threads - 1.) / n_threads;
@@ -1504,23 +1524,23 @@ namespace gpu {
 
             // gpu_state::init_score(state_id, instance.cpers);
             if (gpu_debug_output)
-                gpu_debug_out<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get(), 0u);
+                gpu_debug_out<float_type><<<1, 1, 0, stream>>>(gpu_state::ptr(state_id).get(), 0u);
             gpu_find_cells<float_type><<<n_blocks, n_threads, shared_sz, 0>>>(gpu_state::ptr(state_id).get());
             if (gpu_debug_output)
-                gpu_debug_out<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get(), 1u);
-            gpu_expand_cells<float_type><<<1, n_cells_out, 0, 0>>>(gpu_state::ptr(state_id).get(), n_xblocks * n_threads);
+                gpu_debug_out<float_type><<<1, 1, 0, stream>>>(gpu_state::ptr(state_id).get(), 1u);
+            gpu_expand_cells<float_type><<<1, n_cells_out, 0, stream>>>(gpu_state::ptr(state_id).get(), n_xblocks * n_threads);
             if (gpu_debug_output)
-                gpu_debug_out<float_type><<<1, 1, 0, 0>>>(gpu_state::ptr(state_id).get(), 2u);
-            state.end.record();
-            gpu_state::copy_out(state_id, out);
+                gpu_debug_out<float_type><<<1, 1, 0, stream>>>(gpu_state::ptr(state_id).get(), 2u);
+            state.end.record(stream);
+            gpu_state::copy_out(state_id, out, stream); // synchronizes on stream
         }
         if (timing) {
             end = clock::now();
             duration elapsed = end - start;
             logger::info << stanza << "indexing_time: " << elapsed.count() << "ms\n";
-            state.end.sync(); // probably unnecessary right now, since copy_out syncs on stream
             logger::info << stanza << "kernel_time: " << gpu_timing(state.start, state.end) << "ms\n";
         }
+        gpu_stream::to_cache(std::move(stream));    // return stream to unused pool
     }
 
     // Raw memory pin
