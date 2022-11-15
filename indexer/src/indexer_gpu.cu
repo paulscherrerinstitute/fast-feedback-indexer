@@ -176,7 +176,9 @@ namespace {
                     gpu_debug_output = false;
             }
 
-            logger::info << stanza << "using GPU device " << gpu_device_number << '\n';
+            LOG_START(logger::l_info) {
+                logger::info << stanza << "using GPU device " << gpu_device_number << '\n';
+            } LOG_END;
             cuda_initialized.store(true);
         } // release cuda_init_lock
     }
@@ -275,6 +277,7 @@ namespace {
         cudaStream_t stream;                    // Cuda stream
         static std::mutex unused_update;        // Protect unused streams container
         static std::map<unsigned int, std::vector<gpu_stream>> unused; // Stock of unused streams per flags
+        static uint64_t max_unused;             // Maximum count of unused streams for statistics
 
         // Return uninitialized stream
         gpu_stream() noexcept
@@ -365,6 +368,12 @@ namespace {
             CU_CHECK(cudaStreamGetFlags(s, &flags));
             std::lock_guard lock_unused{unused_update};
             unused[flags].insert(std::end(unused[flags]), std::move(s));
+            LOG_START(logger::l_debug) {
+                if (max_unused < unused[flags].size()) {
+                    max_unused = unused[flags].size();
+                    logger::debug << stanza << "unused stream cache size: " << max_unused << '\n';
+                }
+            } LOG_END;
         }
 
         operator cudaStream_t&() noexcept { return stream; }    // Cast to cuda stream
@@ -372,6 +381,7 @@ namespace {
 
     std::mutex gpu_stream::unused_update;
     std::map<unsigned int, std::vector<gpu_stream>> gpu_stream::unused;
+    uint64_t gpu_stream::max_unused{};
 
     // Indexer GPU state representation on the Host side
     //
@@ -485,7 +495,9 @@ namespace {
         static inline void copy_crt(const key_type& state_id, const fast_feedback::config_runtime<float_type>& crt, cudaStream_t stream=0)
         {
             const auto crt_dp = &ptr(state_id)->crt;
-            logger::debug << stanza << "copy runtime config data: " << &crt << "-->" << crt_dp << '\n';
+            LOG_START(logger::l_debug) {
+                logger::debug << stanza << "copy runtime config data: " << &crt << "-->" << crt_dp << '\n';
+            } LOG_END;
             CU_CHECK(cudaMemcpyAsync(crt_dp, &crt, sizeof(crt), cudaMemcpyHostToDevice, stream));
         }
 
@@ -533,11 +545,13 @@ namespace {
                 }
             }
 
-            logger::debug << stanza << "copy in: " << n_input_cells << " cells(in), " << output.n_cells << " cells(out), "
-                          << n_spots << " spots, elements=" << gpu_state.elements.get() << ": "
-                          << input.x << "-->" << gpu_state.ix << ", "
-                          << input.y << "-->" << gpu_state.iy << ", "
-                          << input.z << "-->" << gpu_state.iz << '\n';
+            LOG_START(logger::l_debug) {
+                logger::debug << stanza << "copy in: " << n_input_cells << " cells(in), " << output.n_cells << " cells(out), "
+                            << n_spots << " spots, elements=" << gpu_state.elements.get() << ": "
+                            << input.x << "-->" << gpu_state.ix << ", "
+                            << input.y << "-->" << gpu_state.iy << ", "
+                            << input.z << "-->" << gpu_state.iz << '\n';
+            } LOG_END;
         }
 
         static inline void init_cand(const key_type& state_id, unsigned n_cand_groups, const config_persistent& cpers,
@@ -580,11 +594,13 @@ namespace {
                 CU_CHECK(cudaStreamSynchronize(stream));
             }
 
-            logger::debug << stanza << "copy out: " << output.n_cells << " cells, elements=" << gpu_state.elements.get() << ": "
-                          << gpu_state.ox << "-->" << output.x << ", "
-                          << gpu_state.oy << "-->" << output.y << ", "
-                          << gpu_state.oz << "-->" << output.z << ", "
-                          << gpu_state.cell_score << "-->" << output.score << '\n';
+            LOG_START(logger::l_debug) {
+                logger::debug << stanza << "copy out: " << output.n_cells << " cells, elements=" << gpu_state.elements.get() << ": "
+                            << gpu_state.ox << "-->" << output.x << ", "
+                            << gpu_state.oy << "-->" << output.y << ", "
+                            << gpu_state.oz << "-->" << output.z << ", "
+                            << gpu_state.cell_score << "-->" << output.score << '\n';
+            } LOG_END;
         }
     };
 
@@ -1388,10 +1404,12 @@ namespace gpu {
                                                      scores};
             }
 
-            logger::debug << stanza << "init id=" << state_id << ", elements=" << elements << '\n'
-                          << stanza << "     ox=" << ox << ", oy=" << oy << ", oz=" << oz << '\n'
-                          << stanza << "     ix=" << ix << ", iy=" << iy << ", iz=" << iz << '\n'
-                          << stanza << "     candval=" << candidate_value << ", candsmpl=" << candidate_sample << '\n';
+            LOG_START(logger::l_debug) {
+                logger::debug << stanza << "init id=" << state_id << ", elements=" << elements << '\n'
+                            << stanza << "     ox=" << ox << ", oy=" << oy << ", oz=" << oz << '\n'
+                            << stanza << "     ix=" << ix << ", iy=" << iy << ", iz=" << iz << '\n'
+                            << stanza << "     candval=" << candidate_value << ", candsmpl=" << candidate_sample << '\n';
+            } LOG_END;
         }
 
         {
@@ -1439,7 +1457,9 @@ namespace gpu {
         // Check input/output
         const auto n_cells_in = std::min(in.n_cells, instance.cpers.max_input_cells);
         const auto n_cells_out = std::min(out.n_cells, instance.cpers.max_output_cells);
-        logger::debug << stanza << "n_cells = " << n_cells_in << "(in)/" << n_cells_out << "(out), n_spots = " << in.n_spots << '\n';
+        LOG_START(logger::l_debug) {
+            logger::debug << stanza << "n_cells = " << n_cells_in << "(in)/" << n_cells_out << "(out), n_spots = " << in.n_spots << '\n';
+        } LOG_END;
         if (n_cells_in <= 0u)
             throw FF_EXCEPTION("no given input cells");
         if (n_cells_out <= 0)
@@ -1469,17 +1489,19 @@ namespace gpu {
             std::sort(std::begin(candidate_length), std::end(candidate_length), std::greater<float_type>{});
 
             const float_type l_threshold = conf_rt.length_threshold;
-            if (logger::level_active<logger::l_debug>()) {
+            LOG_START(logger::l_debug) {
                 logger::debug << stanza << "candidate_length =";
                 for (const auto& e : candidate_length)
                     logger::debug << ' ' << e;
                 logger::debug << ", threshold = " << l_threshold << '\n';                
-            }
+            } LOG_END;
             
             unsigned i=0, j=1;
             do {
                 if ((candidate_length[i] - candidate_length[j]) < l_threshold) {
-                    logger::debug << stanza << "  ignore " << candidate_length[j] << '\n';
+                    LOG_START(logger::l_debug) {
+                        logger::debug << stanza << "  ignore " << candidate_length[j] << '\n';
+                    } LOG_END;
                 } else if (++i != j) {
                     candidate_length[i] = candidate_length[j];
                 }
@@ -1496,12 +1518,12 @@ namespace gpu {
                                         });
                 candidate_idx[i] = it - std::cbegin(candidate_length);
             }
-            if (logger::level_active<logger::l_debug>()) {
+            LOG_START(logger::l_debug) {
                 logger::debug << stanza << "candidate_idx =";
                 for (const auto& e : candidate_idx)
                     logger::debug << ' ' << e;
                 logger::debug << ", n_cand_groups = " << n_cand_groups << '\n';
-            }
+            } LOG_END;
         }
         gpu_stream stream{gpu_stream::from_cache()};    // cuda stream from unused pool
         {   // find vector candidates
@@ -1537,8 +1559,10 @@ namespace gpu {
         if (timing) {
             end = clock::now();
             duration elapsed = end - start;
-            logger::info << stanza << "indexing_time: " << elapsed.count() << "ms\n";
-            logger::info << stanza << "kernel_time: " << gpu_timing(state.start, state.end) << "ms\n";
+            LOG_START(logger::l_info) {
+                logger::info << stanza << "indexing_time: " << elapsed.count() << "ms\n";
+                logger::info << stanza << "kernel_time: " << gpu_timing(state.start, state.end) << "ms\n";
+            } LOG_END;
         }
         gpu_stream::to_cache(std::move(stream));    // return stream to unused pool
     }

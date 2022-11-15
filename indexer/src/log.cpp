@@ -42,6 +42,9 @@ namespace {
     // Protect logging initalisation
     std::mutex logging_init_lock;
 
+    // Protect log output
+    std::mutex logging_output_lock;
+
     constexpr char INDEXER_LOG_LEVEL[] = "INDEXER_LOG_LEVEL";
 
 } // namespace
@@ -100,6 +103,11 @@ namespace logger {
         
         return "undef";
     }
+    
+    std::mutex& lock() noexcept
+    {
+        return logging_output_lock;
+    }
 
     logger<l_fatal> fatal;
     logger<l_error> error;
@@ -107,4 +115,4 @@ namespace logger {
     logger<l_info> info;
     logger<l_debug> debug;
 
-} // namespace log
+} // namespace logger

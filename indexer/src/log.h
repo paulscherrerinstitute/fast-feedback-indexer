@@ -28,6 +28,8 @@ Author: hans-christian.stadler@psi.ch
 
 #include <iostream>
 #include <atomic>
+#include <mutex>
+#include <thread>
 #include <string>
 
 namespace logger {
@@ -55,6 +57,12 @@ namespace logger {
     {
         return log_level <= level.load();
     }
+
+    // Get common log output lock
+    std::mutex& lock() noexcept;
+
+    // Get time
+
 
     // Logger writes to clog
     // Flushes only if log_level is l_fatal
@@ -103,5 +111,10 @@ namespace logger {
     #endif
 
 }
+
+// Start and end locked logging conditional on logging level
+// This will hold the logger::lock()
+#define LOG_START(level) if (logger::level_active<level>()) { std::lock_guard logger_output_lock{logger::lock()}; do
+#define LOG_END while(false); }
 
 #endif // INDEXER_LOG_H
