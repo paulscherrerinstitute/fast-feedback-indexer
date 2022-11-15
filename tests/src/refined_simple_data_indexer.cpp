@@ -62,8 +62,8 @@ int main (int argc, char *argv[])
     using namespace simple_data;
 
     try {
-        if (argc <= 5)
-            throw std::runtime_error("missing arguments <file name> <max number of spots> <max number of output cells> <number of kept candidate vectors> <number of half sphere sample points>");
+        if (argc <= 7)
+            throw std::runtime_error("missing arguments <file name> <max number of spots> <max number of output cells> <number of kept candidate vectors> <number of half sphere sample points> <lsq spot filter threshold> <score filter threshold>");
 
         fast_feedback::config_runtime<float> crt{};         // default runtime config
         {
@@ -99,6 +99,28 @@ int main (int argc, char *argv[])
             }
         }
 
+        float lsq_threshold = .2f;
+        {
+            std::istringstream iss(argv[6]);
+            iss >> lsq_threshold;
+            if (! iss)
+                throw std::runtime_error("unable to parse fifth argument: threshold for spot selection in least squares fitting");
+            std::cout << "lsq_threshold=" << lsq_threshold << '\n';
+            if ((lsq_threshold <= .0f) || (lsq_threshold > .5f))
+                throw std::runtime_error("lsq_threshold must be in range (0..0.5]");
+        }
+
+        float score_threshold = .1f;
+        {
+            std::istringstream iss(argv[7]);
+            iss >> score_threshold;
+            if (! iss)
+                throw std::runtime_error("unable to parse sixth argument: threshold for spot selection in score calculation");
+            std::cout << "score_threshold=" << score_threshold << '\n';
+            if ((score_threshold <= .0f) || (score_threshold > .5f))
+                throw std::runtime_error("score_threshold must be in range (0..0.5]");
+        }
+
         SimpleData<float, raise> data(argv[1]);         // read simple data file
 
         Eigen::MatrixX3f coords(data.spots.size() + 3, 3); // coordinate container
@@ -131,16 +153,19 @@ int main (int argc, char *argv[])
 
         indexer.index(in, out, crt);                    // run indexer
 
+        Eigen::MatrixX2f quality(scores.rows(), 2);
+        quality.col(0) = scores;
+
         {                                               // refine cells
             using namespace Eigen;
             MatrixX3f spots = coords.bottomRows(coords.rows() - 3);
             for (unsigned j=0u; j<out.n_cells; j++) {
                 Matrix3f cell = cells.block(3 * j, 0, 3, 3).inverse();
-                ArrayX3f temp = spots * cell;                // coordinates in system <cell>
-                ArrayX3f miller = round(temp);
+                MatrixX3f temp = spots * cell;          // coordinates in system <cell>
+                MatrixX3f miller = round(temp.array());
                 temp -= miller;
                 Vector<bool, Dynamic> thresh(temp.cols());
-                thresh = temp.abs().rowwise().maxCoeff() < .2f;
+                thresh = temp.array().abs().rowwise().maxCoeff() < lsq_threshold;
                 Matrix<bool, Dynamic, 3> sel(thresh.size(), 3);
                 sel.colwise() = thresh;
                 FullPivHouseholderQR<Eigen::MatrixX3f> qr(sel.select(miller, .0f));
@@ -148,13 +173,13 @@ int main (int argc, char *argv[])
                 cells.block(3 * j, 0, 3, 3) = cell;
                 temp = spots * cell.inverse();
                 temp -= miller;
-                thresh = temp.abs().rowwise().maxCoeff() < .1f;
-                scores(j) = (float)std::reduce(std::begin(thresh), std::end(thresh), 0u, [](unsigned a, unsigned b)->unsigned {return a + b;}) / (float)spots.rows();
+                thresh = temp.array().abs().rowwise().maxCoeff() < score_threshold;
+                quality(j, 1) = (float)std::reduce(std::begin(thresh), std::end(thresh), 0u, [](unsigned a, unsigned b)->unsigned {return a + b;}) / (float)spots.rows();
             }
         }
 
         std::cout << "output:\n" << cells << '\n';      // refined output cells
-        std::cout << "scores:\n" << scores << '\n';     // scores
+        std::cout << "scores:\n" << quality << '\n';    // scores
 
     } catch (std::exception& ex) {
         std::cerr << "indexing failed: " << ex.what() << '\n' << failure;
