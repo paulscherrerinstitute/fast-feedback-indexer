@@ -2,7 +2,7 @@
 
 * Keep memory for each coordinate dimension separate to avoid a stride of 3 elements in GPU kernels
 * Consider replacing sort + merge top in gpu_find_candidates with partitioning algorithms
-* unsigned as data type for a block sequentializer in device is most likely inadequate, what is fastest?
+* *unsigned* as data type for a block sequentializer in device is most likely inadequate, what is fastest?
 
 ### Dependencies
 
@@ -23,11 +23,11 @@
 * I think it's most efficient to use multiple GPUs for different indexing problems. This sometimes increases latency, but maximizes throughput.
 * But if required, multiple GPUs could collaborate on the same indexing problem.
 * Multi GPU collaboration is necessary if the data doesn't fit onto the GPU, which I think is not a danger for indexing.
+* **TODO**: Support a separate GPU per indexer by parsing *INDEXER_GPU_DEVICE* on indexer initialization time.
 
 ### Multiple GPU Streams
 
-* Currently only stream 0 is used
-* **TODO**: make every indexer instance use its own stream != 0
+Every *fast_feedback::indexer* object uses a separate Cuda stream
 
 ### Documentation
 
@@ -37,8 +37,8 @@
 
 ### Thread safety
 
-* Threads should be able to use their private indexer in parallel
-* Logger must be thread safe. Currently log output from different threads can get mingled (if required implement per thread log cache, e.g. ostringstream, with coordinated flushing to final destination)
+* Threads should be able to use their private *fast_feedback::indexer* object in parallel
+* Logger is thread safe. Currently log output from different threads can get mingled (use LOG_START and LOG_END macros consistently to prevent that)
 
 ### Logging
 
@@ -46,11 +46,11 @@ Logging output steered by *INDEXER_LOG_LEVEL* goes to stdlog (the same as stderr
 
 ### Environment Variables
 
-Steer program startup arguments with environment variables. If required, cli args parsing can be introduced as well.
+Steer library behaviour with environment variables. 
 
-* *INDEXER_GPU_DEVICE* (int): The GPU cuda device number to use for indexing
-* *INDEXER_LOG_LEVEL* (string): The log level for the indexer {"fatal", "error", "warn", "info", "debug"}
-* *INDEXER_GPU_DEBUG* (string): Print gpu kernel debug output to stdout {"1", "true", "yes", "on", "0", "false", "no", "off"}
+* *INDEXER_GPU_DEVICE* (int): The GPU cuda device number to use for indexing (parsed once first time an indexer is initialized)
+* *INDEXER_LOG_LEVEL* (string): The log level for the indexer {"fatal", "error", "warn", "info", "debug"} (parsed on calling *logger::init_log_level()*)
+* *INDEXER_GPU_DEBUG* (string): Print gpu kernel debug output to stdout {"1", "true", "yes", "on", "0", "false", "no", "off"} (parsed once first time an indexer is initialized)
 
 ### Noteworthy Cmake Variables
 

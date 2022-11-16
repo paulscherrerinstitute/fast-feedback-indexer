@@ -35,17 +35,20 @@ Author: hans-christian.stadler@psi.ch
 namespace logger {
 
     // Log levels
-    constexpr unsigned l_fatal = 0u;
-    constexpr unsigned l_error = 1u;
-    constexpr unsigned l_warn = 2u;
-    constexpr unsigned l_info = 3u;
-    constexpr unsigned l_debug = 4u;
+    constexpr unsigned l_fatal = 0u;    // Log fatal errors
+    constexpr unsigned l_error = 1u;    // Log errors
+    constexpr unsigned l_warn = 2u;     // Log warnings
+    constexpr unsigned l_info = 3u;     // Log useful information
+    constexpr unsigned l_debug = 4u;    // Log debug information
 
-    // Current log level
+    // Current log level, default is l_error
     // Logging will react to changes dynamically
     inline std::atomic<unsigned> level{l_error};
 
     // Initialize log level from environment, if given
+    // Parses the environment variable INDEXER_LOG_LEVEL
+    // which should contain one of {"fatal", "error", "warn", "info", "debug"}
+    // If the variable is undefined, the log level is not changed.
     void init_log_level();
 
     // Get string representation for log level
@@ -60,9 +63,6 @@ namespace logger {
 
     // Get common log output lock
     std::mutex& lock() noexcept;
-
-    // Get time
-
 
     // Logger writes to clog
     // Flushes only if log_level is l_fatal
