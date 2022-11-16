@@ -31,6 +31,7 @@ Author: hans-christian.stadler@psi.ch
 #include <vector>
 #include <array>
 #include <numeric>
+#include <chrono>
 #include <Eigen/Dense>
 #include <Eigen/LU>
 #include "simple_data.h"
@@ -60,6 +61,8 @@ namespace {
 int main (int argc, char *argv[])
 {
     using namespace simple_data;
+    using clock = std::chrono::high_resolution_clock;
+    using duration = std::chrono::duration<double>;
 
     try {
         if (argc <= 7)
@@ -139,8 +142,10 @@ int main (int argc, char *argv[])
             i++;            
         }
 
-        Eigen::MatrixX3f cells(3 * cpers.max_output_cells, 3); // output cells coordinate container
-        Eigen::VectorXf scores(cpers.max_output_cells); // output cell scores container
+        auto t0 = clock::now();
+
+        Eigen::MatrixX3f cells(3 * cpers.max_output_cells, 3);  // output cells coordinate container
+        Eigen::MatrixX2f scores(cpers.max_output_cells, 2);     // output cell scores container
         fast_feedback::indexer indexer{cpers};          // indexer object
 
         fast_feedback::memory_pin pin_coords{coords};   // pin input coordinate container
@@ -148,13 +153,12 @@ int main (int argc, char *argv[])
         fast_feedback::memory_pin pin_scores(scores);   // pin output cell scores container
         fast_feedback::memory_pin pin_crt{fast_feedback::memory_pin::on(crt)}; // pin runtime config memory
 
-        fast_feedback::input<float> in{&coords(0,0), &coords(0,1), &coords(0,2), 1u, i-3u}; // create indexer input object
+        fast_feedback::input<float> in{&coords(0,0), &coords(0,1), &coords(0,2), 1u, i-3u};                             // create indexer input object
         fast_feedback::output<float> out{&cells(0,0), &cells(0,1), &cells(0,2), scores.data(), cpers.max_output_cells}; // create indexer output object
 
+        auto t1 = clock::now();
         indexer.index(in, out, crt);                    // run indexer
-
-        Eigen::MatrixX2f quality(scores.rows(), 2);
-        quality.col(0) = scores;
+        auto t2 = clock::now();
 
         {                                               // refine cells
             using namespace Eigen;
@@ -174,12 +178,20 @@ int main (int argc, char *argv[])
                 temp = spots * cell.inverse();
                 temp -= miller;
                 thresh = temp.array().abs().rowwise().maxCoeff() < score_threshold;
-                quality(j, 1) = (float)std::reduce(std::begin(thresh), std::end(thresh), 0u, [](unsigned a, unsigned b)->unsigned {return a + b;}) / (float)spots.rows();
+                scores(j, 1) = (float)std::reduce(std::begin(thresh), std::end(thresh), 0u, [](unsigned a, unsigned b)->unsigned {return a + b;}) / (float)spots.rows();
+                scores(j, 0) /= -(3.f * spots.rows());
             }
         }
 
+        auto t3 = clock::now();
+
         std::cout << "output:\n" << cells << '\n';      // refined output cells
-        std::cout << "scores:\n" << quality << '\n';    // scores
+        std::cout << "scores:\n" << scores << '\n';     // scores
+        std::cout << "timings:\n"
+                  << "prep    " << duration{t1 - t0}.count() << "s\n"
+                  << "index   " << duration{t2 - t1}.count() << "s\n"
+                  << "refine  " << duration{t3 - t2}.count() << "s\n"
+                  << "i+r     " << duration{t3 - t1}.count() << "s\n";
 
     } catch (std::exception& ex) {
         std::cerr << "indexing failed: " << ex.what() << '\n' << failure;
