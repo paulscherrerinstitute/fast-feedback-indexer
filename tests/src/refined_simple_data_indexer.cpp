@@ -185,8 +185,10 @@ int main (int argc, char *argv[])
 
         auto t3 = clock::now();
 
-        std::cout << "output:\n" << cells << '\n';      // refined output cells
-        std::cout << "scores:\n" << scores << '\n';     // scores
+        std::cout << "output:\n";
+        for (unsigned j=0u; j<out.n_cells; j++)
+            std::cout << cells.block(3 * j, 0, 3, 3) << "\n\n"; // refined output cells
+        std::cout << "scores:\n" << scores << '\n';             // scores
         std::cout << "timings:\n"
                   << "prep    " << duration{t1 - t0}.count() << "s\n"
                   << "index   " << duration{t2 - t1}.count() << "s\n"
