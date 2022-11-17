@@ -1,6 +1,6 @@
 ## Test Code
 
-Here','s the place for ctest tests and other tests.
+Here's the place for ctest tests and other tests.
 
 ### Tests for ctest
 
@@ -17,7 +17,7 @@ Here','s the place for ctest tests and other tests.
          * *max number of spots*: only use the first spots up to this max
          * *max number of output cells*: never produce more than this max
          * *number of kept candidate vectors*: this is per vector length for sampling a first vector and per cell in the rotation step
-         * *number of half sphere sample points*: sample so many ($N$) first vectors per length, and $1.5 \sqrt{N}$ cells around every such vector
+         * *number of half sphere sample points*: $N$ - sample so many first vectors per length, and $1.5 \sqrt{N}$ cells around every such vector
       * Output
          * Indexing parameters
          * Input cell vectors
