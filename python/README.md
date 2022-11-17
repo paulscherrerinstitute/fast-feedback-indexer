@@ -45,7 +45,7 @@ A tuple of numpy arrays *(output_cells, scores)*
 - **n_input_cells** is the number of given unit cells *N* in the data array
 - **data** array of vectors with shape *(3,3N+S)*, the first *3N* vectors are the given unit cells, the rest are spots (all in reciprocal space)
 
-#### ffbidx.release(hndle)
+#### ffbidx.release(handle)
 
 Release the indexer object. The handle must not be used after this.
 
@@ -55,4 +55,6 @@ Release the indexer object. The handle must not be used after this.
 
 ### Issues
 
-If the indexer is not realeased properly, ugly memory deallocation errors appear.
+   * If the indexer is not realeased properly, ugly memory deallocation errors appear.
+   * The module sets the logging level just once on loading, so the *INDEXER_LOG_LEVEL* environment variable has to be set before the import statement.
+   * The GPU device is determined once when creating the first indexer handle, so the *INDEXER_GPU_DEVICE* environment variable has to be set before that.
