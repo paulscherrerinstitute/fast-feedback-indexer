@@ -4,9 +4,9 @@ project(tests_impl
 
 # ---- Indexer Tests ----
 
-option(TEST_INDEXER_SIMPLE "Enable test code for simple indexer test" OFF)
-option(TEST_INDEXER_EXCEPTION "Enable test code for indexer exception test" OFF)
-option(TEST_INDEXER_OBJ "Enable test code for indexer object code" OFF)
+option(TEST_INDEXER_SIMPLE "Enable ctest test code for simple indexer test" OFF)
+option(TEST_INDEXER_EXCEPTION "Enable ctest test code for indexer exception test" OFF)
+option(TEST_INDEXER_OBJ "Enable ctest test code for indexer object code" OFF)
 option(SIMPLE_DATA_INDEXER "Enable test executable for indexing of simple data" OFF)
 option(REFINED_SIMPLE_DATA_INDEXER "Enable test executable for refined indexing of simple data" OFF)
 
@@ -108,7 +108,7 @@ IF(TEST_DATA)
         set(TEST_SIMPLE_DATA ON)
 ENDIF(TEST_DATA)
 
-option(TEST_SIMPLE_DATA_READER "Enable test code for simple data reader" OFF)
+option(TEST_SIMPLE_DATA_READER "Enable ctest test code for simple data reader" OFF)
 if (TEST_SIMPLE_DATA)
             set(TEST_SIMPLE_DATA_READER ON)
 endif(TEST_SIMPLE_DATA)
