@@ -3,12 +3,13 @@
 Develop an indexer for fast feedback
 
 *Status*: Current results based on simple brute force sampling seem to make sense.
+*Issues*: Implemented in CUDA, so only Nvidia GPUs are supported currently.
 
 ### External Build Dependencies
 
 * C++17 compatible compiler
 * cmake > 3.21 (not so sure if it works with earlier versions as well)
-* indexer needs a compiler compatible CUDA toolkit
+* *BUILD_FAST_INDEXER* needs a compiler compatible CUDA toolkit
 * *BUILD_SIMPLE_DATA_READER* and *REFINED_SIMPLE_DATA_INDEXER* need the Eigen 3.3 library
 * *PYTHON_MODULE* needs Python3 and NumPy (also see https://cmake.org/cmake/help/latest/module/FindPython3.html)
 
@@ -17,6 +18,8 @@ Develop an indexer for fast feedback
 Cmake should complain and tell you what to add to the cmake commandline if internal dependencies are not met. In general tests require what is tested, executables need the simple data reader and indexer libraries, and the python module needs the indexer library.
 
 ### Build Instructions
+
+If the default value of *CMAKE_CUDA_ARCHITECTURES*=\"75;80\" is inappropriate for your GPU, set it correctly, or go to the bottom of the README file for the indexer to get more info.
 
 Get hold of the Eigen3 library, either by installing it via your distro (e.g. on Ubuntu: `sudo apt install libeigen3-dev`) or download it using `git submodule update`. Install python3 and numpy for the python module.
 
