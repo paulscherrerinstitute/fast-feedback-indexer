@@ -2,6 +2,7 @@ cmake_minimum_required (VERSION 3.21)
 project(fast_feedback_indexer)
 
 include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
 
 option(TEST_ALL "Add test targets" OFF)
 
