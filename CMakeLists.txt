@@ -1,6 +1,8 @@
 cmake_minimum_required (VERSION 3.0)
 project(fast_feedback_indexer)
 
+include(GNUInstallDirs)
+
 option(TEST_ALL "Add test targets" OFF)
 
 enable_testing()

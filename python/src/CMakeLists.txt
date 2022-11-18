@@ -3,6 +3,7 @@ project(python_impl
         LANGUAGES CXX)
 
 option(PYTHON_MODULE "Enable python module" OFF)
+set(PYTHON_MODULE_PATH "${CMAKE_INSTALL_LIBDIR}/ffbidx" CACHE PATH "Indexer python module installation path")
 
 if(PYTHON_MODULE)
         #find_package(CUDAToolkit REQUIRED)
@@ -24,4 +25,14 @@ if(PYTHON_MODULE)
                 PRIVATE fast_indexer
                 PUBLIC Python3::NumPy
                 PUBLIC Python3::Module)
+        install(FILES $<TARGET_FILE:ffbidx>
+                DESTINATION ${PYTHON_MODULE_PATH}/ffbidx
+                COMPONENT ffbidx_python
+                RENAME __init__.so)
+        cmake_path(ABSOLUTE_PATH PYTHON_MODULE_PATH
+                BASE_DIRECTORY ${CMAKE_INSTALL_PREFIX}
+                NORMALIZE
+                OUTPUT_VARIABLE ffbidx_PYTHONPATH)
+        install(CODE "MESSAGE(\"use PYTHONPATH=${ffbidx_PYTHONPATH}\")"
+                COMPONENT ffbidx_python)
 endif(PYTHON_MODULE)

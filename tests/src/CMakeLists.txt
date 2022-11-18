@@ -80,6 +80,10 @@ if(SIMPLE_DATA_INDEXER)
         target_link_libraries(simple_data_indexer
                 PRIVATE fast_indexer
                 PRIVATE simple_data)
+        install(TARGETS simple_data_indexer
+                RUNTIME
+                DESTINATION ${CMAKE_INSTALL_BINDIR}
+                COMPONENT ffbidx_executables)
 endif(SIMPLE_DATA_INDEXER)
 
 if(REFINED_SIMPLE_DATA_INDEXER)
@@ -94,6 +98,10 @@ if(REFINED_SIMPLE_DATA_INDEXER)
         target_link_libraries(refined_simple_data_indexer
                 PRIVATE fast_indexer
                 PRIVATE simple_data)
+        install(TARGETS refined_simple_data_indexer
+                RUNTIME
+                DESTINATION ${CMAKE_INSTALL_BINDIR}
+                COMPONENT ffbidx_executables)
 endif(REFINED_SIMPLE_DATA_INDEXER)
 
 # ---- Data Tests ----
