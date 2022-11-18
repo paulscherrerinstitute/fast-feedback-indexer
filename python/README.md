@@ -2,6 +2,8 @@
 
 The idea is to provide simple access to the fast feedback indexer via python, mainly as a means to make more people evaluate the fast feedback indexer and find deficiencies to determine future coding action.
 
+The python module is built and installed into a specific path by setting the *PYTHON_MODULE* option and the *PYTHON_MODULE_PATH* path variable for cmake.
+
 ### Interface
 
 The module has a primitive non pythonic interface, sorry for that.
@@ -58,3 +60,7 @@ Release the indexer object. The handle must not be used after this.
    * If the indexer is not realeased properly, ugly memory deallocation errors appear.
    * The module sets the logging level just once on loading, so the *INDEXER_LOG_LEVEL* environment variable has to be set before the import statement.
    * The GPU device is determined once when creating the first indexer handle, so the *INDEXER_GPU_DEVICE* environment variable has to be set before that.
+
+### Note
+
+To avoid a `make install`, there's a script `pythonlib.sh` at the top level for installing the python module after building it. `LD_LIBRARY_PATH` still has to be set, but to the build artefact (`<clone dir>/build/indexer/src` if you more or less followed the build instructions).

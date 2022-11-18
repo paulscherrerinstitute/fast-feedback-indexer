@@ -3,6 +3,7 @@
 Develop an indexer for fast feedback
 
 *Status*: Current results based on simple brute force sampling seem to make sense.
+
 *Issues*: Implemented in CUDA, so only Nvidia GPUs are supported currently.
 
 ### External Build Dependencies
@@ -46,6 +47,8 @@ $ export PYTHONPATH=${HOME}/ffbidx/lib/ffbidx
 As a quick installation test you could do
 
 ```
-$ ${HOME}/ffbidx/bin/refined_simple_data_indexer ${HOME}/ffbidx/share/ffbidx/data/files/image0_local.txt 300 1 8 $((32*1024)) .2 .1
+$ ${HOME}/ffbidx/bin/refined_simple_data_indexer \
+  ${HOME}/ffbidx/share/ffbidx/data/files/image0_local.txt \
+  300 1 8 $((32*1024)) .2 .1
 $ python -c "import ffbidx; print('OK')"
 ```

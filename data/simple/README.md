@@ -1,5 +1,7 @@
 ## Simple test files
 
+Installed by setting *INSTALL_SIMPLE_DATA_FILES* for cmake.
+
 ### Structure
 
 ```
