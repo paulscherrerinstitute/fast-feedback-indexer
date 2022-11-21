@@ -28,8 +28,9 @@ Get hold of the Eigen3 library, either by installing it via your distro (e.g. on
 $ mkdir build
 $ cd build
 $ cmake -DCMAKE_INSTALL_PREFIX=${HOME}/ffbidx -DCMAKE_BUILD_TYPE=Release \
-  -DINSTALL_SIMPLE_DATA_FILES=ON -DTEST_ALL=ON \
-  -DBUILD_SIMPLE_DATA_READER=ON -DPYTHON_MODULE=ON ..
+  -DINSTALL_SIMPLE_DATA_FILES=ON -DTEST_ALL=ON -DTESTS_RPATH=ON \
+  -DBUILD_SIMPLE_DATA_READER=ON -DPYTHON_MODULE=ON \
+  -DPYTHON_MODULE_RPATH=ON ..
 $ make
 $ ctest
 ```

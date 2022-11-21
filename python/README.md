@@ -4,6 +4,8 @@ The idea is to provide simple access to the fast feedback indexer via python, ma
 
 The python module is built and installed into a specific path by setting the *PYTHON_MODULE* option and the *PYTHON_MODULE_PATH* path variable for cmake.
 
+Since the python module uses the fast feedback indexer library, it must be in a default library search location, or the *LD_LIBRARY_PATH* has to be set. To avoid that the module RUNPATH elf entry can be set to the fast feedback indexer library installation location by switching on the *PYTHON_MODULE_RPATH* cmake option.
+
 ### Interface
 
 The module has a primitive non pythonic interface, sorry for that.
@@ -63,4 +65,4 @@ Release the indexer object. The handle must not be used after this.
 
 ### Note
 
-To avoid a `make install`, there's a script `pythonlib.sh` at the top level for installing the python module after building it. `LD_LIBRARY_PATH` still has to be set, but to the build artefact (`<clone dir>/build/indexer/src` if you more or less followed the build instructions).
+To avoid a `make install`, there's a script `pythonlib.sh` at the top level for installing the python module after building it.
