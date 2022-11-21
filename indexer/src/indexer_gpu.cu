@@ -248,29 +248,6 @@ namespace {
         return time;
     }
 
-    // On GPU compact vector representation
-    template<typename float_type>
-    struct compact_vec final {
-        float_type x;
-        float_type y;
-        float_type z;
-    };
-
-    // On GPU data for indexer
-    template<typename float_type>
-    struct indexer_device_data final {
-        fast_feedback::config_persistent<float_type> cpers;
-        fast_feedback::config_runtime<float_type> crt;
-        fast_feedback::input<float_type> input;
-        fast_feedback::output<float_type> output;
-        float_type* candidate_length;           // Candidate vector groups length, [3 * max_input_cells]
-        float_type* candidate_value;            // Candidate vector objective function values, [3 * max_input_cells * num_candidate_vectors]
-        unsigned* candidate_sample;             // Sample number of candidate vectors, [3 * max_input_cells * num_candidate_vectors]
-        unsigned* cellvec_to_cand;              // Input cell vector to candidate group mapping, [3 * max_input_cells]
-        unsigned* seq_block;                    // Per candidate vector group sequentializer for thread blocks (explicit init to 0, set to 0 in kernel after use)
-                                                //     First sequentializer is also used for candidate cell search
-    };
-
     // Cuda stream wrapper
     struct gpu_stream final {
         bool ready;                             // Is stream ready = initialized
@@ -346,6 +323,29 @@ namespace {
         }
 
         operator cudaStream_t&() noexcept { return stream; }    // Cast to cuda stream
+    };
+
+    // On GPU compact vector representation
+    template<typename float_type>
+    struct compact_vec final {
+        float_type x;
+        float_type y;
+        float_type z;
+    };
+
+    // On GPU data for indexer
+    template<typename float_type>
+    struct indexer_device_data final {
+        fast_feedback::config_persistent<float_type> cpers;
+        fast_feedback::config_runtime<float_type> crt;
+        fast_feedback::input<float_type> input;
+        fast_feedback::output<float_type> output;
+        float_type* candidate_length;           // Candidate vector groups length, [3 * max_input_cells]
+        float_type* candidate_value;            // Candidate vector objective function values, [3 * max_input_cells * num_candidate_vectors]
+        unsigned* candidate_sample;             // Sample number of candidate vectors, [3 * max_input_cells * num_candidate_vectors]
+        unsigned* cellvec_to_cand;              // Input cell vector to candidate group mapping, [3 * max_input_cells]
+        unsigned* seq_block;                    // Per candidate vector group sequentializer for thread blocks (explicit init to 0, set to 0 in kernel after use)
+                                                //     First sequentializer is also used for candidate cell search
     };
 
     // Indexer GPU state representation on the Host side
