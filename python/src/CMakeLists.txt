@@ -3,6 +3,7 @@ project(python_impl
         LANGUAGES CXX)
 
 option(PYTHON_MODULE "Enable python module" OFF)
+option(PYTHON_MODULE_RPATH "Set python module RPATH to fast indexer library installation" OFF)
 set(PYTHON_MODULE_PATH "${CMAKE_INSTALL_LIBDIR}/ffbidx" CACHE PATH "Indexer python module installation path")
 
 if(PYTHON_MODULE)
@@ -25,6 +26,10 @@ if(PYTHON_MODULE)
                 PRIVATE fast_indexer
                 PUBLIC Python3::NumPy
                 PUBLIC Python3::Module)
+        if (PYTHON_MODULE_RPATH)
+                set_target_properties(ffbidx PROPERTIES
+                        INSTALL_RPATH ${CMAKE_INSTALL_LIBDIR})
+        endif(PYTHON_MODULE_RPATH)
         install(FILES $<TARGET_FILE:ffbidx>
                 DESTINATION ${PYTHON_MODULE_PATH}/ffbidx
                 COMPONENT ffbidx_python

@@ -9,6 +9,7 @@ option(TEST_INDEXER_EXCEPTION "Enable ctest test code for indexer exception test
 option(TEST_INDEXER_OBJ "Enable ctest test code for indexer object code" OFF)
 option(SIMPLE_DATA_INDEXER "Enable test executable for indexing of simple data" OFF)
 option(REFINED_SIMPLE_DATA_INDEXER "Enable test executable for refined indexing of simple data" OFF)
+option(TESTS_RPATH "Set RPATH for test executables to fast indexer library installation" OFF)
 
 if(TEST_ALL)
         set(TEST_INDEXER ON)
@@ -68,6 +69,13 @@ if(TEST_INDEXER_OBJ)
         set_property(TEST indexer_object PROPERTY FAIL_REGULAR_EXPRESSION "Test failed")
 endif(TEST_INDEXER_OBJ)
 
+if (TESTS_RPATH)
+        cmake_path(ABSOLUTE_PATH CMAKE_INSTALL_LIBDIR
+                BASE_DIRECTORY ${CMAKE_INSTALL_PREFIX}
+                NORMALIZE
+                OUTPUT_VARIABLE tests_RPATH)
+endif(TESTS_RPATH)
+
 if(SIMPLE_DATA_INDEXER)
         if(NOT BUILD_SIMPLE_DATA_READER)
                 message(FATAL_ERROR "SIMPLE_DATA_INDEXER needs -DBUILD_SIMPLE_DATA_READER=1 as a cmake argument")
@@ -80,6 +88,10 @@ if(SIMPLE_DATA_INDEXER)
         target_link_libraries(simple_data_indexer
                 PRIVATE fast_indexer
                 PRIVATE simple_data)
+        if (TESTS_RPATH)
+                set_target_properties(simple_data_indexer PROPERTIES
+                        INSTALL_RPATH ${tests_RPATH})
+        endif(TESTS_RPATH)
         install(TARGETS simple_data_indexer
                 RUNTIME
                 DESTINATION ${CMAKE_INSTALL_BINDIR}
@@ -98,6 +110,10 @@ if(REFINED_SIMPLE_DATA_INDEXER)
         target_link_libraries(refined_simple_data_indexer
                 PRIVATE fast_indexer
                 PRIVATE simple_data)
+        if (TESTS_RPATH)
+                set_target_properties(refined_simple_data_indexer PROPERTIES
+                        INSTALL_RPATH ${tests_RPATH})
+        endif(TESTS_RPATH)
         install(TARGETS refined_simple_data_indexer
                 RUNTIME
                 DESTINATION ${CMAKE_INSTALL_BINDIR}
