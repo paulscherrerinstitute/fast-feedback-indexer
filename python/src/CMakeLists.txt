@@ -7,7 +7,6 @@ option(PYTHON_MODULE_RPATH "Set python module RPATH to fast indexer library inst
 set(PYTHON_MODULE_PATH "${CMAKE_INSTALL_LIBDIR}/ffbidx" CACHE PATH "Indexer python module installation path")
 
 if(PYTHON_MODULE)
-        #find_package(CUDAToolkit REQUIRED)
         find_package(Python3 COMPONENTS NumPy Development.Module)
         if(NOT ${Python3_Development.Module_FOUND})
                 message(FATAL_ERROR "Python3 module development components not found!")
@@ -27,8 +26,15 @@ if(PYTHON_MODULE)
                 PUBLIC Python3::NumPy
                 PUBLIC Python3::Module)
         if (PYTHON_MODULE_RPATH)
+                set(CMAKE_SKIP_RPATH ON)
+                cmake_path(ABSOLUTE_PATH CMAKE_INSTALL_LIBDIR
+                        BASE_DIRECTORY ${CMAKE_INSTALL_PREFIX}
+                        NORMALIZE
+                        OUTPUT_VARIABLE ffbidx_RPATH)
+                install(CODE "MESSAGE(\"python module RPATH: ${ffbidx_RPATH}\")"
+                        COMPONENT ffbidx_python)
                 set_target_properties(ffbidx PROPERTIES
-                        INSTALL_RPATH ${CMAKE_INSTALL_LIBDIR})
+                        LINK_OPTIONS LINKER:,-rpath,${ffbidx_RPATH})
         endif(PYTHON_MODULE_RPATH)
         install(FILES $<TARGET_FILE:ffbidx>
                 DESTINATION ${PYTHON_MODULE_PATH}/ffbidx
