@@ -39,32 +39,48 @@ namespace {
         fast_feedback::exception ex2 = FF_EXCEPTION_OBJ;
         ex1 = std::move(create_copy());
         ex2 = ex1;
+        if (ex2.line_number == 33)
+            throw ex2;
         return ex2;
     }
 }
 
 int main(int, char**)
 {
-    fast_feedback::exception ex = move_assign_copy() << "34";
-
-    std::string msg{ex.what()};
-    std::string fname{ex.file_name};
     std::string failed{"Test failed: "};
 
-    if (ex.line_number == 33) { // <-- put line number here
-        if (fname.find("test_indexer_exception.cpp") != std::string::npos) {
-            if (msg == "1234") {
-                std::cout << "Test OK.\n";
-                return ((EXIT_SUCCESS));
+    try {
+        try {
+            fast_feedback::exception ex = move_assign_copy();
+        } catch (fast_feedback::exception& ex) {
+            ex  << "34";
+            std::string msg{ex.what()};
+            std::string fname{ex.file_name};
+
+            if (ex.line_number == 33) { // <-- put line number here
+                if (fname.find("test_indexer_exception.cpp") != std::string::npos) {
+                    if (msg == "1234") {
+                        throw ex;
+                    } else {
+                        std::cerr << failed << "msg=" << msg << '\n';
+                    }
+                } else {
+                    std::cerr << failed << "fname=" << fname << '\n';
+                }
             } else {
-                std::cerr << failed << "msg=" << msg << '\n';
+                std::cerr << failed << "line=" << ex.line_number << '\n';
             }
-        } else {
-            std::cerr << failed << "fname=" << fname << '\n';
         }
-    } else {
-        std::cerr << failed << "line=" << ex.line_number << '\n';
+    } catch (std::exception& ex) {
+        std::string msg{ex.what()};
+        if (msg == "1234") {
+            std::cout << "Test OK.\n";
+            return ((EXIT_SUCCESS));
+        } else {
+            std::cerr << failed << "wrong exception message for base class\n";
+        }
     }
 
+    std::cerr << failed << "exception not thrown\n";
     return ((EXIT_FAILURE));
 }
