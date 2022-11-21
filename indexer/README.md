@@ -6,12 +6,11 @@
 
 ### Dependencies
 
-* Minimize indexer API include dependencies, try to rely on standard C++17 only
-* Minimize linkage dependencies, try to rely on standard C++17 and CUDA runtime only
+* The indexer needs C++17 and the CUDA Runtime
 
 ### Memory handling
 
-* All memory should be allocated once at startup
+* All memory is allocated once per indexer object on creation
 
 ### Memory pinning
 
@@ -20,10 +19,12 @@
 
 ### Multiple GPUs
 
+* Every indexer object can act on a separate GPU
+   * if *INDEXER_GPU_DEVICE* is set in the environment, the device is taken from that
+   * otherwise the current CUDA device is used
 * I think it's most efficient to use multiple GPUs for different indexing problems. This sometimes increases latency, but maximizes throughput.
 * But if required, multiple GPUs could collaborate on the same indexing problem.
 * Multi GPU collaboration is necessary if the data doesn't fit onto the GPU, which I think is not a danger for indexing.
-* **TODO**: Support a separate GPU per indexer by parsing *INDEXER_GPU_DEVICE* on indexer initialization time.
 
 ### Multiple GPU Streams
 
@@ -48,9 +49,9 @@ Logging output steered by *INDEXER_LOG_LEVEL* goes to stdlog (the same as stderr
 
 Steer library behaviour with environment variables. 
 
-* *INDEXER_GPU_DEVICE* (int): The GPU cuda device number to use for indexing (parsed once first time an indexer is initialized)
 * *INDEXER_LOG_LEVEL* (string): The log level for the indexer {"fatal", "error", "warn", "info", "debug"} (parsed on calling *logger::init_log_level()*)
-* *INDEXER_GPU_DEBUG* (string): Print gpu kernel debug output to stdout {"1", "true", "yes", "on", "0", "false", "no", "off"} (parsed once first time an indexer is initialized)
+* *INDEXER_GPU_DEVICE* (int): The GPU cuda device number to use for indexing (parsed on indexer object creation)
+* *INDEXER_GPU_DEBUG* (string): Print gpu kernel debug output to stdout {"1", "true", "yes", "on", "0", "false", "no", "off"} (parsed on indexer object creation)
 
 ### Noteworthy Cmake Variables
 

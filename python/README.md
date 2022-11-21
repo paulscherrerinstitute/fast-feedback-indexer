@@ -27,7 +27,7 @@ Handle to the indexer object
 - **max_spots** is the maximum number of spots considered
 - **num_candidate_vectors** is number of candidates (best sample vectors of a specific length) computed per length
 
-This allocates space on the GPU for all the data structures used in the computation.
+This allocates space on the GPU for all the data structures used in the computation. The GPU device is parsed from the *INDEXER_GPU_DEVICE* environment variable. If it is not set, the current GPU device is used.
 
 #### ffbidx.index(handle, length_threshold, num_sample_points, n_output_cells, n_input_cells, data)
 
@@ -61,7 +61,6 @@ Release the indexer object. The handle must not be used after this.
 
    * If the indexer is not realeased properly, ugly memory deallocation errors appear.
    * The module sets the logging level just once on loading, so the *INDEXER_LOG_LEVEL* environment variable has to be set before the import statement.
-   * The GPU device is determined once when creating the first indexer handle, so the *INDEXER_GPU_DEVICE* environment variable has to be set before that.
 
 ### Note
 
