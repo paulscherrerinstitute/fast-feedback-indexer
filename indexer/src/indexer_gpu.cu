@@ -143,7 +143,7 @@ namespace {
                 if (!iss || !iss.eof())
                     throw FF_EXCEPTION_OBJ << "wrong format for " << INDEXER_GPU_DEVICE << ": " << dev_string << " (should be an integer)";
                 if ((dev < 0) || (dev >= list.size()))
-                    throw FF_EXCEPTION_OBJ << "illegal value for " << INDEXER_GPU_DEVICE << ": " << dev << " (should be in [0, " << list.size() << "[)";
+                    throw FF_EXCEPTION_OBJ << "illegal value for " << INDEXER_GPU_DEVICE << ": " << dev << " (should be in [0.." << list.size() << "[)";
             }
 
             LOG_START(logger::l_info) {
