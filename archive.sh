@@ -7,7 +7,7 @@
 # Result: ../fast-feedback-indexer.tar.xz
 
 if test -r archive.sh; then
-    tar cvJf ../fast-feedback-indexer.tar.xz --exclude=build *
+    tar cvJf ../fast-feedback-indexer.tar.xz --exclude=build --exclude=install *
 else
     echo "Failed: execute this command from the top directory of the repository!"
 fi
