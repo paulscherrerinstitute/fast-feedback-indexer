@@ -74,8 +74,8 @@ namespace {
 
     std::vector<gpu_device> gpu_device::list;
 
-    int gpu_device_number;  // Used gpu device, TODO: allow multiple GPU devices
-    bool gpu_debug_output;  // Print gpu debug output if true
+    int gpu_device_number;                      // Used gpu device, TODO: allow multiple GPU devices
+    std::atomic_bool gpu_debug_output{false};   // Print gpu debug output if true, set if INDEXER_GPU_DEBUG env var is set to true at indexer creation time
 
     // Exception for cuda related errors
     struct cuda_exception final : public fast_feedback::exception {
@@ -1507,13 +1507,14 @@ namespace gpu {
             const dim3 n_blocks(n_xblocks, 3 * n_cells_in, instance.cpers.num_candidate_vectors);
             const unsigned shared_sz = std::max(n_cells_out * sizeof(cell_cand_t<float_type>),
                                                 sizeof(typename BlockRadixSort<float_type>::TempStorage));
-            if (gpu_debug_output)
+            bool dbg_flag = gpu_debug_output.load();
+            if (dbg_flag)
                 gpu_debug_out<float_type><<<1, 1, 0, stream>>>(gpu_state::ptr(state_id).get(), 0u);
             gpu_find_cells<float_type><<<n_blocks, n_threads, shared_sz, 0>>>(gpu_state::ptr(state_id).get());
-            if (gpu_debug_output)
+            if (dbg_flag)
                 gpu_debug_out<float_type><<<1, 1, 0, stream>>>(gpu_state::ptr(state_id).get(), 1u);
             gpu_expand_cells<float_type><<<1, n_cells_out, 0, stream>>>(gpu_state::ptr(state_id).get(), n_xblocks * n_threads);
-            if (gpu_debug_output)
+            if (dbg_flag)
                 gpu_debug_out<float_type><<<1, 1, 0, stream>>>(gpu_state::ptr(state_id).get(), 2u);
             state.end.record(stream);
             gpu_state::copy_out(state_id, out, stream); // synchronizes on stream
