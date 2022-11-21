@@ -63,18 +63,6 @@ namespace {
         // static constexpr float_type eps = FLT_EPSILON;
     };
 
-    // Cuda device infos
-    struct gpu_device final {
-        int id;
-        cudaDeviceProp prop;
-
-        // Device list
-        static std::vector<gpu_device> list;
-    };
-
-    std::vector<gpu_device> gpu_device::list;
-
-    int gpu_device_number;                      // Used gpu device, TODO: allow multiple GPU devices
     std::atomic_bool gpu_debug_output{false};   // Print gpu debug output if true, set if INDEXER_GPU_DEBUG env var is set to true at indexer creation time
 
     // Exception for cuda related errors
@@ -98,6 +86,108 @@ namespace {
             CU_EXCEPTION(error);   \
     }
 
+    // Cuda device infos
+    struct gpu_device final {
+        int id;
+        cudaDeviceProp prop;
+
+        static inline std::vector<gpu_device> list;             // Cuda device list
+        static inline std::atomic_bool cuda_initialized{false}; // Is the cuda runtime initialized?
+        static inline std::mutex init_lock;                     // Protect cuda runtime initalisation
+
+        // Check if cuda has been initialized
+        static void check_init()
+        {
+            if (! gpu_device::cuda_initialized.load())
+                throw FF_EXCEPTION("cuda runtime not initialized");
+        }
+
+        // Get the list of cuda devices
+        static void init()
+        {
+            if (cuda_initialized.load())
+                return;
+            
+            {
+                std::lock_guard<std::mutex> lock{init_lock};
+
+                if (cuda_initialized.load())
+                    return;
+            
+                int num_devices;
+                CU_CHECK(cudaGetDeviceCount(&num_devices));
+
+                list.resize(num_devices);
+                for (int dev=0; dev<num_devices; dev++) {
+                    gpu_device& device = list[dev];
+                    device.id = dev;
+                    CU_CHECK(cudaGetDeviceProperties(&device.prop, dev));
+                }
+
+                gpu_device::cuda_initialized.store(true);
+            }
+        }
+
+        // Get a CUDA device
+        // Take the device given with INDEXER_GPU_DEVICE if set,
+        // otherwise take the current device.
+        static int get()
+        {
+            int dev{-1};
+            CU_CHECK(cudaGetDevice(&dev));
+
+            char* dev_string = std::getenv(INDEXER_GPU_DEVICE);
+            if (dev_string != nullptr) {
+                std::istringstream iss{dev_string};
+                iss >> dev;
+                if (!iss || !iss.eof())
+                    throw FF_EXCEPTION_OBJ << "wrong format for " << INDEXER_GPU_DEVICE << ": " << dev_string << " (should be an integer)";
+                if ((dev < 0) || (dev >= list.size()))
+                    throw FF_EXCEPTION_OBJ << "illegal value for " << INDEXER_GPU_DEVICE << ": " << dev << " (should be in [0, " << list.size() << "[)";
+            }
+
+            LOG_START(logger::l_info) {
+                logger::info << stanza << "using GPU device " << dev << '\n';
+            } LOG_END;
+
+            return dev;
+        }
+
+        // Set current CUDA device
+        static void set(int dev)
+        {
+            if ((dev < 0) || (dev >= list.size()))
+                throw FF_EXCEPTION_OBJ << "illegal value for GPU device";
+
+            CU_CHECK(cudaSetDevice(dev));
+        }
+    };
+
+    // Set GPU debug output if INDEXER_GPU_DEBUG is set to true
+    void gpu_debug_init()
+    {
+        char* debug_string = std::getenv(INDEXER_GPU_DEBUG);
+        if (debug_string != nullptr) {
+            const std::vector<std::string> accepted = {"1", "true", "yes", "on", "0", "false", "no", "off"}; // [4] == "0"
+            unsigned i;
+            for (i=0u; i<accepted.size(); i++) {
+                if (accepted[i] == debug_string) {
+                    gpu_debug_output.store(i < 4);                                                           // [4] == "0"
+                    break;
+                }
+            }
+            if (i >= accepted.size()) {
+                std::ostringstream oss;
+                oss << "illegal value for " << INDEXER_GPU_DEBUG << ": \"" << debug_string << "\" (use one of";
+                for (const auto& s : accepted)
+                    oss << " \"" << s << '\"';
+                oss << ')';
+                throw FF_EXCEPTION(oss.str());
+            }
+        } else
+            gpu_debug_output.store(false);
+    }
+
     // Deleter for device smart pointers
     template<typename T>
     struct gpu_deleter final {
@@ -110,84 +200,6 @@ namespace {
     // Device smart pointer
     template<typename T>
     using gpu_pointer = std::unique_ptr<T, gpu_deleter<T>>;
-
-    // Is the cuda runtime initialized?
-    std::atomic_bool cuda_initialized = false;
-
-    // Protect cuda runtime initalisation
-    std::mutex cuda_init_lock;
-
-    // Init CUDA runtime environment
-    void cuda_init()
-    {
-        if (cuda_initialized.load())
-            return;
-        
-        {
-            std::lock_guard<std::mutex> lock{cuda_init_lock};
-
-            if (cuda_initialized.load())
-                return;
-        
-            int num_devices;
-            CU_CHECK(cudaGetDeviceCount(&num_devices));
-
-            gpu_device::list.resize(num_devices);
-            for (int dev=0; dev<num_devices; dev++) {
-                gpu_device& device = gpu_device::list[dev];
-                device.id = dev;
-                CU_CHECK(cudaGetDeviceProperties(&device.prop, dev));
-            }
-
-            CU_CHECK(cudaGetDevice(&gpu_device_number));
-            {
-                char* dev_string = std::getenv(INDEXER_GPU_DEVICE);
-                if (dev_string != nullptr) {
-                    std::istringstream iss{dev_string};
-                    int dev = -1;
-                    iss >> dev;
-                    if (!iss || !iss.eof())
-                        throw FF_EXCEPTION_OBJ << "wrong format for " << INDEXER_GPU_DEVICE << ": " << dev_string << " (should be an integer)\n";
-                    if ((dev < 0) || (dev >= num_devices))
-                        throw FF_EXCEPTION_OBJ << "illegal value for " << INDEXER_GPU_DEVICE << ": " << dev << " (should be in [0, " << num_devices << "[)\n";
-                    CU_CHECK(cudaSetDevice(dev));
-                    CU_CHECK(cudaGetDevice(&gpu_device_number));
-                }
-
-                char* debug_string = std::getenv(INDEXER_GPU_DEBUG);
-                if (debug_string != nullptr) {
-                    const std::vector<std::string> accepted = {"1", "true", "yes", "on", "0", "false", "no", "off"}; // [4] == "0"
-                    unsigned i;
-                    for (i=0u; i<accepted.size(); i++) {
-                        if (accepted[i] == debug_string) {
-                            gpu_debug_output = (i < 4);                                                              // [4] == "0"
-                            break;
-                        }
-                    }
-                    if (i >= accepted.size()) {
-                        std::ostringstream oss;
-                        oss << "illegal value for " << INDEXER_GPU_DEBUG << ": \"" << debug_string << "\" (use one of";
-                        for (const auto& s : accepted)
-                            oss << " \"" << s << '\"';
-                        oss << ')';
-                        throw FF_EXCEPTION(oss.str());
-                    }
-                } else
-                    gpu_debug_output = false;
-            }
-
-            LOG_START(logger::l_info) {
-                logger::info << stanza << "using GPU device " << gpu_device_number << '\n';
-            } LOG_END;
-            cuda_initialized.store(true);
-        } // release cuda_init_lock
-    }
-
-    // Check for an initialized CUDA runtime
-    #define CU_CHECK_INIT {                                      \
-        if (! cuda_initialized.load())                           \
-            throw FF_EXCEPTION("cuda runtime not initialized");  \
-    }
 
     // Cuda event wrapper
     template<unsigned flags=cudaEventDisableTiming>
@@ -222,10 +234,8 @@ namespace {
 
         inline void init()
         {
-            if (event == cudaEvent_t{}) {
-                CU_CHECK_INIT;
+            if (event == cudaEvent_t{})
                 CU_CHECK(cudaEventCreateWithFlags(&event, flags));
-            }
         }
 
         inline void record(cudaStream_t stream=0)
@@ -367,7 +377,7 @@ namespace {
         gpu_pointer<unsigned> candidate_sample;             // Sample number of candidate vectors
         gpu_pointer<unsigned> cellvec_to_cand;              // Input cell vector to candidate group mapping
         gpu_pointer<unsigned> seq_block;                    // Thread block sequentializers
-        gpu_stream init_stream;                             // CUDA stream for initialization
+        gpu_stream cuda_stream;                             // CUDA stream
 
         // Temporary pinned space to transfer n_input_cells, n_output_cells, n_spots
         fast_feedback::pinned_ptr<config_persistent> tmp;   // Pointer to make move construction simple
@@ -387,32 +397,39 @@ namespace {
         gpu_event<cudaEventDefault> start;
         gpu_event<cudaEventDefault> end;
 
+        // GPU device
+        int device;
+
         static std::mutex state_update; // Protect per indexer state map
         static map_type dev_ptr;        // Per indexer state map
 
         // Create hostside on GPU state representation with
-        // d        on GPU state pointer
-        // e        on GPU input and output elements pointed to by *d
-        // cv       on GPU candidate vector objective function values
-        // cs       on GPU candidate vector sample numbers
-        // score    on GPU per output cell scoring function values
-        // sb       on GPU per candidate vector group/output cell block sequentializers
+        // d        pointer to on GPU state
+        // e        on GPU input and output elements pointed to by d->elements
+        // cl       on GPU candidate lengths pointed to by d->candidate_length
+        // cv       on GPU candidate vector objective function values pointed to by d->candidate_value
+        // cs       on GPU candidate vector sample numbers pointed to by d->candidate_sample
+        // v2c      on GPU input cell vector to candidate group mapping pointed to by d->cellvec_to_cand
+        // sb       on GPU per candidate vector group/output cell block sequentializers pointed to by d->seq_block
+        // stream   GPU stream used for actions on this state
         // x/y/zi   on GPU input pointers d->input.x / y / z
-        // x/y/zo   on GPU output pointers d->output.x / y / z
+        // x/y/z0   on GPU output pointers d->output.x / y / z
+        // score    on GPU per output cell scoring function values
+        // dev      cuda device number of the GPU holding this state
         indexer_gpu_state(gpu_pointer<content_type>&& d, gpu_pointer<float_type>&& e,
                           gpu_pointer<float_type>&& cl, gpu_pointer<float_type>&& cv,
                           gpu_pointer<unsigned>&& cs, gpu_pointer<unsigned>&& v2c,
                           gpu_pointer<unsigned>&& sb, gpu_stream&& stream,
                           float_type* xi, float_type* yi, float_type* zi,
                           float_type* xo, float_type* yo, float_type* zo,
-                          float_type* scores)
+                          float_type* scores, int dev)
             : data{std::move(d)}, elements{std::move(e)},
               candidate_length{std::move(cl)}, candidate_value{std::move(cv)},
               candidate_sample{std::move(cs)}, cellvec_to_cand{std::move(v2c)},
-              seq_block{std::move(sb)}, init_stream{std::move(stream)},
+              seq_block{std::move(sb)}, cuda_stream{std::move(stream)},
               ix{xi}, iy{yi}, iz{zi},
               ox{xo}, oy{yo}, oz{zo},
-              cell_score{scores}
+              cell_score{scores}, device{dev}
         {
             tmp = fast_feedback::alloc_pinned<config_persistent>();
         }
@@ -439,7 +456,7 @@ namespace {
         // Shortcut to cuda stream
         static inline gpu_stream& stream(const key_type& id)
         {
-            return ref(id).init_stream;
+            return ref(id).cuda_stream;
         }
 
         // State exists
@@ -1276,7 +1293,8 @@ namespace gpu {
         using gpu_state = indexer_gpu_state<float_type>;
         using device_data = indexer_device_data<float_type>;
 
-        cuda_init();
+        gpu_device::init();
+        gpu_debug_init();
 
         const auto state_id = instance.state;
         if (gpu_state::exists(state_id))
@@ -1298,6 +1316,10 @@ namespace gpu {
         float_type* oy;
         float_type* oz;
         float_type* scores;
+
+        int dev = gpu_device::get();
+        gpu_device::set(dev);
+
         {
             gpu_stream stream;
             stream.init();      // new cuda stream
@@ -1309,6 +1331,7 @@ namespace gpu {
                 std::size_t vector_dimension = std::max(3 * cpers.max_input_cells, cpers.max_output_cells);
                 CU_CHECK(cudaMalloc(&sequentializers, vector_dimension * sizeof(unsigned)));
             }
+
             gpu_pointer<unsigned> sequentializers_ptr{sequentializers};
             {   // initialize sequentializers
                 std::size_t vector_dimension = 3 * cpers.max_input_cells;
@@ -1366,14 +1389,16 @@ namespace gpu {
                                                      std::move(sequentializers_ptr), std::move(stream),
                                                      ix, iy, iz,
                                                      ox, oy, oz,
-                                                     scores};
+                                                     scores, dev};
             }
 
             LOG_START(logger::l_debug) {
-                logger::debug << stanza << "init id=" << state_id << ", elements=" << elements << '\n'
-                            << stanza << "     ox=" << ox << ", oy=" << oy << ", oz=" << oz << '\n'
-                            << stanza << "     ix=" << ix << ", iy=" << iy << ", iz=" << iz << '\n'
-                            << stanza << "     candval=" << candidate_value << ", candsmpl=" << candidate_sample << '\n';
+                logger::debug << stanza << "init id=" << state_id << " on " << dev << ", data=" << data_ptr.get() << '\n'
+                              << stanza << "  cand len=" << candidate_length << ", val=" << candidate_value << ", smpl=" << candidate_sample << '\n'
+                              << stanza << "  vec2cand=" << cellvec_to_cand << ", seq=" << sequentializers << '\n'
+                              << stanza << "  elements=" << elements << ", score=" << scores << '\n'
+                              << stanza << "    ox=" << ox << ", oy=" << oy << ", oz=" << oz << '\n'
+                              << stanza << "    ix=" << ix << ", iy=" << iy << ", iz=" << iz << '\n';
             } LOG_END;
         }
 
@@ -1394,7 +1419,7 @@ namespace gpu {
     {
         using gpu_state = indexer_gpu_state<float_type>;
 
-        cuda_init();
+        gpu_device::init();
         gpu_state::drop(instance.state);
     }
 
@@ -1407,9 +1432,11 @@ namespace gpu {
         using duration = std::chrono::duration<double, std::milli>;
         using time_point = std::chrono::time_point<clock>;
 
-        CU_CHECK_INIT;
+        gpu_device::check_init();
         auto state_id = instance.state;
         auto& state = gpu_state::ref(state_id);
+
+        gpu_device::set(state.device);
 
         bool timing = logger::level_active<logger::l_info>();
         time_point start, end;
@@ -1422,9 +1449,6 @@ namespace gpu {
         // Check input/output
         const auto n_cells_in = std::min(in.n_cells, instance.cpers.max_input_cells);
         const auto n_cells_out = std::min(out.n_cells, instance.cpers.max_output_cells);
-        LOG_START(logger::l_debug) {
-            logger::debug << stanza << "n_cells = " << n_cells_in << "(in)/" << n_cells_out << "(out), n_spots = " << in.n_spots << '\n';
-        } LOG_END;
         if (n_cells_in <= 0u)
             throw FF_EXCEPTION("no given input cells");
         if (n_cells_out <= 0)
@@ -1484,7 +1508,9 @@ namespace gpu {
                 candidate_idx[i] = it - std::cbegin(candidate_length);
             }
             LOG_START(logger::l_debug) {
-                logger::debug << stanza << "candidate_idx =";
+                logger::debug << stanza << "index on " << state.device << ", n_cells = " << n_cells_in << "(in)/"
+                                        << n_cells_out << "(out), n_spots = " << in.n_spots << '\n'
+                              << stanza << "  candidate_idx =";
                 for (const auto& e : candidate_idx)
                     logger::debug << ' ' << e;
                 logger::debug << ", n_cand_groups = " << n_cand_groups << '\n';
