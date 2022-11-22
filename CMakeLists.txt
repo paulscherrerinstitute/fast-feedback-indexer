@@ -5,6 +5,7 @@ include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
 option(TEST_ALL "Add test targets" OFF)
+option(INSTALL_RELOCATABLE "Relocatable installation (especially RPATH)" ON)
 
 enable_testing()
 if (EXISTS ${CMAKE_SOURCE_DIR}/eigen/CMakeLists.txt)

@@ -74,6 +74,15 @@ if (TESTS_RPATH)
                 BASE_DIRECTORY ${CMAKE_INSTALL_PREFIX}
                 NORMALIZE
                 OUTPUT_VARIABLE tests_RPATH)
+        if (INSTALL_RELOCATABLE)
+                cmake_path(ABSOLUTE_PATH CMAKE_INSTALL_BINDIR
+                        BASE_DIRECTORY ${CMAKE_INSTALL_PREFIX}
+                        NORMALIZE
+                        OUTPUT_VARIABLE tests_ABS_PATH)
+                cmake_path(RELATIVE_PATH tests_RPATH
+                        BASE_DIRECTORY ${tests_ABS_PATH})
+                set(tests_RPATH $ORIGIN/${tests_RPATH})
+        endif(INSTALL_RELOCATABLE)
 endif(TESTS_RPATH)
 
 if(SIMPLE_DATA_INDEXER)

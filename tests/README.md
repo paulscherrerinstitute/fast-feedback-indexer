@@ -41,4 +41,4 @@ Here's the place for ctest tests and other tests.
             * Refinement: least squares refinement of indexer output cells on CPU
             * Indexing + Refinement
 
-Since these executables need the fast feedback indexer library, it has to be installed in a default library search location, or the *LD_LIBRARY_PATH* has to be set. To avoid that, the module RUNPATH elf entry can be set to the fast feedback indexer library installation location by switching on the *TESTS_RPATH* cmake option.
+Since these executables need the fast feedback indexer library, it has to be installed in a default library search location, or the *LD_LIBRARY_PATH* has to be set. To avoid that, the module RUNPATH elf entry can be set to the fast feedback indexer library installation location by switching on the *TESTS_RPATH* cmake option. RUNPATH will be set to a relative path, unless the *INSTALL_RELOCATABLE* cmake option is switched off to make RUNPATH an absolute path.
