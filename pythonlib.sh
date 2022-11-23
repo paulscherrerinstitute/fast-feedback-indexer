@@ -10,7 +10,7 @@
 
 default_lib_dir=/tmp/test/ffbidx
 default_build_dir=./build
-lib_name=ffbidx.so
+lib_name=__init__.so
 
 install() {
     local build_dir=${CMAKE_BUILD_DIR:-${default_build_dir}}

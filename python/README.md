@@ -51,7 +51,7 @@ A tuple of numpy arrays *(output_cells, scores)*
 
 #### ffbidx.release(handle)
 
-Release the indexer object. The handle must not be used after this.
+Release the indexer object and associated GPU memory. The handle must not be used after this.
 
 **Arguments**:
 
@@ -59,8 +59,8 @@ Release the indexer object. The handle must not be used after this.
 
 ### Issues
 
-   * If the indexer is not realeased properly, ugly memory deallocation errors appear.
    * The module sets the logging level just once on loading, so the *INDEXER_LOG_LEVEL* environment variable has to be set before the import statement.
+   * The handles are taken from an increasing 32 bit counter that wraps around
 
 ### Note
 

@@ -8,6 +8,7 @@
 #include <atomic>
 #include <map>
 #include <exception>
+#include <stdexcept>
 #include "indexer.h"
 
 namespace {
@@ -47,6 +48,8 @@ namespace {
         uint32_t handle = (uint32_t)-1;
         try {
             handle = next_handle.fetch_add(1u);
+            if (indexers.count(handle) > 0)
+                throw std::runtime_error("unable to allocate handle: handle counter wraparound occurred");
             indexers.emplace(handle, indexer_t{cpers});
         } catch (std::exception& e) {
             PyErr_SetString(PyExc_RuntimeError, e.what());
