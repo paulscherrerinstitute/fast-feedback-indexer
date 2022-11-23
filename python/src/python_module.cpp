@@ -210,6 +210,11 @@ namespace {
         Py_RETURN_NONE;
     }
 
+    void ffbidx_free(void *)
+    {
+        indexers.clear();
+    }
+
 } // namespace
 
 extern "C" {
@@ -245,7 +250,7 @@ extern "C" {
         .m_slots = nullptr,
         .m_traverse = nullptr,
         .m_clear = nullptr,
-        .m_free = nullptr
+        .m_free = ffbidx_free
     };
 
     PyMODINIT_FUNC PyInit_ffbidx(void)
