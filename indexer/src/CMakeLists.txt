@@ -1,7 +1,7 @@
 cmake_policy(SET CMP0048 NEW)
 
 project(fast_indexer
-        DESCRIPTION "Fast Feedback Indexer"
+        DESCRIPTION "Library for fast feedback indexing using brute force sampling"
         VERSION 0.1.0
         LANGUAGES CXX CUDA)
 
@@ -45,4 +45,10 @@ if(BUILD_FAST_INDEXER)
                 COMPONENT ffbidx_libraries)
         write_basic_package_version_file(fast_indexer-config.cmake
                 COMPATIBILITY SameMinorVersion)
+        configure_file(fast_indexer.pc.in
+                fast_indexer.pc
+                @ONLY)
+        install(FILES ${CMAKE_CURRENT_BINARY_DIR}/fast_indexer.pc
+                DESTINATION ${CMAKE_INSTALL_DATADIR}/ffbidx/pkgconfig
+                COMPONENT ffbidx_development)
 endif(BUILD_FAST_INDEXER)
