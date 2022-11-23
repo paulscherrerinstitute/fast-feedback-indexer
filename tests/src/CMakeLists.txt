@@ -24,6 +24,8 @@ if(TEST_INDEXER)
 endif(TEST_INDEXER)
 
 if(TEST_INDEXER_SIMPLE)
+        set(THREADS_PREFER_PTHREAD_FLAG ON)
+        find_package(Threads REQUIRED)
         if(NOT BUILD_SIMPLE_DATA_READER)
                 message(FATAL_ERROR "TEST_INDEXER_SIMPLE needs -DBUILD_SIMPLE_DATA_READER=1 as a cmake argument")
         endif()
@@ -34,8 +36,8 @@ if(TEST_INDEXER_SIMPLE)
         target_compile_features(test_indexer PRIVATE cxx_std_17)
         target_link_libraries(test_indexer
                 PRIVATE fast_indexer
-                PRIVATE simple_data)
-
+                PRIVATE simple_data
+                PRIVATE Threads::Threads)
         add_test(NAME index_file_0 COMMAND test_indexer $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/data/simple/files/image0_local.txt>)
         set_property(TEST index_file_0 PROPERTY PASS_REGULAR_EXPRESSION "Test OK")
         set_property(TEST index_file_0 PROPERTY FAIL_REGULAR_EXPRESSION "Test failed")
@@ -49,7 +51,6 @@ if(TEST_INDEXER_EXCEPTION)
         target_compile_features(test_indexer_exception PRIVATE cxx_std_17)
         target_link_libraries(test_indexer_exception
                 PRIVATE fast_indexer)
-
         add_test(NAME fast_feedback_exception COMMAND test_indexer_exception)
         set_property(TEST fast_feedback_exception PROPERTY PASS_REGULAR_EXPRESSION "Test OK")
         set_property(TEST fast_feedback_exception PROPERTY FAIL_REGULAR_EXPRESSION "Test failed")
@@ -63,7 +64,6 @@ if(TEST_INDEXER_OBJ)
         target_compile_features(test_indexer_obj PRIVATE cxx_std_17)
         target_link_libraries(test_indexer_obj
                 PRIVATE fast_indexer)
-
         add_test(NAME indexer_object COMMAND test_indexer_obj)
         set_property(TEST indexer_object PROPERTY PASS_REGULAR_EXPRESSION "Test OK")
         set_property(TEST indexer_object PROPERTY FAIL_REGULAR_EXPRESSION "Test failed")
@@ -153,7 +153,6 @@ if(TEST_SIMPLE_DATA_READER)
         add_executable(test_simple_data_reader simple_data_test.cpp)
         target_link_libraries(test_simple_data_reader
                 PRIVATE simple_data)
-
         add_test(NAME read_file_0 COMMAND test_simple_data_reader $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/data/simple/files/image0_local.txt>)
         set_property(TEST read_file_0 PROPERTY PASS_REGULAR_EXPRESSION "^Test OK")
         set_property(TEST read_file_0 PROPERTY FAIL_REGULAR_EXPRESSION "^Error")
