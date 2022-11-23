@@ -29,6 +29,7 @@ if(PYTHON_MODULE)
                 PUBLIC Python3::NumPy
                 PUBLIC Python3::Module)
         set(ffbidx_INSTALL_PATH ${PYTHON_MODULE_PATH}/ffbidx)
+        set(ffbidx_INSTALL_RPATH $ORIGIN)
         if (PYTHON_MODULE_RPATH)
                 cmake_path(ABSOLUTE_PATH CMAKE_INSTALL_LIBDIR
                         BASE_DIRECTORY ${CMAKE_INSTALL_PREFIX}
@@ -43,12 +44,12 @@ if(PYTHON_MODULE)
                                 BASE_DIRECTORY ${ffbidx_ABS_PATH})
                         set(ffbidx_RPATH $ORIGIN/${ffbidx_RPATH})
                 endif(INSTALL_RELOCATABLE)
-                set_target_properties(ffbidx PROPERTIES
-                        INSTALL_RPATH ${ffbidx_RPATH})
+                set(ffbidx_INSTALL_RPATH ${ffbidx_INSTALL_RPATH}:${ffbidx_RPATH})
         endif(PYTHON_MODULE_RPATH)
         set_target_properties(ffbidx PROPERTIES
                 PREFIX ""
-                OUTPUT_NAME "__init__")
+                OUTPUT_NAME "__init__"
+                INSTALL_RPATH ${ffbidx_INSTALL_RPATH})
         install(TARGETS ffbidx
                 DESTINATION ${ffbidx_INSTALL_PATH}
                 COMPONENT ffbidx_python)
