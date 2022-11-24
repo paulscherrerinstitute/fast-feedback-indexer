@@ -64,7 +64,7 @@ source spack/share/spack/setup-env.sh
 
 Tell Spack to find your C++17 compatible compiler
 ```
-spack compiler find
+spack compiler find # HPC users should use 'module load gcc/<version>' beforehand
 ```
 
 Add the unofficial ffbidx spack recipe
@@ -84,6 +84,6 @@ Before using the lib in C++ load its run env using:
 spack load ffbidx
 ```
 
-### Installation with Spack on Merlin
+### Installation with Spack on Merlin (PSI cluster)
 
 See: https://git.psi.ch/germann_e/spack-psi
