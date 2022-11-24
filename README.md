@@ -54,7 +54,7 @@ $ ${HOME}/ffbidx/bin/refined_simple_data_indexer \
 $ python -c "import ffbidx; print('OK')"
 ```
 
-### Installation with Spack
+### Installation with Spack on custom systems
 
 Install the official Spack instance
 ```
@@ -83,3 +83,7 @@ Before using the lib in C++ load its run env using:
 ```
 spack load ffbidx
 ```
+
+### Installation with Spack on Merlin
+
+See: https://git.psi.ch/germann_e/spack-psi
