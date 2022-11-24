@@ -53,3 +53,33 @@ $ ${HOME}/ffbidx/bin/refined_simple_data_indexer \
   300 1 8 $((32*1024)) .2 .1
 $ python -c "import ffbidx; print('OK')"
 ```
+
+### Installation with Spack
+
+Install the official Spack instance
+```
+git clone https://github.com/spack/spack.git
+source spack/share/spack/setup-env.sh
+```
+
+Tell Spack to find your C++17 compatible compiler
+```
+spack compiler find
+```
+
+Add the unofficial ffbidx spack recipe
+```
+spack repo add fast-feedback-indexer/spack
+```
+
+Install ffbidx and its dependencies
+```
+spack install ffbidx cuda_arch=60 +python +simple_data_indexer +simple_data_files +test_all
+# Not all options are mandatory
+# Change your cuda_arch according to the system you are running on.
+```
+
+Before using the lib in C++ load its run env using:
+```
+spack load ffbidx
+```
