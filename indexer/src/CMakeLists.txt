@@ -6,8 +6,9 @@ project(fast_indexer
         LANGUAGES CXX CUDA)
 
 option(BUILD_FAST_INDEXER "Build fast indexer library" ON)
+option(BUILD_FAST_INDEXER_STATIC "Build fast indexer static library" ON)
 
-if(BUILD_FAST_INDEXER)
+if (BUILD_FAST_INDEXER OR BUILD_FAST_INDEXER_STATIC)
         find_package(Eigen3 3.3 NO_MODULE)
         if(NOT ${Eigen3_FOUND})
                 message(FATAL_ERROR
@@ -22,16 +23,19 @@ if(BUILD_FAST_INDEXER)
                 refine.h
                 log.h
                 exception.h)
+endif()
+
+if(BUILD_FAST_INDEXER)
         add_library(fast_indexer SHARED
-                      indexer_gpu.cu indexer_gpu.h
-                      indexer.cpp
-                      log.cpp
-                      ${fast_indexer_PUB_HEADER_LIST})
+                indexer_gpu.cu indexer_gpu.h
+                indexer.cpp
+                log.cpp
+                ${fast_indexer_PUB_HEADER_LIST})
         set_target_properties(fast_indexer PROPERTIES
-                                CMAKE_CUDA_KNOWN_FEATURES cuda_std_17
-                                SOVERSION 0
-                                VERSION 0.1.0
-                                POSITION_INDEPENDENT_CODE ON)
+                CUDA_RUNTIME_LIBRARY Shared
+                SOVERSION 0
+                VERSION 0.1.0
+                POSITION_INDEPENDENT_CODE ON)
         target_compile_features(fast_indexer PUBLIC cxx_std_17)
         target_include_directories(fast_indexer PUBLIC .)
         target_link_libraries(fast_indexer
@@ -42,17 +46,12 @@ if(BUILD_FAST_INDEXER)
                 DESTINATION ${CMAKE_INSTALL_LIBDIR}
                 COMPONENT ffbidx_libraries
                 NAMELINK_COMPONENT ffbidx_development)
-        install(FILES ${fast_indexer_PUB_HEADER_LIST}
-                DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ffbidx
-                COMPONENT ffbidx_development)
         cmake_path(ABSOLUTE_PATH CMAKE_INSTALL_LIBDIR
                 BASE_DIRECTORY ${CMAKE_INSTALL_PREFIX}
                 NORMALIZE
                 OUTPUT_VARIABLE ffbidx_LIBRARY_PATH)
         install(CODE "MESSAGE(\"use LD_LIBRARY_PATH=${ffbidx_LIBRARY_PATH}\")"
                 COMPONENT ffbidx_libraries)
-        write_basic_package_version_file(fast_indexer-config.cmake
-                COMPATIBILITY SameMinorVersion)
         configure_file(fast_indexer.pc.in
                 fast_indexer.pc
                 @ONLY)
@@ -60,3 +59,37 @@ if(BUILD_FAST_INDEXER)
                 DESTINATION ${CMAKE_INSTALL_DATADIR}/ffbidx/pkgconfig
                 COMPONENT ffbidx_development)
 endif(BUILD_FAST_INDEXER)
+
+if(BUILD_FAST_INDEXER_STATIC)
+        add_library(fast_indexer_static STATIC
+                indexer_gpu.cu indexer_gpu.h
+                indexer.cpp
+                log.cpp
+                ${fast_indexer_PUB_HEADER_LIST})
+        set_target_properties(fast_indexer_static PROPERTIES
+                CUDA_RUNTIME_LIBRARY Static
+                VERSION 0.1.0)
+        target_compile_features(fast_indexer_static PUBLIC cxx_std_17)
+        target_include_directories(fast_indexer_static PUBLIC .)
+        target_link_libraries(fast_indexer_static
+                PRIVATE CUDA::cudart_static
+                INTERFACE Eigen3::Eigen)
+        install(TARGETS fast_indexer_static
+                LIBRARY
+                DESTINATION ${CMAKE_INSTALL_LIBDIR}
+                COMPONENT ffbidx_static_libraries)
+        configure_file(fast_indexer_static.pc.in
+                fast_indexer_static.pc
+                @ONLY)
+        install(FILES ${CMAKE_CURRENT_BINARY_DIR}/fast_indexer_static.pc
+                DESTINATION ${CMAKE_INSTALL_DATADIR}/ffbidx/pkgconfig
+                COMPONENT ffbidx_development)
+endif(BUILD_FAST_INDEXER_STATIC)
+
+if (BUILD_FAST_INDEXER OR BUILD_FAST_INDEXER_STATIC)
+        install(FILES ${fast_indexer_PUB_HEADER_LIST}
+                DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ffbidx
+                COMPONENT ffbidx_development)
+        write_basic_package_version_file(fast_indexer-config.cmake
+                COMPATIBILITY SameMinorVersion)
+endif()
