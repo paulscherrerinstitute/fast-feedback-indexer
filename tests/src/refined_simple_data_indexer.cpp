@@ -25,15 +25,10 @@ Author: hans-christian.stadler@psi.ch
 
 #include <cstdlib>
 #include <iostream>
-#include <iomanip>
 #include <sstream>
 #include <stdexcept>
-#include <vector>
-#include <array>
-#include <numeric>
 #include <chrono>
 #include <Eigen/Dense>
-#include <Eigen/LU>
 #include "simple_data.h"
 #include "refine.h"
 
@@ -150,26 +145,16 @@ int main (int argc, char *argv[])
         }
 
         auto t1 = clock::now();
-        static_cast<fast_feedback::refine::indexer<>&>(indexer).index(1u, i); // run unrefined indexing
+        indexer.index(1u, i);                           // run refined indexing
         auto t2 = clock::now();
-
-        Eigen::VectorXf score_orig = indexer.oScoreV() / static_cast<float>(3u * i);
-        indexer.refine();                               // refine cells
-
-        auto t3 = clock::now();
 
         std::cout << "output:\n";
         for (unsigned j=0u; j<cpers.max_output_cells; j++)
-            std::cout << indexer.oCellM().block(3u * j, 0u, 3u, 3u) << "\n\n"; // refined output cells
-        Eigen::MatrixX2f scores(score_orig.size(), 2);
-        scores.col(0) = score_orig;
-        scores.col(1) = indexer.oScoreV();
-        std::cout << "scores:\n" << scores << '\n';             // scores
+            std::cout << indexer.oCellM().block(3u * j, 0u, 3u, 3u) << "\n\n";
+        std::cout << "scores:\n" << indexer.oScoreV() << '\n';
         std::cout << "timings:\n"
                   << "prep    " << duration{t1 - t0}.count() << "s\n"
-                  << "index   " << duration{t2 - t1}.count() << "s\n"
-                  << "refine  " << duration{t3 - t2}.count() << "s\n"
-                  << "i+r     " << duration{t3 - t1}.count() << "s\n";
+                  << "index   " << duration{t2 - t1}.count() << "s\n";
 
     } catch (std::exception& ex) {
         std::cerr << "indexing failed: " << ex.what() << '\n' << failure;
