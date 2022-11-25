@@ -6,7 +6,9 @@
 
 ### Dependencies
 
-* The indexer needs C++17 and the CUDA Runtime
+* C++17
+* CUDA Runtime
+* Eigen for lsq refined indexer
 
 ### Memory handling
 

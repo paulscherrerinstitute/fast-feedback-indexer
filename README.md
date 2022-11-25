@@ -10,8 +10,8 @@ Develop an indexer for fast feedback
 
 * C++17 compatible compiler
 * cmake > 3.21 (not so sure if it works with earlier versions as well)
+* Eigen3 header only library
 * *BUILD_FAST_INDEXER* needs a compiler compatible CUDA toolkit
-* *BUILD_SIMPLE_DATA_READER*, *SIMPLE_DATA_INDEXER*, and *REFINED_SIMPLE_DATA_INDEXER* need the Eigen 3.3 library
 * *PYTHON_MODULE* needs Python3 and NumPy (also see https://cmake.org/cmake/help/latest/module/FindPython3.html)
 
 ### Internal Build Dependencies
