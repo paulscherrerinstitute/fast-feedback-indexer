@@ -1,4 +1,10 @@
-The code in the **eigen** directory has it's own license.
+The code in the **eigen** directory has it's own license
+* http://www.eigen.tuxfamily.org
+* https://www.mozilla.org/en-US/MPL/2.0
+
+Python has it's own license
+* https://docs.python.org/3/license.html#psf-license
+
 For the rest, the BSD-3-Clause applies.
 
 ### BSD-3-Clause
