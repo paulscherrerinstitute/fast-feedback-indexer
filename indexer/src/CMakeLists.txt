@@ -8,12 +8,18 @@ project(fast_indexer
 option(BUILD_FAST_INDEXER "Build fast indexer library" ON)
 
 if(BUILD_FAST_INDEXER)
+        find_package(Eigen3 3.3 NO_MODULE)
+        if(NOT ${Eigen3_FOUND})
+                message(FATAL_ERROR
+                        "Eigen3 library not found! Install a distro specific package, or use 'git submodule update' to download the submodule.")
+        endif()
         if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
                 set(CMAKE_CUDA_ARCHITECTURES "75;80")
         endif()
         find_package(CUDAToolkit REQUIRED)
         set(fast_indexer_PUB_HEADER_LIST
                 indexer.h
+                refine.h
                 log.h
                 exception.h)
         add_library(fast_indexer SHARED
@@ -28,7 +34,9 @@ if(BUILD_FAST_INDEXER)
                                 POSITION_INDEPENDENT_CODE ON)
         target_compile_features(fast_indexer PUBLIC cxx_std_17)
         target_include_directories(fast_indexer PUBLIC .)
-        target_link_libraries(fast_indexer PRIVATE CUDA::cudart)
+        target_link_libraries(fast_indexer
+                PRIVATE CUDA::cudart
+                INTERFACE Eigen3::Eigen)
         install(TARGETS fast_indexer
                 LIBRARY
                 DESTINATION ${CMAKE_INSTALL_LIBDIR}
