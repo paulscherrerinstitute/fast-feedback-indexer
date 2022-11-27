@@ -183,6 +183,9 @@ namespace fast_feedback {
             inline unsigned num_sample_points () const noexcept
             { return crt.num_sample_points; }
 
+            const config_runtime<float_type>& conf_runtime () const noexcept
+            { return crt; }
+
             // persistent configuration access
             // - to change the persistent config, create another indexer instance
             inline unsigned max_output_cells () const noexcept
@@ -196,6 +199,9 @@ namespace fast_feedback {
 
             inline unsigned num_candidate_vectors () const noexcept
             { return idx.cpers.num_candidate_vectors; }
+
+            const config_persistent<float_type>& conf_persistent () const noexcept
+            { return idx.cpers; }
 
         }; // indexer
 
@@ -274,6 +280,9 @@ namespace fast_feedback {
 
             inline float_type score_threshold () const noexcept
             { return clsq.score_threshold; }
+
+            const config_lsq<float_type>& conf_lsq () const noexcept
+            { return clsq; }
 
         }; // indexer_lsq
             
