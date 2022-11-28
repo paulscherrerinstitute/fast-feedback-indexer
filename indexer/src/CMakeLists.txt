@@ -9,6 +9,8 @@ option(BUILD_FAST_INDEXER "Build fast indexer library" ON)
 option(BUILD_FAST_INDEXER_STATIC "Build fast indexer static library" ON)
 
 if (BUILD_FAST_INDEXER OR BUILD_FAST_INDEXER_STATIC)
+        set(THREADS_PREFER_PTHREAD_FLAG ON)
+        find_package(Threads REQUIRED)
         find_package(Eigen3 3.3 NO_MODULE)
         if(NOT ${Eigen3_FOUND})
                 message(FATAL_ERROR
@@ -46,6 +48,7 @@ if(BUILD_FAST_INDEXER)
         target_include_directories(fast_indexer PUBLIC .)
         target_link_libraries(fast_indexer
                 PRIVATE CUDA::cudart
+                PRIVATE Threads::Threads
                 INTERFACE Eigen3::Eigen)
         install(TARGETS fast_indexer
                 LIBRARY
@@ -75,6 +78,7 @@ if(BUILD_FAST_INDEXER_STATIC)
         target_include_directories(fast_indexer_static PUBLIC .)
         target_link_libraries(fast_indexer_static
                 PRIVATE CUDA::cudart_static
+                PRIVATE Threads::Threads
                 INTERFACE Eigen3::Eigen)
         install(TARGETS fast_indexer_static
                 LIBRARY
