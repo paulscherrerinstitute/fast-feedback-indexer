@@ -129,6 +129,17 @@ if(REFINED_SIMPLE_DATA_INDEXER)
                 COMPONENT ffbidx_executables)
 endif(REFINED_SIMPLE_DATA_INDEXER)
 
+if (SIMPLE_DATA_INDEXER OR REFINED_SIMPLE_DATA_INDEXER)
+        cmake_path(ABSOLUTE_PATH CMAKE_INSTALL_BINDIR
+                BASE_DIRECTORY ${CMAKE_INSTALL_PREFIX}
+                NORMALIZE
+                OUTPUT_VARIABLE ffbidx_PATH)
+        install(CODE "MESSAGE(\"use PATH=${ffbidx_PATH}\")"
+                COMPONENT ffbidx_executables)
+        string(APPEND fast_feedback_indexer_ENV_SETUP "ffbidx_PATH=${ffbidx_PATH};")
+        set(fast_feedback_indexer_ENV_SETUP "${fast_feedback_indexer_ENV_SETUP}" CACHE INTERNAL ENV)
+endif()
+
 # ---- Data Tests ----
 
 option(TEST_DATA "Add targets for the data tests" OFF)

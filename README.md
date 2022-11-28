@@ -25,9 +25,10 @@ If the default value of *CMAKE_CUDA_ARCHITECTURES*=\"75;80\" is inappropriate fo
 Get hold of the Eigen3 library, either by installing it via your distro (e.g. on Ubuntu: `sudo apt install libeigen3-dev`) or download it using `git submodule update`. Install python3 and numpy for the python module.
 
 ```
+$ FFBIDX_INSTALL_DIR=${HOME}/ffbidx
 $ mkdir build
 $ cd build
-$ cmake -DCMAKE_INSTALL_PREFIX=${HOME}/ffbidx -DCMAKE_BUILD_TYPE=Release \
+$ cmake -DCMAKE_INSTALL_PREFIX=${FFBIDX_INSTALL_DIR} -DCMAKE_BUILD_TYPE=Release \
   -DINSTALL_SIMPLE_DATA_FILES=ON -DTEST_ALL=ON -DTESTS_RPATH=ON \
   -DBUILD_SIMPLE_DATA_READER=ON -DPYTHON_MODULE=ON \
   -DPYTHON_MODULE_RPATH=ON ..
@@ -41,15 +42,16 @@ Take note of the CMAKE_INSTALL_PREFIX value above.
 
 ```
 $ make install
-$ export LD_LIBRARY_PATH=${HOME}/ffbidx/lib
-$ export PYTHONPATH=${HOME}/ffbidx/lib/ffbidx
+$ # The following only works for sh compatible shells.
+$ # Adapt the script if you're using something else.
+$ . ${FFBIDX_INSTALL_DIR}/share/ffbidx/setup-env.sh
 ```
 
 As a quick installation test you could do
 
 ```
-$ ${HOME}/ffbidx/bin/refined_simple_data_indexer \
-  ${HOME}/ffbidx/share/ffbidx/data/files/image0_local.txt \
+$ refined_simple_data_indexer \
+  ${FFBIDX_INSTALL_DIR}/share/ffbidx/data/files/image0_local.txt \
   300 1 8 $((32*1024)) .2 .1
 $ python -c "import ffbidx; print('OK')"
 ```

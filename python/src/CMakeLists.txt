@@ -59,4 +59,6 @@ if(PYTHON_MODULE)
                 OUTPUT_VARIABLE ffbidx_PYTHONPATH)
         install(CODE "MESSAGE(\"use PYTHONPATH=${ffbidx_PYTHONPATH}\")"
                 COMPONENT ffbidx_python)
+        string(APPEND fast_feedback_indexer_ENV_SETUP "ffbidx_PYTHONPATH=${ffbidx_PYTHONPATH};")
+        set(fast_feedback_indexer_ENV_SETUP "${fast_feedback_indexer_ENV_SETUP}" CACHE INTERNAL ENV)
 endif(PYTHON_MODULE)

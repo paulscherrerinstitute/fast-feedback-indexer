@@ -23,6 +23,12 @@ if (BUILD_FAST_INDEXER OR BUILD_FAST_INDEXER_STATIC)
                 refine.h
                 log.h
                 exception.h)
+        cmake_path(ABSOLUTE_PATH CMAKE_INSTALL_LIBDIR
+                BASE_DIRECTORY ${CMAKE_INSTALL_PREFIX}
+                NORMALIZE
+                OUTPUT_VARIABLE ffbidx_LIBRARY_PATH)
+        set(ffbidx_PKG_PATH ${CMAKE_INSTALL_DATADIR}/ffbidx/pkgconfig)
+        set(ffbidx_INCLUDE_PATH ${CMAKE_INSTALL_INCLUDEDIR}/ffbidx)
 endif()
 
 if(BUILD_FAST_INDEXER)
@@ -46,17 +52,13 @@ if(BUILD_FAST_INDEXER)
                 DESTINATION ${CMAKE_INSTALL_LIBDIR}
                 COMPONENT ffbidx_libraries
                 NAMELINK_COMPONENT ffbidx_development)
-        cmake_path(ABSOLUTE_PATH CMAKE_INSTALL_LIBDIR
-                BASE_DIRECTORY ${CMAKE_INSTALL_PREFIX}
-                NORMALIZE
-                OUTPUT_VARIABLE ffbidx_LIBRARY_PATH)
         install(CODE "MESSAGE(\"use LD_LIBRARY_PATH=${ffbidx_LIBRARY_PATH}\")"
                 COMPONENT ffbidx_libraries)
         configure_file(fast_indexer.pc.in
                 fast_indexer.pc
                 @ONLY)
         install(FILES ${CMAKE_CURRENT_BINARY_DIR}/fast_indexer.pc
-                DESTINATION ${CMAKE_INSTALL_DATADIR}/ffbidx/pkgconfig
+                DESTINATION ${ffbidx_PKG_PATH}
                 COMPONENT ffbidx_development)
 endif(BUILD_FAST_INDEXER)
 
@@ -82,14 +84,29 @@ if(BUILD_FAST_INDEXER_STATIC)
                 fast_indexer_static.pc
                 @ONLY)
         install(FILES ${CMAKE_CURRENT_BINARY_DIR}/fast_indexer_static.pc
-                DESTINATION ${CMAKE_INSTALL_DATADIR}/ffbidx/pkgconfig
+                DESTINATION ${ffbidx_PKG_PATH}
                 COMPONENT ffbidx_development)
 endif(BUILD_FAST_INDEXER_STATIC)
 
 if (BUILD_FAST_INDEXER OR BUILD_FAST_INDEXER_STATIC)
         install(FILES ${fast_indexer_PUB_HEADER_LIST}
-                DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ffbidx
+                DESTINATION ${ffbidx_INCLUDE_PATH}
                 COMPONENT ffbidx_development)
+        cmake_path(ABSOLUTE_PATH ffbidx_INCLUDE_PATH
+                BASE_DIRECTORY ${CMAKE_INSTALL_PREFIX}
+                NORMALIZE
+                OUTPUT_VARIABLE ffbidx_CPLUS_INCLUDE_PATH)
+        cmake_path(ABSOLUTE_PATH ffbidx_PKG_PATH
+                BASE_DIRECTORY ${CMAKE_INSTALL_PREFIX}
+                NORMALIZE
+                OUTPUT_VARIABLE ffbidx_PKG_CONFIG_PATH)
+        install(CODE "MESSAGE(\"use PKG_CONFIG_PATH=${ffbidx_PKG_PATH}\")"
+                COMPONENT ffbidx_libraries)
+        install(CODE "MESSAGE(\"use CPLUS_INCLUDE_PATH=${ffbidx_CPLUS_INCLUDE_PATH}\")")
+        install(CODE "MESSAGE(\"use LIBRARY_PATH=${ffbidx_LIBRARY_PATH}\")"
+                COMPONENT ffbidx_libraries)
+        string(APPEND fast_feedback_indexer_ENV_SETUP "ffbidx_LIBRARY_PATH=${ffbidx_LIBRARY_PATH};ffbidx_CPLUS_INCLUDE_PATH=${ffbidx_CPLUS_INCLUDE_PATH};ffbidx_PKG_CONFIG_PATH=${ffbidx_PKG_CONFIG_PATH};")
+        set(fast_feedback_indexer_ENV_SETUP "${fast_feedback_indexer_ENV_SETUP}" CACHE INTERNAL ENV)
         write_basic_package_version_file(fast_indexer-config.cmake
                 COMPATIBILITY SameMinorVersion)
 endif()

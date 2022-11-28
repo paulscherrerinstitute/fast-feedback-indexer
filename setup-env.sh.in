@@ -1,0 +1,48 @@
+# for sourcing with an sh compatible shell
+
+@fast_feedback_indexer_ENV_SETUP@
+
+if [ "${ffbidx_LIBRARY_PATH}" != "" ]; then
+	if [ "${LD_LIBRARY_PATH}" != "" ]; then
+		LD_LIBRARY_PATH="${ffbidx_LIBRARY_PATH}:${LD_LIBRARY_PATH}"
+	else
+		export LD_LIBRARY_PATH="${ffbidx_LIBRARY_PATH}"
+	fi
+	if [ "${LIBRARY_PATH}" != "" ]; then
+		LIBRARY_PATH="${ffbidx_LIBRARY_PATH}:${LIBRARY_PATH}"
+	else
+		export LIBRARY_PATH="${ffbidx_LIBRARY_PATH}"
+	fi
+fi
+
+if [ "${ffbidx_CPLUS_INCLUDE_PATH}" != "" ]; then
+	if [ "${CPLUS_INCLUDE_PATH}" != "" ]; then
+		CPLUS_INCLUDE_PATH="${ffbidx_CPLUS_INCLUDE_PATH}:${CPLUS_INCLUDE_PATH}"
+	else
+		export CPLUS_INCLUDE_PATH="${ffbidx_CPLUS_INCLUDE_PATH}"
+	fi
+fi
+
+if [ "${ffbidx_PKG_CONFIG_PATH}" != "" ]; then
+	if [ "${PKG_CONFIG_PATH}" != "" ]; then
+		PKG_CONFIG_PATH="${ffbidx_PKG_CONFIG_PATH}:${PKG_CONFIG_PATH}"
+	else
+		export PKG_CONFIG_PATH="${ffbidx_PKG_CONFIG_PATH}"
+	fi
+fi
+
+if [ "${ffbidx_PYTHONPATH}" != "" ]; then
+	if [ "${PYTHONPATH}" != "" ]; then
+		PYTHONPATH="${ffbidx_PYTHONPATH}:${PYTHONPATH}"
+	else
+		export PYTHONPATH="${ffbidx_PYTHONPATH}"
+	fi
+fi
+
+if [ "${ffbidx_PATH}" != "" ]; then
+	if [ "${PATH}" != "" ]; then
+		PATH="${ffbidx_PATH}:${PATH}"
+	else
+		export PATH="${ffbidx_PATH}"
+	fi
+fi
