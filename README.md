@@ -29,7 +29,7 @@ $ FFBIDX_INSTALL_DIR=${HOME}/ffbidx
 $ mkdir build
 $ cd build
 $ # For PSI merlin cluster add
-$ # Eigen3_DIR=<path to eigen installation>
+$ # export Eigen3_DIR=<path to eigen installation>
 $ cmake -DCMAKE_INSTALL_PREFIX=${FFBIDX_INSTALL_DIR} -DCMAKE_BUILD_TYPE=Release \
   -DINSTALL_SIMPLE_DATA_FILES=ON -DTEST_ALL=ON -DTESTS_RPATH=ON \
   -DBUILD_SIMPLE_DATA_READER=ON -DPYTHON_MODULE=ON \
