@@ -59,7 +59,7 @@ namespace {
         #pragma nv_diag_suppress 177 // suppress unused warning
         [[maybe_unused]] static constexpr float_type pi2 = M_PI_2;
         #pragma nv_diag_suppress 177 // suppress unused warning
-        [[maybe_unused]] static constexpr float_type dl = 0.76393202250021030359082633126873; // 3 - sqrt(5), for spiral sample points on a half sphere
+        [[maybe_unused]] static constexpr float_type dl = 0.76393202250021030359082633; // 3 - sqrt(5), for spiral sample points on a half sphere
         // static constexpr float_type eps = FLT_EPSILON;
     };
 
