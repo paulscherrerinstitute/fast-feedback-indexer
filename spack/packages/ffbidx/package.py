@@ -86,6 +86,11 @@ class Ffbidx(CMakePackage, CudaPackage):
             self.define_from_variant('TEST_ALL', 'test_all'),
         ]
 
+        if 'python' in self.spec:
+            python_root_dir = self.spec['python'].prefix
+            args.append(self.define('Python3_ROOT_DIR', python_root_dir))
+            print(f'using python from {python_root_dir}')
+
         return args
 
     # Set PATHS for run time
