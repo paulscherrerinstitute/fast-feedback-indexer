@@ -36,6 +36,7 @@ Author: hans-christian.stadler@psi.ch
 #include <memory>
 #include <chrono>
 #include <algorithm>
+#include <limits>
 #include <cmath>    // for M_PI amongst others
 #include <cfloat>   // for FLT_EPSILON and others
 #include "exception.h"
@@ -61,6 +62,44 @@ namespace {
         #pragma nv_diag_suppress 177 // suppress unused warning
         [[maybe_unused]] static constexpr float_type dl = 0.76393202250021030359082633; // 3 - sqrt(5), for spiral sample points on a half sphere
         // static constexpr float_type eps = FLT_EPSILON;
+    };
+
+    // NOTE: not allowed as member of constant
+    // (dl * 2^N) mod 2pi
+    template<typename float_type>
+    __constant__ static constexpr float_type dl2pNmod2pi[32] = {
+        0.76393202250021030359082633,   // N = 0
+        1.5278640450004206071816527,
+        3.0557280900008412143633053,
+        6.1114561800016824287266107,
+        5.9397270528237783805279346,
+        5.5962687984679702841305826,
+        4.9093522897563540913358776,
+        3.535519272333121705746469,
+        0.78785323748665693456765102,   // 8
+        1.575706474973313869135302,
+        3.1514129499466277382706041,
+        0.019640592713668999615921566,
+        0.039281185427337999231843132,
+        0.078562370854675998463686265,
+        0.15712474170935199692737253,
+        0.31424948341870399385474506,
+        0.62849896683740798770949012,   // 16
+        1.2569979336748159754189802,
+        2.5139958673496319508379605,
+        5.0279917346992639016759209,
+        3.7727981622189413264265548,
+        1.2624110172582961759278224,
+        2.5248220345165923518556449,
+        5.0496440690331847037112897,
+        3.8161028308867829304972927,    // 24
+        1.3490203545939793840692983,
+        2.6980407091879587681385967,
+        5.3960814183759175362771934,
+        4.5089775295722485956291,
+        2.7347697519649107143329137,
+        5.4695395039298214286658275,
+        4.6558937006800563804063691     // 31
     };
 
     std::atomic_bool gpu_debug_output{false};   // Print gpu debug output if true, set if INDEXER_GPU_DEBUG env var is set to true at indexer creation time
@@ -669,6 +708,17 @@ namespace {
         {
             return cospif(a);
         }
+        
+        __device__ __forceinline__ static void from_unsigned(float& f1, float& f2, unsigned n)
+        {
+            static constexpr unsigned nbits = 8u * sizeof(unsigned);
+            static constexpr unsigned mant_bits = std::numeric_limits<float>::digits;
+            static constexpr unsigned mask_upper = ((1u << mant_bits) - 1u) << (nbits - mant_bits);;
+            static constexpr unsigned mask_lower = ~mask_upper;
+
+            f1 = n & mask_upper;
+            f2 = n & mask_lower;
+        }
     };
 
     // acquire block sequentializer in busy wait loop
@@ -682,6 +732,17 @@ namespace {
     {
         __threadfence();
         __stwt(&seq, 0u);
+    }
+    
+    // kahan sum
+    // (a, rest) = a + b + rest
+    template<typename float_type>
+    __device__ __forceinline__ void ksum(float_type& a, float_type& rest, const float_type b)
+    {
+        const float_type s = rest + b;
+        const float_type t = a;
+        a = t + s;
+        rest = s - (a - t);
     }
 
     // a 🞄 a
@@ -934,30 +995,32 @@ namespace {
         // x = np.cos(np.pi * l) * r
         // y = np.sin(np.pi * l) * r
 
-        // Numerically problematic:
-        // float_type& x = v[0];
-        // float_type& y = v[1];
-        // float_type& z = v[2];
-        // const float_type dz = float_type{1.} / static_cast<float_type>(n_samples);
-        // z = util<float_type>::fma(-dz, sample_idx, util<float_type>::fma(float_type{-.5}, dz, float_type{1.}));
-        // const float_type r_xy = util<float_type>::sqrt(util<float_type>::fma(-z, z, 1.));
-        // const float_type l = constant<float_type>::dl * static_cast<float_type>(sample_idx);
-        // util<float_type>::sincospi(l, &y, &x);
-        // x *= r_xy;
-        // y *= r_xy;
+        float_type x, y, z;
+        float_type si1, si2, ns1, ns2;
+        util<float_type>::from_unsigned(si1, si2, sample_idx);
+        util<float_type>::from_unsigned(ns1, ns2, n_samples);
+        const float_type dz = float_type{1.} / ns1 - ns2 / (ns1 * ns1 + ns1 * ns2);
 
-        double x, y, z;
-        double sample_d = static_cast<double>(sample_idx);
-        const double dz = double{1.} / static_cast<double>(n_samples);
-        z = fma(-dz, sample_d, fma(double{-.5}, dz, double{1.})); // (double{1.} - double{.5} * dz) - sample_d * dz;
-        const double r_xy = sqrt(fma(-z, z, double{1.}));
-        const double l = constant<double>::dl * sample_d;
-        sincospi(l, &y, &x);
+        float_type rest = float_type{.0};
+        z = float_type{1.};
+        ksum(z, rest, -si1 * dz);
+        ksum(z, rest, -si2 * dz);
+        ksum(z, rest, -float_type{.5} * dz);
+        const float_type r_xy = util<float_type>::sqrt(float_type{1.} - z * z);
+
+        static_assert(sizeof(unsigned) == 4, "assumption about sizeof(unsigned) violated");
+        float_type l = float_type{.0};
+        for (unsigned i=0; i<32; i++) {
+            if (sample_idx & (1u << i))
+                ksum(l, rest, dl2pNmod2pi<float_type>[i]);
+        }
+        util<float_type>::sincos(l, &y, &x);
+
         x *= r_xy;
         y *= r_xy;
-        v[0] = static_cast<float_type>(x);
-        v[1] = static_cast<float_type>(y);
-        v[2] = static_cast<float_type>(z);
+        v[0] = x;
+        v[1] = y;
+        v[2] = z;
     }
 
     // Get sample cell vectors a, b, and unified c
@@ -1002,7 +1065,7 @@ namespace {
         float_type delta = util<float_type>::acos(dot(t, x));                   // angle delta between axy and bxy vectors
         if (dot(t, y) < .0f)
             delta = -delta;
-        float_type alpha = rsample * constant<float_type>::pi2 / n_rsamples;    // sample angle
+        const float_type alpha = rsample * constant<float_type>::pi2 / static_cast<float_type>(n_rsamples); // sample angle
         rotate(a, x, y, z, laz, laxy, alpha);
         rotate(b, x, y, z, lbz, lbxy, alpha + delta);
     }
