@@ -625,6 +625,73 @@ namespace {
         }
     };
 
+    // Calculate vector candidate groups
+    //   All unit cell vectors are mapped to a candidate vector group that uniquely represents the length of the vector.
+    //   crt.length_threshold determines if two vectors are considered to have the same length.
+    //   
+    // Args:
+    //   cand_idx: input cell vector to candidate vector group mapping (preallocated size: 3 * n_cells_in)
+    //   cand_len: candidate vector group length                       (preallocated size: 3 * n_cells_in, initialized to: 0)
+    // Return:
+    //   number of candidate vector groups in [1 ... 3 * n_cells_in]
+    template <typename float_type>
+    unsigned calc_cand_groups(std::vector<unsigned>& cand_idx, std::vector<float_type>& cand_len,
+                              const fast_feedback::input<float_type>& in,
+                              const fast_feedback::config_runtime<float_type>& crt, const unsigned n_cells_in)
+    {
+        const unsigned n_vecs = 3u * n_cells_in;
+
+        if (cand_idx.size() < n_vecs)
+            throw FF_EXCEPTION("candidate index vector too small");
+        if (cand_len.size() < n_vecs)
+            throw FF_EXCEPTION("candidate length vector too small");
+        
+        // All vector lengths
+        for (unsigned i=0u; i<n_vecs; i++) {
+            const auto x = in.x[i];
+            const auto y = in.y[i];
+            const auto z = in.z[i];
+            cand_len[i] = std::sqrt(x*x + y*y + z*z);
+        }
+
+        unsigned n_cand_groups{};
+        {   // Only keep elements that differ by more than length_threshold
+            std::sort(std::begin(cand_len), std::end(cand_len), std::greater<float_type>{});
+
+            const float_type l_threshold = crt.length_threshold;
+            LOG_START(logger::l_debug) {
+                logger::debug << stanza << "candidate_length =";
+                for (const auto& e : cand_len)
+                    logger::debug << ' ' << e;
+                logger::debug << ", threshold = " << l_threshold << '\n';                
+            } LOG_END;
+            
+            unsigned i=0, j=1;
+            do {
+                if ((cand_len[i] - cand_len[j]) < l_threshold) {
+                    LOG_START(logger::l_debug) {
+                        logger::debug << stanza << "  ignore " << cand_len[j] << '\n';
+                    } LOG_END;
+                } else if (++i != j) {
+                    cand_len[i] = cand_len[j];
+                }
+            } while(++j != n_vecs);
+            n_cand_groups = i + 1;
+            for (unsigned i=0u; i<n_vecs; ++i) {
+                const auto x = in.x[i];
+                const auto y = in.y[i];
+                const auto z = in.z[i];
+                float_type length = std::sqrt(x*x + y*y + z*z);
+                auto it = std::lower_bound(std::cbegin(cand_len), std::cbegin(cand_len) + n_cand_groups, length,
+                                        [l_threshold](const float_type& a, const float_type& l) -> bool {
+                                                return (a - l) >= l_threshold;
+                                        });
+                cand_idx[i] = it - std::cbegin(cand_len);
+            }
+        }
+        return n_cand_groups;
+    }
+
     template<> std::mutex indexer_gpu_state<float>::state_update{};
     template<> indexer_gpu_state<float>::map_type indexer_gpu_state<float>::dev_ptr{};
 
@@ -1528,61 +1595,22 @@ namespace gpu {
             throw FF_EXCEPTION("fewer threads in a block than candidate vectors");
         
         // Calculate input vector candidate groups
-        unsigned n_cand_groups = 0u;
-        std::vector<unsigned> candidate_idx(3 * n_cells_in);
-        std::vector<float_type> candidate_length(3 * n_cells_in, float_type{});
-        for (unsigned i=0u; i<candidate_length.size(); ++i) {
-            const auto x = in.x[i];
-            const auto y = in.y[i];
-            const auto z = in.z[i];
-            candidate_length[i] = std::sqrt(x*x + y*y + z*z);
-        }
-        {   // Only keep elements that differ by more than length_threshold
-            std::sort(std::begin(candidate_length), std::end(candidate_length), std::greater<float_type>{});
+        std::vector<unsigned> candidate_idx(3u * n_cells_in);
+        std::vector<float_type> candidate_length(3u * n_cells_in, float_type{});
+        unsigned n_cand_groups = calc_cand_groups(candidate_idx, candidate_length, in, conf_rt, n_cells_in);
+        LOG_START(logger::l_debug) {
+            logger::debug << stanza << "index on " << state.device << ", n_cells = " << n_cells_in << "(in)/"
+                                    << n_cells_out << "(out), n_spots = " << in.n_spots << '\n'
+                          << stanza << "  candidate_idx =";
+            for (const auto& e : candidate_idx)
+                logger::debug << ' ' << e;
+            logger::debug << ", n_cand_groups = " << n_cand_groups << '\n';
+        } LOG_END;
 
-            const float_type l_threshold = conf_rt.length_threshold;
-            LOG_START(logger::l_debug) {
-                logger::debug << stanza << "candidate_length =";
-                for (const auto& e : candidate_length)
-                    logger::debug << ' ' << e;
-                logger::debug << ", threshold = " << l_threshold << '\n';                
-            } LOG_END;
-            
-            unsigned i=0, j=1;
-            do {
-                if ((candidate_length[i] - candidate_length[j]) < l_threshold) {
-                    LOG_START(logger::l_debug) {
-                        logger::debug << stanza << "  ignore " << candidate_length[j] << '\n';
-                    } LOG_END;
-                } else if (++i != j) {
-                    candidate_length[i] = candidate_length[j];
-                }
-            } while(++j != candidate_length.size());
-            n_cand_groups = i + 1;
-            for (unsigned i=0u; i<candidate_idx.size(); ++i) {
-                const auto x = in.x[i];
-                const auto y = in.y[i];
-                const auto z = in.z[i];
-                float_type length = std::sqrt(x*x + y*y + z*z);
-                auto it = std::lower_bound(std::cbegin(candidate_length), std::cbegin(candidate_length) + n_cand_groups, length,
-                                        [l_threshold](const float_type& a, const float_type& l) -> bool {
-                                                return (a - l) >= l_threshold;
-                                        });
-                candidate_idx[i] = it - std::cbegin(candidate_length);
-            }
-            LOG_START(logger::l_debug) {
-                logger::debug << stanza << "index on " << state.device << ", n_cells = " << n_cells_in << "(in)/"
-                                        << n_cells_out << "(out), n_spots = " << in.n_spots << '\n'
-                              << stanza << "  candidate_idx =";
-                for (const auto& e : candidate_idx)
-                    logger::debug << ' ' << e;
-                logger::debug << ", n_cand_groups = " << n_cand_groups << '\n';
-            } LOG_END;
-        }
         gpu_stream& stream = gpu_state::stream(state_id);
         {   // find vector candidates
             const unsigned n_samples = conf_rt.num_sample_points;
-            const dim3 n_blocks((n_samples + n_threads - 1) / n_threads, n_cand_groups);
+            const dim3 n_blocks((n_samples + n_threads - 1) / n_threads, n_cand_groups);                            // <-----
             const unsigned shared_sz = std::max(instance.cpers.num_candidate_vectors * sizeof(vec_cand_t<float_type>),
                                                 sizeof(typename BlockRadixSort<float_type>::TempStorage));
             gpu_state::copy_crt(state_id, conf_rt, stream);
@@ -1593,7 +1621,7 @@ namespace gpu {
         }
         {   // find cells
             const unsigned n_xblocks = (1.5 * std::sqrt(conf_rt.num_sample_points) + n_threads - 1.) / n_threads;
-            const dim3 n_blocks(n_xblocks, 3 * n_cells_in, instance.cpers.num_candidate_vectors);
+            const dim3 n_blocks(n_xblocks, 3 * n_cells_in, instance.cpers.num_candidate_vectors);                   // <-----
             const unsigned shared_sz = std::max(n_cells_out * sizeof(cell_cand_t<float_type>),
                                                 sizeof(typename BlockRadixSort<float_type>::TempStorage));
             bool dbg_flag = gpu_debug_output.load();
