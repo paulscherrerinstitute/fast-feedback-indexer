@@ -393,6 +393,8 @@ namespace {
         float_type* candidate_value;            // Candidate vector objective function values, [3 * max_input_cells * num_candidate_vectors]
         unsigned* candidate_sample;             // Sample number of candidate vectors, [3 * max_input_cells * num_candidate_vectors]
         unsigned* cellvec_to_cand;              // Input cell vector to candidate group mapping, [3 * max_input_cells]
+        unsigned* cell_to_cellvec;              // Input cell to representing cell vector mapping, [max_input_cells]
+        unsigned* vec_cgrps;                    // Candidate vector groups of cell representing vectors, [max_input_cells]
         unsigned* seq_block;                    // Per candidate vector group sequentializer for thread blocks (explicit init to 0, set to 0 in kernel after use)
                                                 //     First sequentializer is also used for candidate cell search
     };
@@ -415,6 +417,8 @@ namespace {
         gpu_pointer<float_type> candidate_value;            // Candidate vectors objective function values on GPU
         gpu_pointer<unsigned> candidate_sample;             // Sample number of candidate vectors
         gpu_pointer<unsigned> cellvec_to_cand;              // Input cell vector to candidate group mapping
+        gpu_pointer<unsigned> cell_to_cellvec;              // Input cell to cell representing vector mapping
+        gpu_pointer<unsigned> vec_cgrps;                    // Candidate vector groups of cell representing vectors
         gpu_pointer<unsigned> seq_block;                    // Thread block sequentializers
         gpu_stream cuda_stream;                             // CUDA stream
 
@@ -449,6 +453,8 @@ namespace {
         // cv       on GPU candidate vector objective function values pointed to by d->candidate_value
         // cs       on GPU candidate vector sample numbers pointed to by d->candidate_sample
         // v2c      on GPU input cell vector to candidate group mapping pointed to by d->cellvec_to_cand
+        // c2v      on GPU input cell to cell representing vector mapping pointed to by d->cell_to_cellvec
+        // vcgr     on GPU candidate groups of cell representing vectors pointed to by d->vec_cgrps
         // sb       on GPU per candidate vector group/output cell block sequentializers pointed to by d->seq_block
         // stream   GPU stream used for actions on this state
         // x/y/zi   on GPU input pointers d->input.x / y / z
@@ -458,6 +464,7 @@ namespace {
         indexer_gpu_state(gpu_pointer<content_type>&& d, gpu_pointer<float_type>&& e,
                           gpu_pointer<float_type>&& cl, gpu_pointer<float_type>&& cv,
                           gpu_pointer<unsigned>&& cs, gpu_pointer<unsigned>&& v2c,
+                          gpu_pointer<unsigned>&& c2v, gpu_pointer<unsigned>&& vcgr,
                           gpu_pointer<unsigned>&& sb, gpu_stream&& stream,
                           float_type* xi, float_type* yi, float_type* zi,
                           float_type* xo, float_type* yo, float_type* zo,
@@ -465,6 +472,7 @@ namespace {
             : data{std::move(d)}, elements{std::move(e)},
               candidate_length{std::move(cl)}, candidate_value{std::move(cv)},
               candidate_sample{std::move(cs)}, cellvec_to_cand{std::move(v2c)},
+              cell_to_cellvec{std::move(c2v)}, vec_cgrps{std::move(vcgr)},
               seq_block{std::move(sb)}, cuda_stream{std::move(stream)},
               ix{xi}, iy{yi}, iz{zi},
               ox{xo}, oy{yo}, oz{zo},
@@ -575,8 +583,11 @@ namespace {
             } LOG_END;
         }
 
-        static inline void init_cand(const key_type& state_id, unsigned n_cand_groups, const config_persistent& cpers,
-                                     std::vector<float_type>& cand_len, std::vector<unsigned>& cand_idx, cudaStream_t stream=0)
+        static inline void init_cand(const key_type& state_id, unsigned n_cand_groups, unsigned n_vec_cgrps,
+                                     const config_persistent& cpers,
+                                     std::vector<float_type>& cand_len, std::vector<unsigned>& cand_idx,
+                                     std::vector<unsigned>& cell_cand, std::vector<unsigned>& vec_cgrps,
+                                     cudaStream_t stream=0)
         {
             const auto n_cand_vecs = n_cand_groups * cpers.num_candidate_vectors;
             const auto& gpu_state = ref(state_id);
@@ -584,6 +595,8 @@ namespace {
             CU_CHECK(cudaMemsetAsync(gpu_state.candidate_value.get(), 0, n_cand_vecs * sizeof(float_type), stream));
             CU_CHECK(cudaMemcpyAsync(gpu_state.candidate_length.get(), cand_len.data(), n_cand_groups * sizeof(float_type), cudaMemcpyHostToDevice, stream));
             CU_CHECK(cudaMemcpyAsync(gpu_state.cellvec_to_cand.get(), cand_idx.data(), cand_idx.size() * sizeof(unsigned), cudaMemcpyHostToDevice, stream));
+            CU_CHECK(cudaMemcpyAsync(gpu_state.cell_to_cellvec.get(), cell_cand.data(), cell_cand.size() * sizeof(unsigned), cudaMemcpyHostToDevice, stream));
+            CU_CHECK(cudaMemcpyAsync(gpu_state.vec_cgrps.get(), vec_cgrps.data(), n_vec_cgrps * sizeof(unsigned), cudaMemcpyHostToDevice, stream));
         }
 
         static inline void init_score(const key_type& state_id, const config_persistent& cpers, cudaStream_t stream=0)
@@ -626,14 +639,17 @@ namespace {
     };
 
     // Calculate vector candidate groups
-    //   All unit cell vectors are mapped to a candidate vector group that uniquely represents the length of the vector.
+    //   All input cell vectors are mapped to a candidate vector group that uniquely represents the length of the vector.
     //   crt.length_threshold determines if two vectors are considered to have the same length.
-    //   
-    // Args:
+    // Input Args:
+    //   in        : indexing input
+    //   crt       : runtime configuration
+    //   n_cells_in: number of considered input cells
+    // Output Args:
     //   cand_idx: input cell vector to candidate vector group mapping (preallocated size: 3 * n_cells_in)
-    //   cand_len: candidate vector group length                       (preallocated size: 3 * n_cells_in, initialized to: 0)
+    //   cand_len: sorted candidate vector group length                (preallocated size: 3 * n_cells_in, initialized to: 0)
     // Return:
-    //   number of candidate vector groups in [1 ... 3 * n_cells_in]
+    //   number of candidate vector groups N ∈ [1 ... 3 * n_cells_in]
     template <typename float_type>
     unsigned calc_cand_groups(std::vector<unsigned>& cand_idx, std::vector<float_type>& cand_len,
                               const fast_feedback::input<float_type>& in,
@@ -677,7 +693,7 @@ namespace {
                 }
             } while(++j != n_vecs);
             n_cand_groups = i + 1;
-            for (unsigned i=0u; i<n_vecs; ++i) {
+            for (unsigned i=0u; i<n_vecs; i++) {
                 const auto x = in.x[i];
                 const auto y = in.y[i];
                 const auto z = in.z[i];
@@ -690,6 +706,46 @@ namespace {
             }
         }
         return n_cand_groups;
+    }
+
+    // Calculate a candidate vector for each cell
+    //   Chose a vector for every input cell. This vector will be used for the initial half-sphere brute force sampling step.
+    //   The algorithm relies on the decreasing order of the candidate group lengths and corresponding indices in cand_idx.
+    //   So a lower candidate vector group index in cand_idx means a longer vector.
+    // Input Args:
+    //   cand_idx: input cell vector to candidate vector group mapping (see ordering requirement above, size 3 * n_cells_in)
+    // Output Args:
+    //   cell_vec: cell to chosen input vector mapping (preallocated size: n_cells_in)
+    //   vec_cand: candidate groups of chosen input vectors (preallocated size: n_cells_in)
+    // Return:
+    //   Number of candidate groups for the chosen vectors
+    unsigned calc_cell_cand(std::vector<unsigned>& cell_vec, std::vector<unsigned>& vec_cand,
+                            const std::vector<unsigned>& cand_idx, const unsigned n_cells_in)
+    {
+        const unsigned n_vecs = 3u * n_cells_in;
+
+        if (cand_idx.size() < n_vecs)
+            throw FF_EXCEPTION("candidate index vector too small");
+        if (cell_vec.size() < n_cells_in)
+            throw FF_EXCEPTION("cell candidate vector too small");
+        if (vec_cand.size() < n_cells_in)
+            throw FF_EXCEPTION("candidate groups vector too small");
+
+        unsigned num_cand_grps = 0u;
+        unsigned vec = 0u;
+        for (unsigned cell=0u; cell<n_cells_in; cell++) {
+            unsigned cand = vec++;
+            for (unsigned v=1u; v<3u; vec++, v++) {
+                if (cand_idx[cand] > cand_idx[vec])
+                    cand = vec;
+            }
+            cell_vec[cell] = cand;
+            auto it = std::find(&vec_cand[0u], &vec_cand[num_cand_grps], cand);
+            if (it == &vec_cand[num_cand_grps])
+                vec_cand[num_cand_grps++] = cand;
+        }
+
+        return num_cand_grps;
     }
 
     template<> std::mutex indexer_gpu_state<float>::state_update{};
@@ -1208,8 +1264,8 @@ namespace {
 
             unsigned ncg = 0u;
             const unsigned n_cells_in  = data->input.n_cells;
-            for (unsigned i=0; i<n_cells_in; ++i) {
-                printf("input cell%u cgi:", i);
+            for (unsigned i=0u; i<n_cells_in; ++i) {
+                printf("input cell%u rep %u, cgi:", i, data->cell_to_cellvec[i]);
                 for (unsigned j=3*i; j<3*i+3; ++j) {
                     unsigned cg = data->cellvec_to_cand[j];
                     printf(" %u", cg);
@@ -1219,7 +1275,12 @@ namespace {
                 printf("\n");
             }
 
-            for (unsigned i=0; i<=ncg; ++i) {
+            printf("rcgrps:");
+            for (unsigned i=0u; i<n_cells_in; ++i)
+                printf(" %u", data->vec_cgrps[i]);
+            printf("\n");
+
+            for (unsigned i=0u; i<=ncg; ++i) {
                 printf("cg%u:", i);
                 auto cv = &cvp[i * ncv];
                 auto cs = &csp[i * ncv];
@@ -1232,9 +1293,9 @@ namespace {
         const fast_feedback::output<float_type>& out = data->output;
         const unsigned n_cells_out  = data->cpers.max_output_cells;
         printf("output n_cells=%u\n", out.n_cells);
-        for (unsigned i=0; i<n_cells_out; ++i) {
+        for (unsigned i=0u; i<n_cells_out; ++i) {
             printf("output cell%u s=%f:\n", i, out.score[i]);
-            for (unsigned j=3*i; j<3*i+3; ++j) {
+            for (unsigned j=3u*i; j<3u*i+3u; ++j) {
                 if (kind == 0u) {
                     printf(" %u  %u  %u\n",
                         *reinterpret_cast<unsigned*>(&out.x[j]),
@@ -1249,7 +1310,7 @@ namespace {
     }
 
     // sample = blockDim.x * blockIdx.x + threadIdx.x
-    // candidate group = blockIdx.y
+    // representing vector candidate group = blockIdx.y
     template<typename float_type>
     __global__ void gpu_find_candidates(indexer_device_data<float_type>* data)
     {
@@ -1257,7 +1318,7 @@ namespace {
 
         unsigned sample = blockDim.x * blockIdx.x + threadIdx.x;
         const unsigned n_samples = data->crt.num_sample_points;
-        const unsigned c_group = blockIdx.y;
+        const unsigned c_group = data->vec_cgrps[blockIdx.y];
         float_type v = 0.;  // objective function value for sample vector
 
         if (sample < n_samples) {                                   // calculate v
@@ -1314,7 +1375,7 @@ namespace {
     }
 
     // sample rotation angle index = blockDim.x * blockIdx.x + threadIdx.x
-    // input cell vector index = blockIdx.y
+    // input cell index = blockIdx.y
     // sample vector index = blockIdx.z
     template<typename float_type>
     __global__ void gpu_find_cells(indexer_device_data<float_type>* data)
@@ -1323,7 +1384,7 @@ namespace {
 
         const unsigned n_vsamples = data->crt.num_sample_points;
         unsigned rsample = blockIdx.x * blockDim.x + threadIdx.x;
-        const unsigned cell_vec = blockIdx.y;
+        const unsigned cell_vec = data->cell_to_cellvec[blockIdx.y];
         const unsigned cand = blockIdx.z;
         const unsigned cand_grp = data->cellvec_to_cand[cell_vec];
         const unsigned n_cand = data->cpers.num_candidate_vectors;
@@ -1437,6 +1498,8 @@ namespace gpu {
         float_type* candidate_value = nullptr;
         unsigned* candidate_sample = nullptr;
         unsigned* cellvec_to_cand = nullptr;
+        unsigned* cell_to_cellvec = nullptr;
+        unsigned* vec_cgrps = nullptr;
         unsigned* sequentializers = nullptr;
         float_type* elements = nullptr;
         float_type* ix;
@@ -1498,6 +1561,18 @@ namespace gpu {
             }
             gpu_pointer<unsigned> v2c_ptr{cellvec_to_cand};
 
+            {
+                std::size_t vector_dimension = cpers.max_input_cells;
+                CU_CHECK(cudaMalloc(&cell_to_cellvec, vector_dimension * sizeof(unsigned)));
+            }
+            gpu_pointer<unsigned> c2v_ptr{cell_to_cellvec};
+
+            {
+                std::size_t vector_dimension = cpers.max_input_cells;
+                CU_CHECK(cudaMalloc(&vec_cgrps, vector_dimension * sizeof(unsigned)));
+            }
+            gpu_pointer<unsigned> vcgrp_ptr{vec_cgrps};
+
             std::size_t dim = cpers.max_output_cells;
             scores = elements;
 
@@ -1516,6 +1591,7 @@ namespace gpu {
                 gpu_state::ref(state_id) = gpu_state{std::move(data_ptr), std::move(element_ptr),
                                                      std::move(candidate_length_ptr), std::move(candidate_value_ptr),
                                                      std::move(candidate_sample_ptr), std::move(v2c_ptr),
+                                                     std::move(c2v_ptr), std::move(vcgrp_ptr),
                                                      std::move(sequentializers_ptr), std::move(stream),
                                                      ix, iy, iz,
                                                      ox, oy, oz,
@@ -1525,8 +1601,8 @@ namespace gpu {
             LOG_START(logger::l_debug) {
                 logger::debug << stanza << "init id=" << state_id << " on " << dev << ", data=" << data_ptr.get() << '\n'
                               << stanza << "  cand len=" << candidate_length << ", val=" << candidate_value << ", smpl=" << candidate_sample << '\n'
-                              << stanza << "  vec2cand=" << cellvec_to_cand << ", seq=" << sequentializers << '\n'
-                              << stanza << "  elements=" << elements << ", score=" << scores << '\n'
+                              << stanza << "  vec2cand=" << cellvec_to_cand << ", cell2vec=" << cell_to_cellvec << ", vec_cgrp=" << vec_cgrps << '\n'
+                              << stanza << "  seq=" << sequentializers << ", elements=" << elements << ", score=" << scores << '\n'
                               << stanza << "    ox=" << ox << ", oy=" << oy << ", oz=" << oz << '\n'
                               << stanza << "    ix=" << ix << ", iy=" << iy << ", iz=" << iz << '\n';
             } LOG_END;
@@ -1538,6 +1614,7 @@ namespace gpu {
                               fast_feedback::output<float_type>{ox, oy, oz, scores, 0},
                               candidate_length, candidate_value,
                               candidate_sample, cellvec_to_cand,
+                              cell_to_cellvec, vec_cgrps,
                               sequentializers};
             CU_CHECK(cudaMemcpyAsync(data, &_data, sizeof(_data), cudaMemcpyHostToDevice, gpu_state::stream(state_id)));
         }
@@ -1595,9 +1672,12 @@ namespace gpu {
             throw FF_EXCEPTION("fewer threads in a block than candidate vectors");
         
         // Calculate input vector candidate groups
-        std::vector<unsigned> candidate_idx(3u * n_cells_in);
-        std::vector<float_type> candidate_length(3u * n_cells_in, float_type{});
+        std::vector<unsigned> cell_candidate(n_cells_in);                           // cell -> chosen vector idx
+        std::vector<unsigned> vec_cgrps(n_cells_in);                                // chosen vector candidate groups
+        std::vector<unsigned> candidate_idx(3u * n_cells_in);                       // vector -> cand group idx
+        std::vector<float_type> candidate_length(3u * n_cells_in, float_type{});    // cand group length (sorted !)
         unsigned n_cand_groups = calc_cand_groups(candidate_idx, candidate_length, in, conf_rt, n_cells_in);
+        unsigned n_vec_cgrps = calc_cell_cand(cell_candidate, vec_cgrps, candidate_idx, n_cells_in);
         LOG_START(logger::l_debug) {
             logger::debug << stanza << "index on " << state.device << ", n_cells = " << n_cells_in << "(in)/"
                                     << n_cells_out << "(out), n_spots = " << in.n_spots << '\n'
@@ -1605,23 +1685,30 @@ namespace gpu {
             for (const auto& e : candidate_idx)
                 logger::debug << ' ' << e;
             logger::debug << ", n_cand_groups = " << n_cand_groups << '\n';
+            logger::debug << stanza << "cell_candidates =";
+            for (const auto& e : cell_candidate)
+                logger::debug << ' ' << e;
+            logger::debug << ", vec_cgrps =";
+            for (unsigned i=0u; i<n_vec_cgrps; i++)
+                logger::debug << ' ' << vec_cgrps[i];
+            logger::debug << ", n_vec_cgrps = " << n_vec_cgrps << '\n';
         } LOG_END;
 
         gpu_stream& stream = gpu_state::stream(state_id);
         {   // find vector candidates
             const unsigned n_samples = conf_rt.num_sample_points;
-            const dim3 n_blocks((n_samples + n_threads - 1) / n_threads, n_cand_groups);                            // <-----
+            const dim3 n_blocks((n_samples + n_threads - 1) / n_threads, n_vec_cgrps);
             const unsigned shared_sz = std::max(instance.cpers.num_candidate_vectors * sizeof(vec_cand_t<float_type>),
                                                 sizeof(typename BlockRadixSort<float_type>::TempStorage));
             gpu_state::copy_crt(state_id, conf_rt, stream);
             gpu_state::copy_in(state_id, instance.cpers, in, out, stream);
-            gpu_state::init_cand(state_id, n_cand_groups, instance.cpers, candidate_length, candidate_idx, stream);
+            gpu_state::init_cand(state_id, n_cand_groups, n_vec_cgrps, instance.cpers, candidate_length, candidate_idx, cell_candidate, vec_cgrps, stream);
             state.start.record(stream);
             gpu_find_candidates<float_type><<<n_blocks, n_threads, shared_sz, stream>>>(gpu_state::ptr(state_id).get());
         }
         {   // find cells
             const unsigned n_xblocks = (1.5 * std::sqrt(conf_rt.num_sample_points) + n_threads - 1.) / n_threads;
-            const dim3 n_blocks(n_xblocks, 3 * n_cells_in, instance.cpers.num_candidate_vectors);                   // <-----
+            const dim3 n_blocks(n_xblocks, n_cells_in, instance.cpers.num_candidate_vectors);
             const unsigned shared_sz = std::max(n_cells_out * sizeof(cell_cand_t<float_type>),
                                                 sizeof(typename BlockRadixSort<float_type>::TempStorage));
             bool dbg_flag = gpu_debug_output.load();
