@@ -1193,7 +1193,7 @@ namespace {
         rotate(b, x, y, z, lbz, lbxy, alpha + delta);
     }
 
-    // sum(s ∈ spots | s 🞄 v >= eps) -cos(2π * s 🞄 v / vlength)
+    // sum(s ∈ spots) -cos(2π * s 🞄 v / vlength)
     // v        unit vector in sample vector direction, |v| == 1
     // vlength  sample vector length
     // s{x,y,z} spot coordinate pointers [n_spots]
@@ -1296,7 +1296,7 @@ namespace {
         for (unsigned i=0u; i<n_cells_out; ++i) {
             printf("output cell%u s=%f:\n", i, out.score[i]);
             for (unsigned j=3u*i; j<3u*i+3u; ++j) {
-                if (kind == 0u) {
+                if (kind == 1u) {
                     printf(" %u  %u  %u\n",
                         *reinterpret_cast<unsigned*>(&out.x[j]),
                         *reinterpret_cast<unsigned*>(&out.y[j]),
