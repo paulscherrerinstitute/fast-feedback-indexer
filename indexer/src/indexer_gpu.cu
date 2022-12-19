@@ -544,10 +544,10 @@ namespace {
             output.n_cells = std::min(output.n_cells, cpers.max_output_cells);
 
             pinned_tmp.max_output_cells = output.n_cells;
-            CU_CHECK(cudaMemcpyAsync(&device_data->output.n_cells, &pinned_tmp.max_output_cells, sizeof(output.n_cells), cudaMemcpyHostToDevice, stream));
-            // NOTE: the following code assumes consecutive storage of two data members in tmp and in device_data->input
             pinned_tmp.max_input_cells = n_input_cells;
             pinned_tmp.max_spots = n_spots;
+            CU_CHECK(cudaMemcpyAsync(&device_data->output.n_cells, &pinned_tmp.max_output_cells, sizeof(output.n_cells), cudaMemcpyHostToDevice, stream));
+            // NOTE: the following code assumes consecutive storage of two data members in tmp and in device_data->input
             CU_CHECK(cudaMemcpyAsync(&device_data->input.n_cells, &pinned_tmp.max_input_cells, sizeof(n_input_cells) + sizeof(n_spots), cudaMemcpyHostToDevice, stream));
 
             if (n_input_cells + n_spots > 0u) {
@@ -557,14 +557,14 @@ namespace {
                     CU_CHECK(cudaMemcpyAsync(gpu_state.iy, input.y, combi_sz, cudaMemcpyHostToDevice, stream));
                     CU_CHECK(cudaMemcpyAsync(gpu_state.iz, input.z, combi_sz, cudaMemcpyHostToDevice, stream));
                 } else {
-                    const auto dst_offset = 3u * n_input_cells;
                     if (n_input_cells > 0u) {
-                        const auto cell_sz = dst_offset * sizeof(float_type);
+                        const auto cell_sz = 3u * n_input_cells * sizeof(float_type);
                         CU_CHECK(cudaMemcpyAsync(gpu_state.ix, input.x, cell_sz, cudaMemcpyHostToDevice, stream));
                         CU_CHECK(cudaMemcpyAsync(gpu_state.iy, input.y, cell_sz, cudaMemcpyHostToDevice, stream));
                         CU_CHECK(cudaMemcpyAsync(gpu_state.iz, input.z, cell_sz, cudaMemcpyHostToDevice, stream));
                     }
                     if (n_spots > 0) {
+                        const auto dst_offset = 3u * cpers.max_input_cells;
                         const auto src_offset = 3u * input.n_cells;
                         const auto spot_sz = n_spots * sizeof(float_type);
                         CU_CHECK(cudaMemcpyAsync(&gpu_state.ix[dst_offset], &input.x[src_offset], spot_sz, cudaMemcpyHostToDevice, stream));
@@ -583,17 +583,17 @@ namespace {
             } LOG_END;
         }
 
-        static inline void init_cand(const key_type& state_id, unsigned n_cand_groups, unsigned n_vec_cgrps,
+        static inline void init_cand(const key_type& state_id, const unsigned n_cand_groups, const unsigned n_vec_cgrps,
                                      const config_persistent& cpers,
-                                     std::vector<float_type>& cand_len, std::vector<unsigned>& cand_idx,
-                                     std::vector<unsigned>& cell_cand, std::vector<unsigned>& vec_cgrps,
+                                     const std::vector<float_type>& cand_len, const std::vector<unsigned>& cand_idx,
+                                     const std::vector<unsigned>& cell_cand, const std::vector<unsigned>& vec_cgrps,
                                      cudaStream_t stream=0)
         {
             const auto n_cand_vecs = n_cand_groups * cpers.num_candidate_vectors;
             const auto& gpu_state = ref(state_id);
 
-            CU_CHECK(cudaMemsetAsync(gpu_state.candidate_value.get(), 0, n_cand_vecs * sizeof(float_type), stream));
             CU_CHECK(cudaMemcpyAsync(gpu_state.candidate_length.get(), cand_len.data(), n_cand_groups * sizeof(float_type), cudaMemcpyHostToDevice, stream));
+            CU_CHECK(cudaMemsetAsync(gpu_state.candidate_value.get(), 0, n_cand_vecs * sizeof(float_type), stream));
             CU_CHECK(cudaMemcpyAsync(gpu_state.cellvec_to_cand.get(), cand_idx.data(), cand_idx.size() * sizeof(unsigned), cudaMemcpyHostToDevice, stream));
             CU_CHECK(cudaMemcpyAsync(gpu_state.cell_to_cellvec.get(), cell_cand.data(), cell_cand.size() * sizeof(unsigned), cudaMemcpyHostToDevice, stream));
             CU_CHECK(cudaMemcpyAsync(gpu_state.vec_cgrps.get(), vec_cgrps.data(), n_vec_cgrps * sizeof(unsigned), cudaMemcpyHostToDevice, stream));
@@ -782,6 +782,11 @@ namespace {
             return fabsf(val);
         }
 
+        __device__ __forceinline__ static float rint(float val)
+        {
+            return rintf(val);
+        }
+
         __device__ __forceinline__ static void sincos(float angle, float* sine, float* cosine)
         {
             return sincosf(angle, sine, cosine);
@@ -866,6 +871,29 @@ namespace {
         const float_type t = a;
         a = t + s;
         rest = s - (a - t);
+    }
+
+    // max of a, b, c
+    template<typename float_type>
+    __device__ __forceinline__ float_type max3(const float_type a, const float_type b, const float_type c)
+    {
+        const float_type t = (a < b) ? b : a;
+        return (t < c) ? c : t;
+    }
+
+    // Trimmed distance to nearest integer
+    // The function assumes that 0 <= triml <= trimh <= 0.5
+    // Args:
+    //   val  : value
+    //   triml: lower trim value    (0 => no effect)
+    //   trimh: higher trim value   (0.5 => no effect)
+    // Return:
+    //   Distance from val to nearest integer, trimmed above by trimh, below by triml
+    template<typename float_type>
+    __device__ __forceinline__ float_type dist2int_trim(const fast_feedback::config_runtime<float_type>& crt, const float_type val)
+    {
+        const float_type dist = util<float_type>::abs(val - util<float_type>::rint(val));
+        return min(max(crt.triml, dist), crt.trimh);
     }
 
     // a 🞄 a
@@ -1193,55 +1221,61 @@ namespace {
         rotate(b, x, y, z, lbz, lbxy, alpha + delta);
     }
 
-    // sum(s ∈ spots) -cos(2π * s 🞄 v / vlength)
-    // v        unit vector in sample vector direction, |v| == 1
-    // vlength  sample vector length
-    // s{x,y,z} spot coordinate pointers [n_spots]
-    // n_spots  number of spots
+    // sum(s ∈ spots) dist2int(s 🞄 v / vlength) trim [triml ... trimh]
+    // v            unit vector in sample vector direction, |v| == 1
+    // vlength      sample vector length
+    // s{x,y,z}     spot coordinate pointers [n_spots]
+    // trim{l,h}    lower trim value
+    // n_spots      number of spots
     template<typename float_type>
-    __device__ __forceinline__ float_type sample1(const float_type v[3], const float_type vlength,
+    __device__ __forceinline__ float_type sample1(const fast_feedback::config_runtime<float_type>& crt,
+                                                  const float_type v[3], const float_type vlength,
                                                   const float_type *sx, const float_type *sy, const float_type *sz,
                                                   const unsigned n_spots)
     {
         float_type sval = float_type{0.f};
-        const float_type t_vl = float_type{2.f} / vlength;
+        float_type rest = float_type{0.f};
+
+        const float_type t_vl = float_type{1.f} / vlength;
         for (unsigned i=0u; i<n_spots; i++) {
             const float_type s[3] = { sx[i], sy[i], sz[i] };
             const float_type dp = dot(v, s);
-            const float_type dv = util<float_type>::fma(.5f, util<float_type>::cospi(t_vl * dp), .5f);
-            sval -= dv;
+            const float_type dv = dist2int_trim(crt, t_vl * dp);
+            ksum(sval, rest, dv);
         }
-        return sval;
+        return sval - float_type{.5f} * n_spots;
     }
 
-    // sum(s ∈ spots) -cos(2π * s 🞄 vi / |vi|²) for i in [1,2]
-    // v1, v2   sample vectors
-    // s{x,y,z} spot coordinate pointers [n_spots]
-    // n_spots  number of spots
+    // sum(s ∈ spots) dist2int(s 🞄 vi / |vi|²) trim [triml ... trimh] for i in [1,2]
+    // v1, v2       sample vectors
+    // s{x,y,z}     spot coordinate pointers [n_spots]
+    // triml        lower trim value
+    // trimh        higher trim value
+    // n_spots      number of spots
     template<typename float_type>
-    __device__ __forceinline__ float_type sample2(const float_type v1[3], const float_type v2[3],
+    __device__ __forceinline__ float_type sample2(const fast_feedback::config_runtime<float_type>& crt,
+                                                  const float_type v1[3], const float_type v2[3],
                                                   const float_type *sx, const float_type *sy, const float_type *sz,
                                                   const unsigned n_spots)
     {
         float_type sval = float_type{0.f};
-        const float_type t_v1l2 = float_type{2.f} / norm2(v1);
-        const float_type t_v2l2 = float_type{2.f} / norm2(v2);
+        float_type rest = float_type{0.f};
+        const float_type t_v1l2 = float_type{1.f} / norm2(v1);
+        const float_type t_v2l2 = float_type{1.f} / norm2(v2);
         for (unsigned i=0u; i<n_spots; i++) {
-            float_type t;
             const float_type s[3] = { sx[i], sy[i], sz[i] };
             {   // handle v1
                 const float_type dp = dot(v1, s);
-                const float_type dv = util<float_type>::fma(.5f, util<float_type>::cospi(t_v1l2 * dp), .5f);
-                t = -dv;
+                const float_type dv = dist2int_trim(crt, t_v1l2 * dp);
+                ksum(sval, rest, dv);
             }
             {   // handle v2
                 const float_type dp = dot(v2, s);
-                const float_type dv = util<float_type>::fma(.5f, util<float_type>::cospi(t_v2l2 * dp), .5f);
-                t -= dv;
+                const float_type dv = dist2int_trim(crt, t_v2l2 * dp);
+                ksum(sval, rest, dv);
             }
-            sval += t;
         }
-        return sval;
+        return sval - n_spots;
     }
 
     // -----------------------------------
@@ -1333,7 +1367,7 @@ namespace {
             const float_type* sy = &in.y[spot_offset];
             const float_type* sz = &in.z[spot_offset];
             
-            v = sample1(sv, sl, sx, sy, sz, n_spots);
+            v = sample1(data->crt, sv, sl, sx, sy, sz, n_spots);
         }
 
         {   // sort within block {objective function value, sample} ascending by objective function value
@@ -1404,7 +1438,9 @@ namespace {
             const float_type* sx = &in.x[spot_offset];
             const float_type* sy = &in.y[spot_offset];
             const float_type* sz = &in.z[spot_offset];
-            vabc = sample2(a, b, sx, sy, sz, n_spots);
+            const float_type triml = data->crt.triml;
+            const float_type trimh = data->crt.trimh;
+            vabc = sample2(data->crt, a, b, sx, sy, sz, n_spots);
             
             const float_type vvalue = data->candidate_value[cand_grp * n_cand + cand];
             vabc += vvalue;

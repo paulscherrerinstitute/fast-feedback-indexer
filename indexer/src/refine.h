@@ -65,6 +65,12 @@ namespace fast_feedback {
                     throw FF_EXCEPTION("nonpositive number of candidate vectors");
                 if (cr.num_sample_points < cp.num_candidate_vectors)
                     throw FF_EXCEPTION("fewer sample points than required candidate vectors");
+                if (cr.triml < float_type{0.f})
+                    throw FF_EXCEPTION("lower trim value < 0");
+                if (cr.triml > cr.trimh)
+                    throw FF_EXCEPTION("lower > higher trim value");
+                if (cr.trimh > float_type{.5f})
+                    throw FF_EXCEPTION("higher trim value > 0.5");
             }
 
             inline indexer (const fast_feedback::config_persistent<float_type>& cp,
@@ -167,6 +173,34 @@ namespace fast_feedback {
 
             inline float_type length_threshold () const noexcept
             { return crt.length_threshold; }
+
+            inline void triml (float_type tl)
+            {
+                if (tl < float_type{0.f})
+                    throw FF_EXCEPTION("lower trim value < 0");
+                if (tl > crt.trimh)
+                    throw FF_EXCEPTION("lower > higher trim value");
+                crt.triml = tl;
+            }
+
+            inline float_type triml () const noexcept
+            {
+                return crt.triml;
+            }
+
+            inline void trimh (float_type th)
+            {
+                if (crt.triml > th)
+                    throw FF_EXCEPTION("lower > higher trim value");
+                if (th > float_type{.5f})
+                    throw FF_EXCEPTION("higher trim value > 0.5");
+                crt.trimh = th;
+            }
+
+            inline float_type trimh () const noexcept
+            {
+                return crt.trimh;
+            }
 
             inline void num_sample_points (unsigned nsp)
             {

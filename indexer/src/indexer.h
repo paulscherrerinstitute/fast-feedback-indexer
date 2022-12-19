@@ -71,7 +71,9 @@ namespace fast_feedback {
     // Memory must be pinned in order to be used as an argument for indexing
     template <typename float_type=float>
     struct config_runtime final {
-        float_type length_threshold=1e-6;   // threshold for determining equal vector length (|va| - threshold < |vb| < |va| + threshold)
+        float_type length_threshold=1e-9;   // threshold for determining equal vector length (|va| - threshold < |vb| < |va| + threshold)
+        float_type triml=0.01;              // lower trim value for distance to nearest integer objective value - 0 < triml < trimh
+        float_type trimh=0.3;               // higher trim value for distance to nearest integer objective value - triml < trimh < 0.5
         unsigned num_sample_points=100000u; // number of sample points on half sphere for finding vector candidates
     };
 
