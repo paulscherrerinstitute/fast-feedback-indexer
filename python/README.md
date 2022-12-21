@@ -32,7 +32,7 @@ This allocates space on the GPU for all the data structures used in the computat
 #### ffbidx.index(handle, length_threshold, triml, trimh, num_sample_points, n_output_cells, n_input_cells, data)
 
 Run the fast feedback indexer on given reciprocal space input cells and spots packed in the **data** numpy array and return oriented cells and their scores.
-The cell score is *sum\[cellvec\](sum\[spot\](trim(dist(dot(cellvec, spot) / |cellvec|^2))))*, where *dist* ist the distance to the next integer.
+The cell score is $\sum_{v \in cell} \sum_{s \in spots} trim(dist(\frac{v \cdot s}{|v|^2}))$, where $trim$ stands for trimming and $dist$ for distance to nearest integer.
 
 **Return**:
 
