@@ -29,9 +29,10 @@ Handle to the indexer object
 
 This allocates space on the GPU for all the data structures used in the computation. The GPU device is parsed from the *INDEXER_GPU_DEVICE* environment variable. If it is not set, the current GPU device is used.
 
-#### ffbidx.index(handle, length_threshold, num_sample_points, n_output_cells, n_input_cells, data)
+#### ffbidx.index(handle, length_threshold, triml, trimh, num_sample_points, n_output_cells, n_input_cells, data)
 
 Run the fast feedback indexer on given reciprocal space input cells and spots packed in the **data** numpy array and return oriented cells and their scores.
+The cell score is *sum\[cellvec\](sum\[spot\](trim(dist(dot(cellvec, spot) / |cellvec|^2))))*, where *dist* ist the distance to the next integer.
 
 **Return**:
 
@@ -44,6 +45,8 @@ A tuple of numpy arrays *(output_cells, scores)*
 
 - **handle** is the indexer object handle
 - **length_threshold**: consider input cell vector length the same if they differ by less than this
+- **triml**: >= 0, low trim value, 0 means no trimming
+- **trimh**: <= 0.5, high trim value, 0.5 means no trimming
 - **num_sample_points** is the number of sampling points per length on the half sphere
 - **n_output_cells** is the number of desired output cells
 - **n_input_cells** is the number of given unit cells *N* in the data array
