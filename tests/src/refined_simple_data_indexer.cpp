@@ -60,8 +60,8 @@ int main (int argc, char *argv[])
     using duration = std::chrono::duration<double>;
 
     try {
-        if (argc <= 7)
-            throw std::runtime_error("missing arguments <file name> <max number of spots> <max number of output cells> <number of kept candidate vectors> <number of half sphere sample points> <lsq spot filter threshold> <score filter threshold>");
+        if (argc <= 8)
+            throw std::runtime_error("missing arguments, use\n<file name> <max number of spots> <max number of output cells> <number of kept candidate vectors> <number of half sphere sample points> ((lsq <lsq spot filter threshold> <score filter threshold>) | (ifme <error sensitivity> <number of iterations>))");
 
         fast_feedback::config_runtime<float> crt{};         // default runtime config
         {
@@ -97,33 +97,65 @@ int main (int argc, char *argv[])
             }
         }
 
-        fast_feedback::refine::config_lsq clsq{};   // default lsq refinement config
-        {
-            {
-                std::istringstream iss(argv[6]);
-                iss >> clsq.fit_threshold;
-                if (! iss)
-                    throw std::runtime_error("unable to parse fifth argument: threshold for spot selection in least squares fitting");
-                std::cout << "lsq_threshold=" << clsq.fit_threshold << '\n';
-                if ((clsq.fit_threshold <= .0f) || (clsq.fit_threshold > .5f))
-                    throw std::runtime_error("lsq_threshold must be in range (0..0.5]");
-            }
-            {
-                std::istringstream iss(argv[7]);
-                iss >> clsq.score_threshold;
-                if (! iss)
-                    throw std::runtime_error("unable to parse sixth argument: threshold for spot selection in score calculation");
-                std::cout << "score_threshold=" << clsq.score_threshold << '\n';
-                if ((clsq.score_threshold <= .0f) || (clsq.score_threshold > .5f))
-                    throw std::runtime_error("score_threshold must be in range (0..0.5]");
-            }
-        }
+        fast_feedback::refine::indexer<float>* indexer_p = nullptr;
+        std::string method{argv[6]};
+        std::cout << "method=" << method << '\n';
 
         SimpleData<float, raise> data{argv[1]};         // read simple data file
 
         auto t0 = clock::now();
 
-        fast_feedback::refine::indexer_lsq indexer{cpers, crt, clsq};
+        if (method == "lsq") {
+            fast_feedback::refine::config_lsq clsq{};   // default lsq refinement config
+            {
+                {
+                    std::istringstream iss(argv[7]);
+                    iss >> clsq.fit_threshold;
+                    if (! iss)
+                        throw std::runtime_error("unable to parse sixth argument: threshold for spot selection in least squares fitting");
+                    std::cout << "lsq_threshold=" << clsq.fit_threshold << '\n';
+                    if ((clsq.fit_threshold <= .0f) || (clsq.fit_threshold > .5f))
+                        throw std::runtime_error("lsq_threshold must be in range (0..0.5]");
+                }
+                {
+                    std::istringstream iss(argv[8]);
+                    iss >> clsq.score_threshold;
+                    if (! iss)
+                        throw std::runtime_error("unable to parse seventh argument: threshold for spot selection in score calculation");
+                    std::cout << "score_threshold=" << clsq.score_threshold << '\n';
+                    if ((clsq.score_threshold <= .0f) || (clsq.score_threshold > .5f))
+                        throw std::runtime_error("score_threshold must be in range (0..0.5]");
+                }
+            }
+            indexer_p = new fast_feedback::refine::indexer_lsq{cpers, crt, clsq};
+        } else if (method == "ifme") {
+            fast_feedback::refine::config_ifme cifme{}; // default ifme refinement config
+            {
+                {
+                    std::istringstream iss(argv[7]);
+                    iss >> cifme.error_sensitivity;
+                    if (! iss)
+                        throw std::runtime_error("unable to parse sixth argument: error sensitivity for iterated fit to modified errors");
+                    std::cout << "error_sensitivity=" << cifme.error_sensitivity << '\n';
+                    if (cifme.error_sensitivity < .0f)
+                        throw std::runtime_error("error_sensitivity must be greter equal to 0");
+                }
+                {
+                    std::istringstream iss(argv[8]);
+                    iss >> cifme.n_iter;
+                    if (! iss)
+                        throw std::runtime_error("unable to parse seventh argument: number of iterations for iterated fit to modified errors");
+                    std::cout << "n_iter=" << cifme.n_iter << '\n';
+                    if (cifme.n_iter <= .0f)
+                        throw std::runtime_error("number of iterations must be bigger than 0");
+                }
+            }
+            indexer_p = new fast_feedback::refine::indexer_ifme{cpers, crt, cifme};
+        } else {
+            throw std::runtime_error("indexer method must be one of 'lsq', 'ifme'");
+        }
+
+        fast_feedback::refine::indexer<float>& indexer = *indexer_p;
 
         unsigned i=0u;
         for (const auto& coord : data.unit_cell) {      // copy cell coordinates

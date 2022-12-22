@@ -270,21 +270,23 @@ namespace fast_feedback {
             {
                 using namespace std;
                 using namespace Eigen;
+                using Mx3 = Matrix<float_type, Dynamic, 3>;
+                using M3 = Matrix<float_type, 3, 3>;
                 auto& coords = indexer<float_type>::coords;
                 auto& cells = indexer<float_type>::cells;
                 auto& scores = indexer<float_type>::scores;
                 auto& cpers = indexer<float_type>::idx.cpers;
-                MatrixX3f spots = coords.bottomRows(coords.rows() - 3u * cpers.max_input_cells);
+                Mx3 spots = coords.bottomRows(coords.rows() - 3u * cpers.max_input_cells);
                 for (unsigned j=0u; j<cpers.max_output_cells; j++) {
-                    Matrix3f cell = cells.block(3u * j, 0u, 3u, 3u).inverse();
-                    MatrixX3f temp = spots * cell;          // coordinates in system <cell>
-                    MatrixX3f miller = round(temp.array());
+                    M3 cell = cells.block(3u * j, 0u, 3u, 3u).inverse();
+                    Mx3 temp = spots * cell;          // coordinates in system <cell>
+                    Mx3 miller = round(temp.array());
                     temp -= miller;
                     Vector<bool, Dynamic> thresh(temp.cols());
                     thresh = temp.array().abs().rowwise().maxCoeff() < clsq.fit_threshold;
                     Matrix<bool, Dynamic, 3u> sel(thresh.size(), 3u);
                     sel.colwise() = thresh;
-                    FullPivHouseholderQR<MatrixX3f> qr(sel.select(miller, .0f));
+                    FullPivHouseholderQR<Mx3> qr(sel.select(miller, .0f));
                     cell = qr.solve(sel.select(spots, .0f));
                     cells.block(3u * j, 0u, 3u, 3u) = cell;
                     temp = spots * cell.inverse();
@@ -320,6 +322,90 @@ namespace fast_feedback {
 
         }; // indexer_lsq
             
+        // iterative fit to modified errors refinement indexer extra config
+        template <typename float_type=float>
+        struct config_ifme final {
+            unsigned n_iter=3;                  // number of iterations
+            float_type error_sensitivity=1.;    // errors will be weighted by e^(-(error * error_sensitivity)^2 / sigma^2) [0 means low sensitivity]
+        };
+
+        // iterative fit to modified errors refinement indexer
+        template <typename float_type=float>
+        class indexer_ifme : public indexer<float_type> {
+            config_ifme<float_type> cifme;
+          public:
+            indexer_ifme (const fast_feedback::config_persistent<float_type>& cp,
+                          const fast_feedback::config_runtime<float_type>& cr,
+                          const config_ifme<float_type>& c)
+                : indexer<float_type>{cp, cr}, cifme{c}
+            {}
+
+            inline indexer_ifme (indexer_ifme&&) = default;
+            inline indexer_ifme& operator= (indexer_ifme&&) = default;
+            inline ~indexer_ifme () override = default;
+
+            indexer_ifme () = delete;
+            indexer_ifme (const indexer_ifme&) = delete;
+            indexer_ifme& operator= (const indexer_ifme&) = delete;
+
+            // refine output
+            void refine ()
+            {
+                using namespace std;
+                using namespace Eigen;
+                using Mx3 = Matrix<float_type, Dynamic, 3>;
+                using M3 = Matrix<float_type, 3, 3>;
+                using Ax = Array<float_type, Dynamic, 1>;
+                auto& coords = indexer<float_type>::coords;
+                auto& cells = indexer<float_type>::cells;
+                auto& scores = indexer<float_type>::scores;
+                auto& cpers = indexer<float_type>::idx.cpers;
+                Mx3 spots = coords.bottomRows(coords.rows() - 3u * cpers.max_input_cells);
+                unsigned nspots = spots.rows();
+                for (unsigned j=0u; j<cpers.max_output_cells; j++) {
+                    float_type uscore_m1 = float_type{2.} * scores[j] / (float_type{3.} * nspots);
+                    M3 B = cells.block(3u * j, 0u, 3u, 3u);               // approximated lattice basis
+                    for (unsigned i=0u; i<cifme.n_iter; i++) {
+                        const float_type s = -uscore_m1 / (i + 1u);
+                        Mx3 Z = round((spots * B.inverse()).array());     // approximated Miller coordinates
+                        Mx3 E = spots - Z * B;
+                        Ax w = exp(-square(E.array().abs().rowwise().maxCoeff() * (cifme.error_sensitivity / s))).eval();
+                        E.array().colwise() *= w;
+                        FullPivHouseholderQR<Mx3> qr(Z);
+                        B += qr.solve(E);
+                    }
+                    cells.block(3u * j, 0u, 3u, 3u) = B;
+                    Mx3 S = spots * B.inverse();
+                    Mx3 Z = round(S.array());
+                    scores(j) = (S - Z).array().abs().rowwise().maxCoeff().mean();
+                }
+            }
+
+            // refined indexing
+            void index (unsigned n_input_cells, unsigned n_spots) override
+            {
+                indexer<float_type>::index(n_input_cells, n_spots);
+                refine();
+            }
+
+            // ifme configuration access
+            inline void n_iter (unsigned n) noexcept
+            { cifme.n_iter = n; }
+
+            inline unsigned n_iter () const noexcept
+            { return cifme.n_iter; }
+
+            inline void error_sensitivity (float_type s) noexcept
+            { cifme.error_sensitivity = s; }
+
+            inline float_type error_sensitivity () const noexcept
+            { return cifme.error_sensitivity; }
+
+            const config_ifme<float_type>& conf_ifme () const noexcept
+            { return cifme; }
+
+        }; // indexer_ifme
+
     } // namespace refine
 } // namespace fast_feedback
 
