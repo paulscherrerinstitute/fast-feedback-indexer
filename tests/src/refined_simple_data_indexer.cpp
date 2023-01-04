@@ -180,6 +180,7 @@ int main (int argc, char *argv[])
         indexer.index(1u, i);                           // run refined indexing
         auto t2 = clock::now();
 
+        std::cout.precision(12);
         std::cout << "output:\n";
         for (unsigned j=0u; j<cpers.max_output_cells; j++)
             std::cout << indexer.oCellM().block(3u * j, 0u, 3u, 3u) << "\n\n";
