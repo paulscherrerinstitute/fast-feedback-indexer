@@ -107,13 +107,27 @@ namespace fast_feedback {
     template <typename float_type=float> struct indexer;    // Forward declaration
 
     // Future to retrieve asynchronous result
-    // NOTE: Make sure the data underlying the references survives this object
+    // NOTE: Make sure the data underlying the pointers survives this object
     template <typename float_type=float>
     struct future final {
-        indexer<float_type>& idx;
-        const input<float_type>& in;
-        output<float_type>& out;
-        const config_runtime<float_type>& conf_rt;
+        indexer<float_type>* idx;
+        const input<float_type>* in;
+        output<float_type>* out;
+        const config_runtime<float_type>* crt;
+        bool ready = false;
+
+        inline future (indexer<float_type>& indexer,
+                       const input<float_type>& input,
+                       output<float_type>& output,
+                       const config_runtime<float_type>& conf_rt)
+            : idx{&indexer}, in{&input}, out{&output}, crt{&conf_rt}
+        {}
+
+        ~future () = default;
+        future (const future&) = default;
+        future& operator= (const future&) = default;
+        future (future&&) = default;
+        future& operator= (future&&) = default;
 
         // Is output data ready?
         bool is_ready ();

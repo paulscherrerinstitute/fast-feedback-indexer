@@ -458,7 +458,7 @@ namespace {
         // Timings
         gpu_event<cudaEventDefault> start;
         gpu_event<cudaEventDefault> end;
-        time_point start_time;
+        time_point start_time{};
 
         // GPU device
         int device;
@@ -1694,13 +1694,16 @@ namespace gpu {
         using duration = std::chrono::duration<double, std::milli>;
         using time_point = std::chrono::time_point<clock>;
 
-        auto state_id = fut.idx.state;
+        if (fut.ready)
+            return true;
+        
+        auto state_id = fut.idx->state;
         gpu_stream& stream = gpu_state::stream(state_id);
 
         if (! stream.completed())
             return false;
 
-        gpu_state::copy_out(state_id, fut.out, stream); // synchronizes on stream
+        gpu_state::copy_out(state_id, *fut.out, stream); // synchronizes on stream
         if (logger::level_active<logger::l_info>()) {
             auto& state = gpu_state::ref(state_id);
             time_point end = clock::now();
@@ -1711,7 +1714,7 @@ namespace gpu {
             } LOG_END;
         }
 
-        return true;
+        return (fut.ready = true);
     }
 
     template <typename float_type>
@@ -1719,7 +1722,10 @@ namespace gpu {
     {
         using gpu_state = indexer_gpu_state<float_type>;
 
-        auto state_id = fut.idx.state;
+        if (fut.ready)
+            return;
+    
+        auto state_id = fut.idx->state;
         gpu_stream& stream = gpu_state::stream(state_id);
         stream.sync();
         if (! is_ready(fut))
