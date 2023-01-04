@@ -36,6 +36,13 @@ Author: hans-christian.stadler@psi.ch
 namespace fast_feedback {
     namespace refine {
 
+        template<typename float_type=float>
+        struct future final {
+            fast_feedback::input<float_type> input;
+            fast_feedback::output<float_type> output;
+            fast_feedback::future<float_type> fut;
+        };
+
         // base indexer class for refinement
         // - controlling all indexer data
         // - getter/setter interface
@@ -51,6 +58,7 @@ namespace fast_feedback {
             fast_feedback::memory_pin pin_cells;                    // pin output cells coordinate container
             fast_feedback::memory_pin pin_scores;                   // pin output cell scores container
             fast_feedback::memory_pin pin_crt;                      // pin runtime config memory
+            future<float_type> fut;                                 // for asynchronous indexing
           public:
             inline static void check_config (const fast_feedback::config_persistent<float_type>& cp,
                                              const fast_feedback::config_runtime<float_type>& cr)
@@ -79,7 +87,12 @@ namespace fast_feedback {
                   cells{3u * cp.max_output_cells, 3u}, scores{cp.max_output_cells},
                   crt{cr}, idx{cp},
                   pin_coords{coords}, pin_cells{cells}, pin_scores{scores},
-                  pin_crt{fast_feedback::memory_pin::on(cr)}
+                  pin_crt{fast_feedback::memory_pin::on(cr)},
+                  fut{
+                    fast_feedback::input<float_type>{&coords(0,0), &coords(0,1), &coords(0,2), 0, 0},
+                    fast_feedback::output<float_type>{&cells(0,0), &cells(0,1), &cells(0,2), scores.data(), idx.cpers.max_output_cells},
+                    {idx, fut.input, fut.output, crt}
+                  }
             {
                 check_config(cp, cr);
             }
@@ -92,11 +105,26 @@ namespace fast_feedback {
             indexer (const indexer&) = delete;
             indexer& operator= (const indexer&) = delete;
 
-            inline virtual void index (unsigned n_input_cells, unsigned n_spots)
+            inline void index_async (unsigned n_input_cells, unsigned n_spots)
             {
-                fast_feedback::input<float_type> input{&coords(0,0), &coords(0,1), &coords(0,2), n_input_cells, n_spots};
-                fast_feedback::output<float_type> output{&cells(0,0), &cells(0,1), &cells(0,2), scores.data(), idx.cpers.max_output_cells};
-                idx.index(input, output, crt);
+                fut.input.n_cells = n_input_cells;
+                fut.input.n_spots = n_spots;
+                fut.fut = idx.index_async(fut.input, fut.output, crt);
+            }
+
+            inline virtual bool is_ready ()
+            { return fut.fut.is_ready(); }
+
+            inline void wait_for ()
+            {
+                fut.fut.wait_for();
+                is_ready();
+            }
+
+            inline void index (unsigned n_input_cells, unsigned n_spots)
+            {
+                index_async(n_input_cells, n_spots);
+                wait_for();
             }
 
             // spot access: spot i
@@ -251,9 +279,9 @@ namespace fast_feedback {
         class indexer_lsq : public indexer<float_type> {
             config_lsq<float_type> clsq;
           public:
-            indexer_lsq (const fast_feedback::config_persistent<float_type>& cp,
-                         const fast_feedback::config_runtime<float_type>& cr,
-                         const config_lsq<float_type>& c)
+            inline indexer_lsq (const fast_feedback::config_persistent<float_type>& cp,
+                                const fast_feedback::config_runtime<float_type>& cr,
+                                const config_lsq<float_type>& c)
                 : indexer<float_type>{cp, cr}, clsq{c}
             {}
 
@@ -266,16 +294,16 @@ namespace fast_feedback {
             indexer_lsq& operator= (const indexer_lsq&) = delete;
 
             // refine output
-            void refine ()
+            inline static void refine (const Eigen::Matrix<float_type, Eigen::Dynamic, 3u>& coords,
+                                       Eigen::Matrix<float_type, Eigen::Dynamic, 3u>& cells,
+                                       Eigen::Vector<float_type, Eigen::Dynamic>& scores,
+                                       const fast_feedback::config_persistent<float_type>& cpers,
+                                       const config_lsq<float_type>& clsq)
             {
                 using namespace std;
                 using namespace Eigen;
                 using Mx3 = Matrix<float_type, Dynamic, 3>;
                 using M3 = Matrix<float_type, 3, 3>;
-                auto& coords = indexer<float_type>::coords;
-                auto& cells = indexer<float_type>::cells;
-                auto& scores = indexer<float_type>::scores;
-                auto& cpers = indexer<float_type>::idx.cpers;
                 Mx3 spots = coords.bottomRows(coords.rows() - 3u * cpers.max_input_cells);
                 for (unsigned j=0u; j<cpers.max_output_cells; j++) {
                     M3 cell = cells.block(3u * j, 0u, 3u, 3u).inverse();
@@ -297,11 +325,13 @@ namespace fast_feedback {
                 }
             }
 
-            // refined indexing
-            void index (unsigned n_input_cells, unsigned n_spots) override
+            // refined result
+            inline bool is_ready () override
             {
-                indexer<float_type>::index(n_input_cells, n_spots);
-                refine();
+                if (! indexer<float_type>::fut.fut.is_ready())
+                    return false;
+                refine(this->coords, this->cells, this->scores, this->idx.cpers, clsq);
+                return true;
             }
 
             // lsq configuration access
@@ -317,7 +347,7 @@ namespace fast_feedback {
             inline float_type score_threshold () const noexcept
             { return clsq.score_threshold; }
 
-            const config_lsq<float_type>& conf_lsq () const noexcept
+            inline const config_lsq<float_type>& conf_lsq () const noexcept
             { return clsq; }
 
         }; // indexer_lsq
@@ -334,7 +364,7 @@ namespace fast_feedback {
         class indexer_ifme : public indexer<float_type> {
             config_ifme<float_type> cifme;
           public:
-            indexer_ifme (const fast_feedback::config_persistent<float_type>& cp,
+            inline indexer_ifme (const fast_feedback::config_persistent<float_type>& cp,
                           const fast_feedback::config_runtime<float_type>& cr,
                           const config_ifme<float_type>& c)
                 : indexer<float_type>{cp, cr}, cifme{c}
@@ -349,17 +379,17 @@ namespace fast_feedback {
             indexer_ifme& operator= (const indexer_ifme&) = delete;
 
             // refine output
-            void refine ()
+            inline static void refine (const Eigen::Matrix<float_type, Eigen::Dynamic, 3u>& coords,
+                                       Eigen::Matrix<float_type, Eigen::Dynamic, 3u>& cells,
+                                       Eigen::Vector<float_type, Eigen::Dynamic>& scores,
+                                       const fast_feedback::config_persistent<float_type>& cpers,
+                                       const config_ifme<float_type>& cifme)
             {
                 using namespace std;
                 using namespace Eigen;
                 using Mx3 = Matrix<float_type, Dynamic, 3>;
                 using M3 = Matrix<float_type, 3, 3>;
                 using Ax = Array<float_type, Dynamic, 1>;
-                auto& coords = indexer<float_type>::coords;
-                auto& cells = indexer<float_type>::cells;
-                auto& scores = indexer<float_type>::scores;
-                auto& cpers = indexer<float_type>::idx.cpers;
                 Mx3 spots = coords.bottomRows(coords.rows() - 3u * cpers.max_input_cells);
                 unsigned nspots = spots.rows();
                 for (unsigned j=0u; j<cpers.max_output_cells; j++) {
@@ -381,11 +411,13 @@ namespace fast_feedback {
                 }
             }
 
-            // refined indexing
-            void index (unsigned n_input_cells, unsigned n_spots) override
+            // refined result
+            inline bool is_ready () override
             {
-                indexer<float_type>::index(n_input_cells, n_spots);
-                refine();
+                if (! indexer<float_type>::fut.fut.is_ready())
+                    return false;
+                refine(this->coords, this->cells, this->scores, this->idx.cpers, cifme);
+                return true;
             }
 
             // ifme configuration access
@@ -401,7 +433,7 @@ namespace fast_feedback {
             inline float_type error_sensitivity () const noexcept
             { return cifme.error_sensitivity; }
 
-            const config_ifme<float_type>& conf_ifme () const noexcept
+            inline const config_ifme<float_type>& conf_ifme () const noexcept
             { return cifme; }
 
         }; // indexer_ifme
