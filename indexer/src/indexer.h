@@ -104,10 +104,28 @@ namespace fast_feedback {
         }
     };
 
+    template <typename float_type=float> struct indexer;    // Forward declaration
+
+    // Future to retrieve asynchronous result
+    // NOTE: Make sure the data underlying the references survives this object
+    template <typename float_type=float>
+    struct future final {
+        indexer<float_type>& idx;
+        const input<float_type>& in;
+        output<float_type>& out;
+        const config_runtime<float_type>& conf_rt;
+
+        // Is output data ready?
+        bool is_ready ();
+
+        // Wait for ready output data.
+        void wait_for ();
+    };
+
     // Indexer object
     //
     // Keeps persistent state, like GPU memory allocations.
-    template <typename float_type=float>
+    template <typename float_type>
     struct indexer final {
         config_persistent<float_type> cpers;    // persistent configuration
         const state_id::type state;             // object instance private state identifier
@@ -161,9 +179,16 @@ namespace fast_feedback {
             }
         }
 
+        // Run indexing asynchronously according to conf_rt on in data.
+        // All coordinate data and the runtime config memory must be pinned
+        future<float_type> index_async (const input<float_type>& in, output<float_type>& out, const config_runtime<float_type>& conf_rt);
+
         // Run indexing according to conf_rt on in data, put result into out data
         // All coordinate data and the runtime config memory must be pinned
-        void index (const input<float_type>& in, output<float_type>& out, const config_runtime<float_type>& conf_rt);
+        inline void index (const input<float_type>& in, output<float_type>& out, const config_runtime<float_type>& conf_rt)
+        {
+            index_async(in, out, conf_rt).wait_for();
+        }
     };
 
     // Pin allocated memory during the lifetime of this object

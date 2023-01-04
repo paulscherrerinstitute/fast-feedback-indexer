@@ -39,9 +39,17 @@ namespace gpu {
     template <typename float_type>
     void drop (const indexer<float_type>& instance);
 
+    // GPU part of future::ready
+    template <typename float_type>
+    bool is_ready (future<float_type>& fut);
+
+    // GPU part of future::ready
+    template <typename float_type>
+    void wait_for (future<float_type>& fut);
+
     // GPU part of indexer::index
     template <typename float_type>
-    void index (const indexer<float_type>& instance, const input<float_type>& in, output<float_type>& out, const config_runtime<float_type>& conf_rt);
+    void index_async (const indexer<float_type>& instance, const input<float_type>& in, output<float_type>& out, const config_runtime<float_type>& conf_rt);
 
     // Register host memory
     void pin_memory(void* ptr, std::size_t size);

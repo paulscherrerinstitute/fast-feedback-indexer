@@ -371,6 +371,23 @@ namespace {
                 CU_CHECK(cudaStreamSynchronize(stream));
         }
 
+        // Check for completion status
+        bool completed()
+        {
+            if (ready) {
+                auto error = cudaStreamQuery(stream);
+                switch (error) {
+                    case cudaSuccess:
+                        return true;
+                    case cudaErrorNotReady:
+                        return false;
+                    default:
+                        throw CU_EXCEPTION(error);
+                }
+            }
+            return true;
+        }
+
         operator cudaStream_t&() noexcept { return stream; }    // Cast to cuda stream
     };
 
@@ -410,6 +427,8 @@ namespace {
         using map_type = std::map<key_type, indexer_gpu_state>;
         using config_persistent = fast_feedback::config_persistent<float_type>;
         using memory_pin = fast_feedback::memory_pin;
+        using clock = std::chrono::high_resolution_clock;
+        using time_point = std::chrono::time_point<clock>;
 
         gpu_pointer<content_type> data;                     // Indexer_device_data on GPU
         gpu_pointer<float_type> elements;                   // Input/output vector elements of data on GPU
@@ -439,6 +458,7 @@ namespace {
         // Timings
         gpu_event<cudaEventDefault> start;
         gpu_event<cudaEventDefault> end;
+        time_point start_time;
 
         // GPU device
         int device;
@@ -1666,14 +1686,52 @@ namespace gpu {
         gpu_state::drop(instance.state);
     }
 
-    // Run indexer
     template <typename float_type>
-    void index (const indexer<float_type>& instance, const input<float_type>& in, output<float_type>& out, const config_runtime<float_type>& conf_rt)
+    bool is_ready (future<float_type>& fut)
     {
         using gpu_state = indexer_gpu_state<float_type>;
         using clock = std::chrono::high_resolution_clock;
         using duration = std::chrono::duration<double, std::milli>;
         using time_point = std::chrono::time_point<clock>;
+
+        auto state_id = fut.idx.state;
+        gpu_stream& stream = gpu_state::stream(state_id);
+
+        if (! stream.completed())
+            return false;
+
+        gpu_state::copy_out(state_id, fut.out, stream); // synchronizes on stream
+        if (logger::level_active<logger::l_info>()) {
+            auto& state = gpu_state::ref(state_id);
+            time_point end = clock::now();
+            duration elapsed = end - state.start_time;
+            LOG_START(logger::l_info) {
+                logger::info << stanza << "indexing_time: " << elapsed.count() << "ms\n";
+                logger::info << stanza << "kernel_time: " << gpu_timing(state.start, state.end) << "ms\n";
+            } LOG_END;
+        }
+
+        return true;
+    }
+
+    template <typename float_type>
+    void wait_for (future<float_type>& fut)
+    {
+        using gpu_state = indexer_gpu_state<float_type>;
+
+        auto state_id = fut.idx.state;
+        gpu_stream& stream = gpu_state::stream(state_id);
+        stream.sync();
+        if (! is_ready(fut))
+            throw FF_EXCEPTION("internal - future not ready despite synced stream");
+    }
+
+    // Run indexer asynchronously
+    template <typename float_type>
+    void index_async (const indexer<float_type>& instance, const input<float_type>& in, output<float_type>& out, const config_runtime<float_type>& conf_rt)
+    {
+        using gpu_state = indexer_gpu_state<float_type>;
+        using clock = std::chrono::high_resolution_clock;
 
         gpu_device::check_init();
         auto state_id = instance.state;
@@ -1682,9 +1740,8 @@ namespace gpu {
         gpu_device::set(state.device);
 
         bool timing = logger::level_active<logger::l_info>();
-        time_point start, end;
         if (timing) {
-            start = clock::now();
+            state.start_time = clock::now();
             state.start.init();
             state.end.init();
         }
@@ -1757,15 +1814,6 @@ namespace gpu {
             if (dbg_flag)
                 gpu_debug_out<float_type><<<1, 1, 0, stream>>>(gpu_state::ptr(state_id).get(), 2u);
             state.end.record(stream);
-            gpu_state::copy_out(state_id, out, stream); // synchronizes on stream
-        }
-        if (timing) {
-            end = clock::now();
-            duration elapsed = end - start;
-            LOG_START(logger::l_info) {
-                logger::info << stanza << "indexing_time: " << elapsed.count() << "ms\n";
-                logger::info << stanza << "kernel_time: " << gpu_timing(state.start, state.end) << "ms\n";
-            } LOG_END;
         }
     }
 
@@ -1795,6 +1843,8 @@ namespace gpu {
 
     template void init<float> (const indexer<float>&);
     template void drop<float> (const indexer<float>&);
-    template void index<float> (const indexer<float>&, const input<float>&, output<float>&, const config_runtime<float>&);
+    template bool is_ready<float> (future<float>&);
+    template void wait_for<float> (future<float>&);
+    template void index_async<float> (const indexer<float>&, const input<float>&, output<float>&, const config_runtime<float>&);
 
 } // namespace gpu
