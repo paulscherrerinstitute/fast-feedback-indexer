@@ -43,9 +43,10 @@ namespace fast_feedback {
             fast_feedback::future<float_type> fut;
         };
 
-        // base indexer class for refinement
+        // Base indexer class for refinement
         // - controlling all indexer data
         // - getter/setter interface
+        // The origin is implicitly assumed to be part of the lattice
         template<typename float_type=float>
         class indexer {
           protected:

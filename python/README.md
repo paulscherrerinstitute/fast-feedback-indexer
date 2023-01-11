@@ -50,7 +50,7 @@ A tuple of numpy arrays *(output_cells, scores)*
 - **num_sample_points** is the number of sampling points per length on the half sphere
 - **n_output_cells** is the number of desired output cells
 - **n_input_cells** is the number of given unit cells *N* in the data array
-- **data** array of vectors with shape *(3,3N+S)*, the first *3N* vectors are the given unit cells, the rest are spots (all in 3D space)
+- **data** array of vectors with shape *(3,3N+S)*, the first *3N* vectors are the given unit cells, the rest are spots (all in 3D space, the origin is implicitly assumed to be part of the lattice)
 
 #### ffbidx.release(handle)
 

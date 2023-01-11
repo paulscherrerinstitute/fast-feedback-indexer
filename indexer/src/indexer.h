@@ -41,6 +41,7 @@ namespace fast_feedback {
     // coordinates
     // - of given unit cells        [0..3*n_cells[
     // - of the spots               [3*n_cells..3*n_cells+n_spots[
+    // The origin is implicitly assumed to be part of the lattice.
     template <typename float_type=float>
     struct input final {
         float_type* x;      // x coordinates, pinned memory
