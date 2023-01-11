@@ -37,7 +37,7 @@ namespace fast_feedback {
 
     // Input data for fast feedback indexer
     //
-    // Input data consists of the (x,y,z) reciprocal space
+    // Input data consists of the (x,y,z) 3D space coordinates
     // coordinates
     // - of given unit cells        [0..3*n_cells[
     // - of the spots               [3*n_cells..3*n_cells+n_spots[
@@ -52,7 +52,7 @@ namespace fast_feedback {
 
     // Output data for fast feedback indexer
     //
-    // Output data consists of the (x,y,z) reciprocal space
+    // Output data consists of the (x,y,z) 3D space
     // coordinates of the found unit cell vectors [0..3*n_cells[
     //
     // The coordinate arrays must be of size 3*n_cells at least,

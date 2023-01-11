@@ -31,14 +31,14 @@ This allocates space on the GPU for all the data structures used in the computat
 
 #### ffbidx.index(handle, length_threshold, triml, trimh, num_sample_points, n_output_cells, n_input_cells, data)
 
-Run the fast feedback indexer on given reciprocal space input cells and spots packed in the **data** numpy array and return oriented cells and their scores.
+Run the fast feedback indexer on given 3D space input cells and spots packed in the **data** numpy array and return oriented cells and their scores.
 The cell score is $\sum_{v \in cell} \sum_{s \in spots} trim(dist(\frac{v \cdot s}{|v|^2}))$, where $trim$ stands for trimming and $dist$ for distance to nearest integer.
 
 **Return**:
 
 A tuple of numpy arrays *(output_cells, scores)*
 
-- **output_cells** is an array with *N* computed cells in reciprocal space and shape *(3, 3N)*. The first cell is *\[:,:3\]* and it's first vector is *\[:,0\]*.
+- **output_cells** is an array with *N* computed cells in 3D space with shape *(3, 3N)*. The first cell is *\[:,:3\]* and it's first vector is *\[:,0\]*.
 - **scores** is a one dimensional numpy array of shape *(N,)* containing the score (objective function value) for each output cell.
 
 **Arguments**:
@@ -50,7 +50,7 @@ A tuple of numpy arrays *(output_cells, scores)*
 - **num_sample_points** is the number of sampling points per length on the half sphere
 - **n_output_cells** is the number of desired output cells
 - **n_input_cells** is the number of given unit cells *N* in the data array
-- **data** array of vectors with shape *(3,3N+S)*, the first *3N* vectors are the given unit cells, the rest are spots (all in reciprocal space)
+- **data** array of vectors with shape *(3,3N+S)*, the first *3N* vectors are the given unit cells, the rest are spots (all in 3D space)
 
 #### ffbidx.release(handle)
 

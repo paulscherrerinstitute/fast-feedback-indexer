@@ -49,7 +49,7 @@ namespace fast_feedback {
         template<typename float_type=float>
         class indexer {
           protected:
-            Eigen::Matrix<float_type, Eigen::Dynamic, 3u> coords;  // for input cells + spots in reciprocal space
+            Eigen::Matrix<float_type, Eigen::Dynamic, 3u> coords;  // for input cells + spots in 3D space
             Eigen::Matrix<float_type, Eigen::Dynamic, 3u> cells;   // output cells coordinate container
             Eigen::Vector<float_type, Eigen::Dynamic> scores;      // output cell scores container
             fast_feedback::config_runtime<float_type> crt;
