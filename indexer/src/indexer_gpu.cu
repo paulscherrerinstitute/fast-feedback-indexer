@@ -760,9 +760,10 @@ namespace {
                     cand = vec;
             }
             cell_vec[cell] = cand;
-            auto it = std::find(&vec_cand[0u], &vec_cand[num_cand_grps], cand);
+            unsigned cand_grp = cand_idx[cand];
+            auto it = std::find(&vec_cand[0u], &vec_cand[num_cand_grps], cand_grp);
             if (it == &vec_cand[num_cand_grps])
-                vec_cand[num_cand_grps++] = cand;
+                vec_cand[num_cand_grps++] = cand_grp;
         }
 
         return num_cand_grps;
