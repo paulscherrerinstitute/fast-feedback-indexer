@@ -357,7 +357,8 @@ namespace fast_feedback {
         template <typename float_type=float>
         struct config_ifme final {
             unsigned n_iter=3;                  // number of iterations
-            float_type error_sensitivity=1.;    // errors will be weighted by e^(-(error * error_sensitivity)^2 / sigma^2) [0 means low sensitivity]
+            float_type error_sensitivity=.8;    // errors will be weighted by e^(-(error * error_sensitivity)^2 / sigma^2) [0 means low sensitivity]
+            float_type weight_contraction=2.;   // sigma will be reduced by weight_contraction / (iteration + weight_contraction)
         };
 
         // iterative fit to modified errors refinement indexer
@@ -394,10 +395,10 @@ namespace fast_feedback {
                 Mx3 spots = coords.bottomRows(coords.rows() - 3u * cpers.max_input_cells);
                 unsigned nspots = spots.rows();
                 for (unsigned j=0u; j<cpers.max_output_cells; j++) {
-                    float_type uscore_m1 = float_type{2.} * scores[j] / (float_type{3.} * nspots);
+                    float_type uscore_m1 = float_type{2.} * scores[j] * cifme.weight_contraction / (float_type{3.} * nspots);
                     M3 B = cells.block(3u * j, 0u, 3u, 3u);               // approximated lattice basis
                     for (unsigned i=0u; i<cifme.n_iter; i++) {
-                        const float_type s = -uscore_m1 / (i + 1u);
+                        const float_type s = -uscore_m1 / (cifme.weight_contraction + i);
                         Mx3 Z = round((spots * B.inverse()).array());     // approximated Miller coordinates
                         Mx3 E = spots - Z * B;
                         Ax w = exp(-square(E.array().abs().rowwise().maxCoeff() * (cifme.error_sensitivity / s))).eval();
