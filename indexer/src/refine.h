@@ -435,6 +435,12 @@ namespace fast_feedback {
             inline float_type error_sensitivity () const noexcept
             { return cifme.error_sensitivity; }
 
+            inline void weight_contraction (float_type c) noexcept
+            { cifme.weight_contraction = c; }
+
+            inline float_type weight_contraction () noexcept
+            { return cifme.weight_contraction; }
+
             inline const config_ifme<float_type>& conf_ifme () const noexcept
             { return cifme; }
 
