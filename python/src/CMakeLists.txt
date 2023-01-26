@@ -46,7 +46,7 @@ if(PYTHON_MODULE)
                                 BASE_DIRECTORY ${ffbidx_ABS_PATH})
                         set(ffbidx_RPATH $ORIGIN/${ffbidx_RPATH})
                 endif(INSTALL_RELOCATABLE)
-                set(ffbidx_INSTALL_RPATH ${ffbidx_INSTALL_RPATH}:${ffbidx_RPATH})
+                set(ffbidx_INSTALL_RPATH ${ffbidx_INSTALL_RPATH}:${ffbidx_RPATH}:${Python3_RUNTIME_LIBRARY_DIRS})
         endif(PYTHON_MODULE_RPATH)
         set_target_properties(ffbidx PROPERTIES
                 PREFIX ""
