@@ -329,7 +329,6 @@ namespace fast_feedback {
                         miller = round(resid.array());
                         resid -= miller;
                         below = (resid.rowwise().norm().array() < threshold);
-                        std::cout << j << " - " << threshold << ": " << below.count() << '\n';
                         if (below.count() < clsq.min_spots)
                             break;
                         threshold *= clsq.threshold_contraction;
