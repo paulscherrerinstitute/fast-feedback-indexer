@@ -110,6 +110,9 @@ namespace fast_feedback {
             {
                 fut.input.n_cells = n_input_cells;
                 fut.input.n_spots = n_spots;
+                fut.input.x = &coords(idx.cpers.max_input_cells - n_input_cells,0);
+                fut.input.y = &coords(idx.cpers.max_input_cells - n_input_cells,1);
+                fut.input.z = &coords(idx.cpers.max_input_cells - n_input_cells,2);
                 fut.fut = idx.index_async(fut.input, fut.output, crt);
             }
 
@@ -152,23 +155,24 @@ namespace fast_feedback {
 
             // input cell access: cell i, vector j
             inline float_type& iCellX (unsigned i=0u, unsigned j=0u) noexcept
-            { return coords(3u * i + j, 0u); }
+            { return coords(3u * (idx.cpers.max_input_cells - i - 1u) + j, 0u); }
 
             inline const float_type& iCellX (unsigned i=0u, unsigned j=0u) const noexcept
-            { return coords(3u * i + j, 0u); }
+            { return coords(3u * (idx.cpers.max_input_cells - i - 1u) + j, 0u); }
 
             inline float_type& iCellY (unsigned i=0u, unsigned j=0u) noexcept
-            { return coords(3u * i + j, 1u); }
+            { return coords(3u * (idx.cpers.max_input_cells - i - 1u) + j, 1u); }
 
             inline const float_type& iCellY (unsigned i=0u, unsigned j=0u) const noexcept
-            { return coords(3u * i + j, 1u); }
+            { return coords(3u * (idx.cpers.max_input_cells - i - 1u) + j, 1u); }
 
             inline float_type& iCellZ (unsigned i=0u, unsigned j=0u) noexcept
-            { return coords(3u * i + j, 2u); }
+            { return coords(3u * (idx.cpers.max_input_cells - i - 1u) + j, 2u); }
 
             inline const float_type& iCellZ (unsigned i=0u, unsigned j=0u) const noexcept
-            { return coords(3u * i + j, 2u); }
+            { return coords(3u * (idx.cpers.max_input_cells - i - 1u) + j, 2u); }
 
+            // fill from bottom up
             inline auto iCellM ()
             { return coords.topRows(3u * idx.cpers.max_input_cells); }
 
@@ -271,8 +275,8 @@ namespace fast_feedback {
         // least squares refinement indexer extra config
         template <typename float_type=float>
         struct config_lsq final {
-            float_type fit_threshold=.1;    // fit unit cells to spots closer than this to approximated Miller indices
-            float_type score_threshold=.2;  // calculate score as percentage of spots closer than this to approximated Miller indices
+            float_type threshold_contraction=.8;        // contract error threshold by this value in every iteration
+            unsigned min_spots=6;                       // minimum number of spots to fit against
         };
 
         // least squares refinement indexer
@@ -299,54 +303,67 @@ namespace fast_feedback {
                                        Eigen::Matrix<float_type, Eigen::Dynamic, 3u>& cells,
                                        Eigen::Vector<float_type, Eigen::Dynamic>& scores,
                                        const fast_feedback::config_persistent<float_type>& cpers,
-                                       const config_lsq<float_type>& clsq)
+                                       const config_lsq<float_type>& clsq,
+                                       unsigned nspots)
             {
+                //         f = self.score
+                //         while True:
+                //             S, Z, n = self.elim(B, f)
+                //             if n < self.npoints:
+                //                 return B
+                //             B = np.linalg.lstsq(Z, S, rcond=None)[0].T
+                //             f *= self.contraction
                 using namespace std;
                 using namespace Eigen;
                 using Mx3 = Matrix<float_type, Dynamic, 3>;
                 using M3 = Matrix<float_type, 3, 3>;
-                Mx3 spots = coords.bottomRows(coords.rows() - 3u * cpers.max_input_cells);
+                VectorX<bool> below;
+                Mx3 resid;
+                Mx3 miller;
+                Mx3 spots = coords.block(3u * cpers.max_input_cells, 0u, nspots, 3u);
                 for (unsigned j=0u; j<cpers.max_output_cells; j++) {
-                    M3 cell = cells.block(3u * j, 0u, 3u, 3u).inverse();
-                    Mx3 temp = spots * cell;          // coordinates in system <cell>
-                    Mx3 miller = round(temp.array());
-                    temp -= miller;
-                    Vector<bool, Dynamic> thresh(temp.cols());
-                    thresh = temp.array().abs().rowwise().maxCoeff() < clsq.fit_threshold;
-                    Matrix<bool, Dynamic, 3u> sel(thresh.size(), 3u);
-                    sel.colwise() = thresh;
-                    FullPivHouseholderQR<Mx3> qr(sel.select(miller, .0f));
-                    cell = qr.solve(sel.select(spots, .0f));
+                    M3 cell = cells.block(3u * j, 0u, 3u, 3u);  // row vectors
+                    float_type threshold = float_type{1.} + float_type{2.} * scores[j] / (float_type{3.} * nspots);  // normalize score
+                    do {
+                        resid = spots * cell.inverse();    // coordinates in system <cell>
+                        miller = round(resid.array());
+                        resid -= miller;
+                        below = (resid.rowwise().norm().array() < threshold);
+                        std::cout << j << " - " << threshold << ": " << below.count() << '\n';
+                        if (below.count() < clsq.min_spots)
+                            break;
+                        threshold *= clsq.threshold_contraction;
+                        Matrix<bool, Dynamic, 3u> sel{below.size(), 3u};
+                        sel.colwise() = below;
+                        FullPivHouseholderQR<Mx3> qr{sel.select(miller, .0f)};
+                        cell = qr.solve(sel.select(spots, .0f));
+                    } while (true);
                     cells.block(3u * j, 0u, 3u, 3u) = cell;
-                    temp = spots * cell.inverse();
-                    temp -= miller;
-                    thresh = temp.array().abs().rowwise().maxCoeff() < clsq.score_threshold;
-                    scores(j) = static_cast<float_type>(reduce(begin(thresh), end(thresh), 0u, plus<unsigned>{}))
-                                / static_cast<float_type>(spots.rows());
+                    scores(j) = resid.rowwise().norm().mean();
                 }
             }
 
             // refined result
             inline bool is_ready () override
             {
-                if (! indexer<float_type>::fut.fut.is_ready())
+                if (! this->fut.fut.is_ready())
                     return false;
-                refine(this->coords, this->cells, this->scores, this->idx.cpers, clsq);
+                refine(this->coords, this->cells, this->scores, this->idx.cpers, clsq, this->fut.input.n_spots);
                 return true;
             }
 
             // lsq configuration access
-            inline void fit_threshold (float_type ft) noexcept
-            { clsq.fit_threshold = ft; }
+            inline void threshold_contraction (float_type tc) noexcept
+            { clsq.threshold_contraction = tc; }
             
-            inline float_type fit_threshold () const noexcept
-            { return clsq.fit_threshold; }
+            inline float_type threshold_contraction () const noexcept
+            { return clsq.threshold_contraction; }
 
-            inline void score_threshold (float_type st) noexcept
-            { clsq.score_threshold = st; }
+            inline void min_spots (unsigned ms) noexcept
+            { clsq.min_spots = ms; }
 
-            inline float_type score_threshold () const noexcept
-            { return clsq.score_threshold; }
+            inline unsigned min_spots () const noexcept
+            { return clsq.min_spots; }
 
             inline const config_lsq<float_type>& conf_lsq () const noexcept
             { return clsq; }
