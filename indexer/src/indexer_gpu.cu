@@ -823,6 +823,11 @@ namespace {
             return acosf(angle);
         }
 
+        __device__ __forceinline__ static float log2(float x)
+        {
+            return log2f(x);
+        }
+
         __device__ __forceinline__ static float sqrt(float x)
         {
             return sqrtf(x);
@@ -1258,10 +1263,11 @@ namespace {
         float_type rest = float_type{0.f};
 
         const float_type t_vl = float_type{1.f} / vlength;
+        const float_type delta = crt.delta;
         for (unsigned i=0u; i<n_spots; i++) {
             const float_type s[3] = { sx[i], sy[i], sz[i] };
             const float_type dp = dot(v, s);
-            const float_type dv = dist2int_trim(crt, t_vl * dp);
+            const float_type dv = util<float_type>::log2(dist2int_trim(crt, t_vl * dp) + delta);
             ksum(sval, rest, dv);
         }
         return sval - float_type{.5f} * n_spots;
@@ -1283,16 +1289,17 @@ namespace {
         float_type rest = float_type{0.f};
         const float_type t_v1l2 = float_type{1.f} / norm2(v1);
         const float_type t_v2l2 = float_type{1.f} / norm2(v2);
+        const float_type delta = crt.delta;
         for (unsigned i=0u; i<n_spots; i++) {
             const float_type s[3] = { sx[i], sy[i], sz[i] };
             {   // handle v1
                 const float_type dp = dot(v1, s);
-                const float_type dv = dist2int_trim(crt, t_v1l2 * dp);
+                const float_type dv = util<float_type>::log2(dist2int_trim(crt, t_v1l2 * dp) + delta);
                 ksum(sval, rest, dv);
             }
             {   // handle v2
                 const float_type dp = dot(v2, s);
-                const float_type dv = dist2int_trim(crt, t_v2l2 * dp);
+                const float_type dv = util<float_type>::log2(dist2int_trim(crt, t_v2l2 * dp) + delta);
                 ksum(sval, rest, dv);
             }
         }
@@ -1766,6 +1773,12 @@ namespace gpu {
             throw FF_EXCEPTION("nonpositive number of candidate vectors");
         if (conf_rt.num_sample_points < instance.cpers.num_candidate_vectors)
             throw FF_EXCEPTION("fewer sample points than required candidate vectors");
+        if (conf_rt.delta <= .0f)
+            throw FF_EXCEPTION("nonpositive delta value in runtime configuration");
+        if (conf_rt.triml >= conf_rt.trimh)
+            throw FF_EXCEPTION("lower trim value bigger than higher trim value");
+        if (conf_rt.triml < .0f)
+            throw FF_EXCEPTION("negative lower trim value");
         if (n_cells_out > n_threads)
             throw FF_EXCEPTION("fewer threads in a block than output cells");
         if (instance.cpers.num_candidate_vectors > n_threads)

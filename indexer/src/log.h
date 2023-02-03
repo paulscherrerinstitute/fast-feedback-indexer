@@ -110,6 +110,11 @@ namespace logger {
         extern logger<l_debug> debug;
     #endif
 
+    // TODO: imlement thread safe lock_guard<log_level> for logger<log_level>
+    // {
+    //  guard = logger << (create guard) blabla << blabla;
+    //  guard << blabla << blabla; (release guard)
+    // }
 }
 
 // Start and end locked logging conditional on logging level

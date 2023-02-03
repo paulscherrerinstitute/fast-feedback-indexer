@@ -34,7 +34,7 @@ This allocates space on the GPU for all the data structures used in the computat
 #### ffbidx.index(handle, length_threshold, triml, trimh, num_sample_points, n_output_cells, n_input_cells, data)
 
 Run the fast feedback indexer on given 3D space input cells and spots packed in the **data** numpy array and return oriented cells and their scores.
-The cell score is $\sum_{v \in cell} \sum_{s \in spots} trim(dist(\frac{v \cdot s}{|v|^2}))$, where $trim$ stands for trimming and $dist$ for distance to nearest integer.
+The cell score is $\sum_{v \in cell} \sum_{s \in spots} \log_2(trim(dist(\frac{v \cdot s}{|v|^2})) + delta)$, where $trim$ stands for trimming and $dist$ for distance to nearest integer.
 
 **Return**:
 
@@ -49,6 +49,7 @@ A tuple of numpy arrays *(output_cells, scores)*
 - **length_threshold**: consider input cell vector length the same if they differ by less than this
 - **triml**: >= 0, low trim value, 0 means no trimming
 - **trimh**: <= 0.5, high trim value, 0.5 means no trimming
+- **delta**: > 0, $\log_2$ curve position, lower values will be more selective in choosing close spots
 - **num_sample_points** is the number of sampling points per length on the half sphere
 - **n_output_cells** is the number of desired output cells
 - **n_input_cells** is the number of given unit cells *N* in the data array

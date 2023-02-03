@@ -60,8 +60,8 @@ int main (int argc, char *argv[])
     using duration = std::chrono::duration<double>;
 
     try {
-        if (argc <= 8)
-            throw std::runtime_error("missing arguments, use\n<file name> <max number of spots> <max number of output cells> <number of kept candidate vectors> <number of half sphere sample points> ((lsq <threshold contraction> <min spots>) | (ifme <error sensitivity> <number of iterations>))");
+        if ((argc <= 8) || ((std::string{argv[6]} == "ifse") && (argc <= 9)))
+            throw std::runtime_error("missing arguments, use\n<file name> <max number of spots> <max number of output cells> <number of kept candidate vectors> <number of half sphere sample points> ((lsq <threshold contraction> <min spots>) | (ifse <contraction speed> <min spots> <max iterations>))");
 
         fast_feedback::config_runtime<float> crt{};         // default runtime config
         {
@@ -128,31 +128,40 @@ int main (int argc, char *argv[])
                 }
             }
             indexer_p = new fast_feedback::refine::indexer_lsq{cpers, crt, clsq};
-        } else if (method == "ifme") {
-            fast_feedback::refine::config_ifme cifme{}; // default ifme refinement config
+        } else if (method == "ifse") {
+            fast_feedback::refine::config_ifse cifse{}; // default ifse refinement config
             {
                 {
                     std::istringstream iss(argv[7]);
-                    iss >> cifme.error_sensitivity;
+                    iss >> cifse.contraction_speed;
                     if (! iss)
-                        throw std::runtime_error("unable to parse sixth argument: error sensitivity for iterated fit to modified errors");
-                    std::cout << "error_sensitivity=" << cifme.error_sensitivity << '\n';
-                    if (cifme.error_sensitivity < .0f)
-                        throw std::runtime_error("error_sensitivity must be greter equal to 0");
+                        throw std::runtime_error("unable to parse sixth argument: contraction speed for iterated fit to selected errors");
+                    std::cout << "contraction_speed=" << cifse.contraction_speed << '\n';
+                    if (cifse.contraction_speed <= .0f)
+                        throw std::runtime_error("contraction_speed must be positive");
                 }
                 {
                     std::istringstream iss(argv[8]);
-                    iss >> cifme.n_iter;
+                    iss >> cifse.min_spots;
                     if (! iss)
-                        throw std::runtime_error("unable to parse seventh argument: number of iterations for iterated fit to modified errors");
-                    std::cout << "n_iter=" << cifme.n_iter << '\n';
-                    if (cifme.n_iter <= .0f)
-                        throw std::runtime_error("number of iterations must be bigger than 0");
+                        throw std::runtime_error("unable to parse seventh argument: min spots for iterated fit to selected errors");
+                    std::cout << "min_spots=" << cifse.min_spots << '\n';
+                    if (cifse.min_spots <= 3)
+                        throw std::runtime_error("min spots must be bigger than 3");
+                }
+                {
+                    std::istringstream iss(argv[9]);
+                    iss >> cifse.max_iter;
+                    if (! iss)
+                        throw std::runtime_error("unable to parse eight argument: max iterations for iterated fit to selected errors");
+                    std::cout << "max_iter=" << cifse.max_iter << '\n';
+                    if (cifse.max_iter <= 0)
+                        throw std::runtime_error("max iterations must be positive");
                 }
             }
-            indexer_p = new fast_feedback::refine::indexer_ifme{cpers, crt, cifme};
+            indexer_p = new fast_feedback::refine::indexer_ifse{cpers, crt, cifse};
         } else {
-            throw std::runtime_error("indexer method must be one of 'lsq', 'ifme'");
+            throw std::runtime_error("indexer method must be one of 'lsq', 'ifse'");
         }
 
         fast_feedback::refine::indexer<float>& indexer = *indexer_p;

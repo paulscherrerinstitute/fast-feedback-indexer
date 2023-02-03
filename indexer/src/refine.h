@@ -32,9 +32,11 @@ Author: hans-christian.stadler@psi.ch
 #include <numeric>
 #include <functional>
 #include "indexer.h"
+#include "log.h"
 
 namespace fast_feedback {
     namespace refine {
+        using logger::stanza;
 
         template<typename float_type=float>
         struct future final {
@@ -80,6 +82,8 @@ namespace fast_feedback {
                     throw FF_EXCEPTION("lower > higher trim value");
                 if (cr.trimh > float_type{.5f})
                     throw FF_EXCEPTION("higher trim value > 0.5");
+                if (cr.delta <= float_type{.0})
+                    throw FF_EXCEPTION("nonpositive delta value");
             }
 
             inline indexer (const fast_feedback::config_persistent<float_type>& cp,
@@ -196,6 +200,11 @@ namespace fast_feedback {
             inline auto& oScoreV () noexcept
             { return scores; }
 
+            inline static float_type normalize_score (const fast_feedback::config_runtime<float_type>& crt, float_type score, unsigned nspots)
+            {
+                return std::exp2(score / (float_type{3.} * nspots) - crt.delta);
+            }
+
             // runtime configuration access
             inline void length_threshold (float_type lt)
             {
@@ -233,6 +242,17 @@ namespace fast_feedback {
             inline float_type trimh () const noexcept
             {
                 return crt.trimh;
+            }
+
+            inline void delta (float_type d)
+            {
+                if (d <= float_type{.0})
+                    throw FF_EXCEPTION("nonnegative delta value");
+            }
+
+            inline float_type delta () const noexcept
+            {
+                return crt.delta;
             }
 
             inline void num_sample_points (unsigned nsp)
@@ -284,11 +304,23 @@ namespace fast_feedback {
         class indexer_lsq : public indexer<float_type> {
             config_lsq<float_type> clsq;
           public:
+            inline static void check_config (const config_lsq<float_type>& c)
+            {
+                if (c.threshold_contraction <= float_type{.0})
+                    throw FF_EXCEPTION("nonpositive threshold contraction");
+                if (c.threshold_contraction >= float_type{1.})
+                    throw FF_EXCEPTION("threshold contraction >= 1");
+                if (c.min_spots <= 3)
+                    throw FF_EXCEPTION("min spots <= 3");
+            }
+
             inline indexer_lsq (const fast_feedback::config_persistent<float_type>& cp,
                                 const fast_feedback::config_runtime<float_type>& cr,
                                 const config_lsq<float_type>& c)
                 : indexer<float_type>{cp, cr}, clsq{c}
-            {}
+            {
+                check_config(c);
+            }
 
             inline indexer_lsq (indexer_lsq&&) = default;
             inline indexer_lsq& operator= (indexer_lsq&&) = default;
@@ -303,6 +335,7 @@ namespace fast_feedback {
                                        Eigen::Matrix<float_type, Eigen::Dynamic, 3u>& cells,
                                        Eigen::Vector<float_type, Eigen::Dynamic>& scores,
                                        const fast_feedback::config_persistent<float_type>& cpers,
+                                       const fast_feedback::config_runtime<float_type>& crt,
                                        const config_lsq<float_type>& clsq,
                                        unsigned nspots)
             {
@@ -313,7 +346,6 @@ namespace fast_feedback {
                 //                 return B
                 //             B = np.linalg.lstsq(Z, S, rcond=None)[0].T
                 //             f *= self.contraction
-                using namespace std;
                 using namespace Eigen;
                 using Mx3 = Matrix<float_type, Dynamic, 3>;
                 using M3 = Matrix<float_type, 3, 3>;
@@ -323,12 +355,18 @@ namespace fast_feedback {
                 Mx3 spots = coords.block(3u * cpers.max_input_cells, 0u, nspots, 3u);
                 for (unsigned j=0u; j<cpers.max_output_cells; j++) {
                     M3 cell = cells.block(3u * j, 0u, 3u, 3u);  // row vectors
-                    float_type threshold = float_type{1.} + float_type{2.} * scores[j] / (float_type{3.} * nspots);  // normalize score
+                    float_type threshold = indexer<float_type>::normalize_score(crt, scores[j], nspots);
+                    LOG_START(logger::l_debug) {
+                        logger::debug << stanza << "cell " << j << ", score: " << scores[j] << " (normalized: " << threshold << ")\n";
+                    } LOG_END;
                     do {
                         resid = spots * cell.inverse();    // coordinates in system <cell>
                         miller = round(resid.array());
                         resid -= miller;
                         below = (resid.rowwise().norm().array() < threshold);
+                        LOG_START(logger::l_debug) {
+                            logger::debug << stanza << "threshold: " << threshold << " spots: " << below.count() << '\n';
+                        } LOG_END;
                         if (below.count() < clsq.min_spots)
                             break;
                         threshold *= clsq.threshold_contraction;
@@ -347,19 +385,29 @@ namespace fast_feedback {
             {
                 if (! this->fut.fut.is_ready())
                     return false;
-                refine(this->coords, this->cells, this->scores, this->idx.cpers, clsq, this->fut.input.n_spots);
+                refine(this->coords, this->cells, this->scores, this->idx.cpers, this->crt, clsq, this->fut.input.n_spots);
                 return true;
             }
 
             // lsq configuration access
-            inline void threshold_contraction (float_type tc) noexcept
-            { clsq.threshold_contraction = tc; }
+            inline void threshold_contraction (float_type tc)
+            {
+                if (tc <= float_type{.0})
+                    throw FF_EXCEPTION("nonpositive threshold contraction");
+                if (tc >= float_type{1.})
+                    throw FF_EXCEPTION("threshold contraction >= 1");
+                clsq.threshold_contraction = tc;
+            }
             
             inline float_type threshold_contraction () const noexcept
             { return clsq.threshold_contraction; }
 
-            inline void min_spots (unsigned ms) noexcept
-            { clsq.min_spots = ms; }
+            inline void min_spots (unsigned ms)
+            {
+                if (ms <= 3)
+                    throw FF_EXCEPTION("min spots <= 3");
+                clsq.min_spots = ms;
+            }
 
             inline unsigned min_spots () const noexcept
             { return clsq.min_spots; }
@@ -371,61 +419,92 @@ namespace fast_feedback {
             
         // iterative fit to modified errors refinement indexer extra config
         template <typename float_type=float>
-        struct config_ifme final {
-            unsigned n_iter=3;                  // number of iterations
-            float_type error_sensitivity=.8;    // errors will be weighted by e^(-(error * error_sensitivity)^2 / sigma^2) [0 means low sensitivity]
-            float_type weight_contraction=2.;   // sigma will be reduced by weight_contraction / (iteration + weight_contraction)
+        struct config_ifse final {
+            float_type contraction_speed=.8;    // upper threshold will be multiplied by contraction_speed / (iteration + contraction_speed)
+            unsigned min_spots=6;               // minimum number of spots to fit against
+            unsigned max_iter=10;               // max number of iterations
         };
 
-        // iterative fit to modified errors refinement indexer
+        // iterative fit to selected errors refinement indexer
         template <typename float_type=float>
-        class indexer_ifme : public indexer<float_type> {
-            config_ifme<float_type> cifme;
+        class indexer_ifse : public indexer<float_type> {
+            config_ifse<float_type> cifse;
           public:
-            inline indexer_ifme (const fast_feedback::config_persistent<float_type>& cp,
+            inline static void check_config (const config_ifse<float_type>& c)
+            {
+                if (c.contraction_speed <= float_type{.0})
+                    throw FF_EXCEPTION("nonpositive contraction speed");
+                if (c.min_spots <= 3)
+                    throw FF_EXCEPTION("min spots <= 3");
+            }
+
+            inline indexer_ifse (const fast_feedback::config_persistent<float_type>& cp,
                           const fast_feedback::config_runtime<float_type>& cr,
-                          const config_ifme<float_type>& c)
-                : indexer<float_type>{cp, cr}, cifme{c}
+                          const config_ifse<float_type>& c)
+                : indexer<float_type>{cp, cr}, cifse{c}
             {}
 
-            inline indexer_ifme (indexer_ifme&&) = default;
-            inline indexer_ifme& operator= (indexer_ifme&&) = default;
-            inline ~indexer_ifme () override = default;
+            inline indexer_ifse (indexer_ifse&&) = default;
+            inline indexer_ifse& operator= (indexer_ifse&&) = default;
+            inline ~indexer_ifse () override = default;
 
-            indexer_ifme () = delete;
-            indexer_ifme (const indexer_ifme&) = delete;
-            indexer_ifme& operator= (const indexer_ifme&) = delete;
+            indexer_ifse () = delete;
+            indexer_ifse (const indexer_ifse&) = delete;
+            indexer_ifse& operator= (const indexer_ifse&) = delete;
 
             // refine output
             inline static void refine (const Eigen::Matrix<float_type, Eigen::Dynamic, 3u>& coords,
                                        Eigen::Matrix<float_type, Eigen::Dynamic, 3u>& cells,
                                        Eigen::Vector<float_type, Eigen::Dynamic>& scores,
                                        const fast_feedback::config_persistent<float_type>& cpers,
-                                       const config_ifme<float_type>& cifme)
+                                       const fast_feedback::config_runtime<float_type>& crt,
+                                       const config_ifse<float_type>& cifse,
+                                       unsigned nspots)
             {
-                using namespace std;
+                // Z, E, e = self.ZEe(B)
+                // a, b = e.min(), e.max()
+                // t = a + (b - a) * self.score * self.r / (i + self.r)
+                // print(i, ':', t)
+                // sel = e < t
+                // if sel.sum() < self.minp:
+                //     return B, False
+                // D = np.linalg.lstsq(Z[sel, :], E[sel, :], rcond=None)[0].T
+                // return B + D, True
                 using namespace Eigen;
                 using Mx3 = Matrix<float_type, Dynamic, 3>;
                 using M3 = Matrix<float_type, 3, 3>;
                 using Ax = Array<float_type, Dynamic, 1>;
-                Mx3 spots = coords.bottomRows(coords.rows() - 3u * cpers.max_input_cells);
-                unsigned nspots = spots.rows();
+                VectorX<bool> below;
+                Ax error;
+                Mx3 resid;
+                Mx3 miller;
+                Mx3 spots = coords.block(3u * cpers.max_input_cells, 0u, nspots, 3u);
                 for (unsigned j=0u; j<cpers.max_output_cells; j++) {
-                    float_type uscore_m1 = float_type{2.} * scores[j] * cifme.weight_contraction / (float_type{3.} * nspots);
-                    M3 B = cells.block(3u * j, 0u, 3u, 3u);               // approximated lattice basis
-                    for (unsigned i=0u; i<cifme.n_iter; i++) {
-                        const float_type s = -uscore_m1 / (cifme.weight_contraction + i);
-                        Mx3 Z = round((spots * B.inverse()).array());     // approximated Miller coordinates
-                        Mx3 E = spots - Z * B;
-                        Ax w = exp(-square(E.array().abs().rowwise().maxCoeff() * (cifme.error_sensitivity / s))).eval();
-                        E.array().colwise() *= w;
-                        FullPivHouseholderQR<Mx3> qr(Z);
-                        B += qr.solve(E);
+                    M3 cell = cells.block(3u * j, 0u, 3u, 3u);  // row vectors
+                    const float_type score = indexer<float_type>::normalize_score(crt, scores[j], nspots);
+                    LOG_START(logger::l_debug) {
+                        logger::debug << stanza << "cell " << j << ", score: " << scores[j] << " (normalized: " << score << ")\n";
+                    } LOG_END;
+                    for (unsigned i=0; i<cifse.max_iter; i++) {
+                        resid = spots * cell.inverse();    // coordinates in system <cell>
+                        miller = round((spots * cell.inverse()).array());
+                        resid = spots - miller * cell;
+                        error = resid.rowwise().norm().array();
+                        auto [min, max] = std::minmax_element(std::cbegin(error), std::cend(error));
+                        const float_type threshold = *min + (*max - *min) * score * cifse.contraction_speed / (i + cifse.contraction_speed);
+                        below = (error < threshold);
+                        LOG_START(logger::l_debug) {
+                            logger::debug << stanza << i << " threshold: " << threshold << " spots: " << below.count() << '\n';
+                        } LOG_END;
+                        if (below.count() < cifse.min_spots)
+                            break;
+                        Matrix<bool, Dynamic, 3u> sel{below.size(), 3u};
+                        sel.colwise() = below;
+                        FullPivHouseholderQR<Mx3> qr{sel.select(miller, .0f)};
+                        cell += qr.solve(sel.select(resid, .0f));
                     }
-                    cells.block(3u * j, 0u, 3u, 3u) = B;
-                    Mx3 S = spots * B.inverse();
-                    Mx3 Z = round(S.array());
-                    scores(j) = (S - Z).array().abs().rowwise().maxCoeff().mean();
+                    cells.block(3u * j, 0u, 3u, 3u) = cell;
+                    scores(j) = resid.rowwise().norm().mean();
                 }
             }
 
@@ -434,33 +513,41 @@ namespace fast_feedback {
             {
                 if (! indexer<float_type>::fut.fut.is_ready())
                     return false;
-                refine(this->coords, this->cells, this->scores, this->idx.cpers, cifme);
+                refine(this->coords, this->cells, this->scores, this->idx.cpers, this->crt, cifse, this->fut.input.n_spots);
                 return true;
             }
 
-            // ifme configuration access
-            inline void n_iter (unsigned n) noexcept
-            { cifme.n_iter = n; }
+            // ifse configuration access
+            inline void contraction_speed (float_type cs)
+            {
+                if (cs <= float_type{.0})
+                    throw FF_EXCEPTION("nonpositive contraction speed");
+                cifse.contraction_speed = cs;
+            }
 
-            inline unsigned n_iter () const noexcept
-            { return cifme.n_iter; }
+            inline float_type contraction_speed () const noexcept
+            { return cifse.contraction_speed; }
 
-            inline void error_sensitivity (float_type s) noexcept
-            { cifme.error_sensitivity = s; }
+            inline void min_spots (unsigned ms)
+            {
+                if (ms <= 3)
+                    throw FF_EXCEPTION("min spots <= 3");
+                cifse.min_spots = ms;
+            }
 
-            inline float_type error_sensitivity () const noexcept
-            { return cifme.error_sensitivity; }
+            inline unsigned min_spots () const noexcept
+            { return cifse.min_spots; }
 
-            inline void weight_contraction (float_type c) noexcept
-            { cifme.weight_contraction = c; }
+            inline void max_iter (unsigned n) noexcept
+            { cifse.max_iter = n; }
 
-            inline float_type weight_contraction () noexcept
-            { return cifme.weight_contraction; }
+            inline unsigned max_iter () const noexcept
+            { return cifse.max_iter; }
 
-            inline const config_ifme<float_type>& conf_ifme () const noexcept
-            { return cifme; }
+            inline const config_ifse<float_type>& conf_ifse () const noexcept
+            { return cifse; }
 
-        }; // indexer_ifme
+        }; // indexer_ifse
 
     } // namespace refine
 } // namespace fast_feedback
