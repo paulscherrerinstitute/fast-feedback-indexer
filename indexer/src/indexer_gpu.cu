@@ -23,9 +23,6 @@ DAMAGE.
 Author: hans-christian.stadler@psi.ch
 */
 
-#ifndef __USE_XOPEN
-#define __USE_XOPEN // for <cmath> M_PI
-#endif
 #include <iostream>
 #include <atomic>
 #include <mutex>
@@ -37,8 +34,6 @@ Author: hans-christian.stadler@psi.ch
 #include <chrono>
 #include <algorithm>
 #include <limits>
-#include <cmath>    // for M_PI amongst others
-#include <cfloat>   // for FLT_EPSILON and others
 #include "exception.h"
 #include "log.h"
 #include "indexer_gpu.h"
@@ -56,12 +51,11 @@ namespace {
 
     template<typename float_type>
     struct constant final {
-        // static constexpr float_type pi = M_PI;
+        // static constexpr float_type pi = 3.1415926535897932384628;
         #pragma nv_diag_suppress 177 // suppress unused warning
-        [[maybe_unused]] static constexpr float_type pi2 = M_PI_2;
+        [[maybe_unused]] static constexpr float_type pi2 = 6.2831853071795864769257;
         #pragma nv_diag_suppress 177 // suppress unused warning
         [[maybe_unused]] static constexpr float_type dl = 0.76393202250021030359082633; // 3 - sqrt(5), for spiral sample points on a half sphere
-        // static constexpr float_type eps = FLT_EPSILON;
     };
 
     // NOTE: not allowed as member of constant
@@ -798,72 +792,72 @@ namespace {
 
     template<>
     struct util<float> final {
-        __device__ __forceinline__ static float abs(float val)
+        __device__ __forceinline__ static float abs(const float val) noexcept
         {
             return fabsf(val);
         }
 
-        __device__ __forceinline__ static float rint(float val)
+        __device__ __forceinline__ static float rint(const float val) noexcept
         {
             return rintf(val);
         }
 
-        __device__ __forceinline__ static void sincos(float angle, float* sine, float* cosine)
+        __device__ __forceinline__ static void sincos(const float angle, float* sine, float* cosine) noexcept
         {
             return sincosf(angle, sine, cosine);
         }
 
-        __device__ __forceinline__ static float cos(float angle)
+        __device__ __forceinline__ static float cos(const float angle) noexcept
         {
             return cosf(angle);
         }
 
-        __device__ __forceinline__ static float acos(float angle)
+        __device__ __forceinline__ static float acos(const float x) noexcept
         {
-            return acosf(angle);
+            return acosf(x);
         }
 
-        __device__ __forceinline__ static float log2(float x)
+        __device__ __forceinline__ static float log2(const float x) noexcept
         {
             return log2f(x);
         }
 
-        __device__ __forceinline__ static float sqrt(float x)
+        __device__ __forceinline__ static float sqrt(const float x) noexcept
         {
             return sqrtf(x);
         }
         
-        __device__ __forceinline__ static float rem(float x, float y)
+        __device__ __forceinline__ static float rem(const float x, const float y) noexcept
         {
             return remainderf(x, y);
         }
 
-        __device__ __forceinline__ static float norm(float x, float y, float z)
+        __device__ __forceinline__ static float norm(const float x, const float y, const float z) noexcept
         {   // sqrt(x*x + y*y + z*z)
             return norm3df(x, y, z);
         }
 
-        __device__ __forceinline__ static float rnorm(float x, float y, float z)
+        __device__ __forceinline__ static float rnorm(const float x, const float y, const float z) noexcept
         {   // 1 / sqrt(x*x + y*y + z*z)
             return rnorm3df(x, y, z);
         }
 
-        __device__ __forceinline__ static float fma(float x, float y, float z)
+        __device__ __forceinline__ static float fma(const float x, const float y, const float z) noexcept
         {   // x * y + z
             return fmaf(x, y, z);
         }
 
-        __device__ __forceinline__ static void sincospi(float a, float* sinp, float* cosp)
+        __device__ __forceinline__ static void sincospi(const float a, float* sinp, float* cosp) noexcept
         {
             sincospif(a, sinp, cosp);
         }
 
-        __device__ __forceinline__ static float cospi(float a)
+        __device__ __forceinline__ static float cospi(const float a) noexcept
         {
             return cospif(a);
         }
         
-        __device__ __forceinline__ static void from_unsigned(float& f1, float& f2, unsigned n)
+        __device__ __forceinline__ static void from_unsigned(float& f1, float& f2, const unsigned n) noexcept
         {
             static constexpr unsigned nbits = 8u * sizeof(unsigned);
             static constexpr unsigned mant_bits = std::numeric_limits<float>::digits;
@@ -876,13 +870,13 @@ namespace {
     };
 
     // acquire block sequentializer in busy wait loop
-    __device__ __forceinline__ void seq_acquire(unsigned& seq)
+    __device__ __forceinline__ void seq_acquire(unsigned& seq) noexcept
     {
         while (atomicCAS(&seq, 0u, 1u) != 0u);
     }
 
     // release block sequentializer
-    __device__ __forceinline__ void seq_release(unsigned& seq)
+    __device__ __forceinline__ void seq_release(unsigned& seq) noexcept
     {
         __threadfence();
         __stwt(&seq, 0u);
@@ -891,7 +885,7 @@ namespace {
     // kahan sum
     // (a, rest) = a + b + rest
     template<typename float_type>
-    __device__ __forceinline__ void ksum(float_type& a, float_type& rest, const float_type b)
+    __device__ __forceinline__ void ksum(float_type& a, float_type& rest, const float_type b) noexcept
     {
         const float_type s = rest + b;
         const float_type t = a;
@@ -901,44 +895,45 @@ namespace {
 
     // max of a, b, c
     template<typename float_type>
-    __device__ __forceinline__ float_type max3(const float_type a, const float_type b, const float_type c)
+    __device__ __forceinline__ float_type max3(const float_type a, const float_type b, const float_type c) noexcept
     {
         const float_type t = (a < b) ? b : a;
         return (t < c) ? c : t;
     }
 
-    // Trimmed distance to nearest integer
-    // The function assumes that 0 <= triml <= trimh <= 0.5
-    // Args:
-    //   val  : value
-    //   triml: lower trim value    (0 => no effect)
-    //   trimh: higher trim value   (0.5 => no effect)
-    // Return:
-    //   Distance from val to nearest integer, trimmed above by trimh, below by triml
+    // return value trimmed to the range [triml..trimh]
+    // assume triml <= trimh
     template<typename float_type>
-    __device__ __forceinline__ float_type dist2int_trim(const fast_feedback::config_runtime<float_type>& crt, const float_type val)
+    __device__ __forceinline__ float_type trim(const fast_feedback::config_runtime<float_type>& crt, const float_type val) noexcept
     {
-        const float_type dist = util<float_type>::abs(val - util<float_type>::rint(val));
-        return min(max(crt.triml, dist), crt.trimh);
+        return min(max(crt.triml, val), crt.trimh);
+    }
+
+    // return distance to nearest integer for value
+    // The function assumes that 0 <= triml <= trimh <= 0.5
+    template<typename float_type>
+    __device__ __forceinline__ float_type dist2int(const float_type val) noexcept
+    {
+        return util<float_type>::abs(val - util<float_type>::rint(val));
     }
 
     // a 🞄 a
     template<typename float_type>
-    __device__ __forceinline__ float_type norm2(const float_type a[3])
+    __device__ __forceinline__ float_type norm2(const float_type a[3]) noexcept
     {
         return util<float_type>::fma(a[0], a[0], util<float_type>::fma(a[1], a[1], a[2] * a[2]));
     }
 
     // a 🞄 b
     template<typename float_type>
-    __device__ __forceinline__ float_type dot(const float_type a[3], const float_type b[3])
+    __device__ __forceinline__ float_type dot(const float_type a[3], const float_type b[3]) noexcept
     {
         return util<float_type>::fma(a[0], b[0], util<float_type>::fma(a[1], b[1], a[2] * b[2]));
     }
 
     // a = b X c
     template<typename float_type>
-    __device__ __forceinline__ void cross(float_type a[3], const float_type b[3], const float_type c[3])
+    __device__ __forceinline__ void cross(float_type a[3], const float_type b[3], const float_type c[3]) noexcept
     {
         a[0] = util<float_type>::fma(b[1], c[2], -b[2] * c[1]);
         a[1] = util<float_type>::fma(b[2], c[0], -b[0] * c[2]);
@@ -947,7 +942,7 @@ namespace {
 
     // a = (a + l * b); a /= |a|
     template<typename float_type>
-    __device__ __forceinline__ void add_unify(float_type a[3], const float_type b[3], const float_type l)
+    __device__ __forceinline__ void add_unify(float_type a[3], const float_type b[3], const float_type l) noexcept
     {
         for (unsigned i=0u; i<3u; i++)
             a[i] = util<float_type>::fma(l, b[i], a[i]);
@@ -959,7 +954,7 @@ namespace {
     // a = 2 * (a 🞄 b) * b - a
     // pre: |b| == 1
     template<typename float_type>
-    __device__ __forceinline__ void mirror(float_type a[3], float_type b[3])
+    __device__ __forceinline__ void mirror(float_type a[3], const float_type b[3]) noexcept
     {
         // const float_type p2 = float_type{2.f} * dot(a, b);
         const float_type p2 = float_type{2.f} * dot(a, b);
@@ -974,7 +969,7 @@ namespace {
     // pre: |z| == 1
     template<typename float_type>
     __device__ __forceinline__ void project_unify(float_type x[3], const float_type a[3], const float_type z[3],
-                                                  float_type &laz, float_type &laxy)
+                                                  float_type &laz, float_type &laxy) noexcept
     {
         laz = dot(a, z);
         for (unsigned i=0u; i<3u; i++)
@@ -990,7 +985,7 @@ namespace {
     __device__ __forceinline__ void rotate(float_type a[3],
                                            const float_type x[3], const float_type y[3], const float_type z[3],
                                            const float_type laz, const float_type laxy,
-                                           const float_type alpha)
+                                           const float_type alpha) noexcept
     {
         float_type s, c;
         util<float_type>::sincos(alpha, &s, &c);
@@ -1000,7 +995,7 @@ namespace {
 
     // single threaded merge of block local sorted candidate vector array into global sorted candidate vector array
     template<typename float_type>
-    __device__ __forceinline__ void merge_top_vecs(float_type* top_val, unsigned* top_sample, vec_cand_t<float_type>* cand, unsigned n_cand)
+    __device__ __forceinline__ void merge_top_vecs(float_type* top_val, unsigned* top_sample, vec_cand_t<float_type>* cand, const unsigned n_cand) noexcept
     {
         // ---- python equivalent ----
         // def a_top(A, B):
@@ -1086,7 +1081,7 @@ namespace {
     // Misuse output cell vector as storage for { score[i]=value, x[i]=vsample, y[i]=rsample, z[i]=cell_vector_index }
     // Run a separate kernel to expand vsample, rsample, cell_vector_index into cell vectors
     template<typename float_type>
-    __device__ __forceinline__ void merge_top_cells(fast_feedback::output<float_type>& out, cell_cand_t<float_type>* cand, unsigned n_cand)
+    __device__ __forceinline__ void merge_top_cells(fast_feedback::output<float_type>& out, cell_cand_t<float_type>* cand, const unsigned n_cand) noexcept
     {
         if (out.score[n_cand-1] <= cand[0].value)
             return;
@@ -1160,7 +1155,7 @@ namespace {
     // n_samples    number of sampling points
     // v            sample point coordinates on half unit sphere multiplied by factor
     template<typename float_type>
-    __device__ __forceinline__ void sample_point(const unsigned sample_idx, const unsigned n_samples, float_type v[3])
+    __device__ __forceinline__ void sample_point(const unsigned sample_idx, const unsigned n_samples, float_type v[3]) noexcept
     {
         // Python equivalent:
         // N = n_samples
@@ -1219,7 +1214,7 @@ namespace {
                                                 const float_type vlength,
                                                 const unsigned vsample, const unsigned n_vsamples,
                                                 const unsigned rsample, const unsigned n_rsamples,
-                                                const unsigned cell_vec)
+                                                const unsigned cell_vec) noexcept
     {
         const unsigned cell_base = cell_vec / 3u;
         float_type t[3] = { cx[cell_vec], cy[cell_vec], cz[cell_vec] };
@@ -1247,7 +1242,7 @@ namespace {
         rotate(b, x, y, z, lbz, lbxy, alpha + delta);
     }
 
-    // sum(s ∈ spots) dist2int(s 🞄 v / vlength) trim [triml ... trimh]
+    // sum(s ∈ spots) log2(trim[triml..trimh](dist2int(s 🞄 v / vlength)) + delta)
     // v            unit vector in sample vector direction, |v| == 1
     // vlength      sample vector length
     // s{x,y,z}     spot coordinate pointers [n_spots]
@@ -1257,7 +1252,7 @@ namespace {
     __device__ __forceinline__ float_type sample1(const fast_feedback::config_runtime<float_type>& crt,
                                                   const float_type v[3], const float_type vlength,
                                                   const float_type *sx, const float_type *sy, const float_type *sz,
-                                                  const unsigned n_spots)
+                                                  const unsigned n_spots) noexcept
     {
         float_type sval = float_type{0.f};
         float_type rest = float_type{0.f};
@@ -1267,43 +1262,40 @@ namespace {
         for (unsigned i=0u; i<n_spots; i++) {
             const float_type s[3] = { sx[i], sy[i], sz[i] };
             const float_type dp = dot(v, s);
-            const float_type dv = util<float_type>::log2(dist2int_trim(crt, t_vl * dp) + delta);
+            const float_type dv = util<float_type>::log2(trim(crt, dist2int(t_vl * dp)) + delta);
             ksum(sval, rest, dv);
         }
-        return sval - float_type{.5f} * n_spots;
+        return sval;
     }
 
-    // sum(s ∈ spots) dist2int(s 🞄 vi / |vi|²) trim [triml ... trimh] for i in [1,2]
-    // v1, v2       sample vectors
+    // sum(s ∈ spots) sum(log2(trim[triml..trimh](sqrt(sum[i=a,b,c](dist2int(s 🞄 vi / |vi|²)²))) + delta))
+    // crt          runtime configuration with triml/h and delta
+    // z, a, b      sample vectors, z is c normalized
     // s{x,y,z}     spot coordinate pointers [n_spots]
-    // triml        lower trim value
-    // trimh        higher trim value
+    // lz           length of vector c, c = z * lz
     // n_spots      number of spots
     template<typename float_type>
-    __device__ __forceinline__ float_type sample2(const fast_feedback::config_runtime<float_type>& crt,
-                                                  const float_type v1[3], const float_type v2[3],
+    __device__ __forceinline__ float_type sample3(const fast_feedback::config_runtime<float_type>& crt,
+                                                  const float_type z[3], const float_type a[3], const float_type b[3],
                                                   const float_type *sx, const float_type *sy, const float_type *sz,
-                                                  const unsigned n_spots)
+                                                  const float_type lz, const unsigned n_spots) noexcept
     {
         float_type sval = float_type{0.f};
         float_type rest = float_type{0.f};
-        const float_type t_v1l2 = float_type{1.f} / norm2(v1);
-        const float_type t_v2l2 = float_type{1.f} / norm2(v2);
+        constexpr float_type f1{1.f};
+        const float_type ilz = f1 / lz;
+        const float_type ila2 = f1 / norm2(a);
+        const float_type ilb2 = f1 / norm2(b);
         const float_type delta = crt.delta;
         for (unsigned i=0u; i<n_spots; i++) {
             const float_type s[3] = { sx[i], sy[i], sz[i] };
-            {   // handle v1
-                const float_type dp = dot(v1, s);
-                const float_type dv = util<float_type>::log2(dist2int_trim(crt, t_v1l2 * dp) + delta);
-                ksum(sval, rest, dv);
-            }
-            {   // handle v2
-                const float_type dp = dot(v2, s);
-                const float_type dv = util<float_type>::log2(dist2int_trim(crt, t_v2l2 * dp) + delta);
-                ksum(sval, rest, dv);
-            }
+            const float_type cc = dist2int(ilz * dot(z, s));
+            const float_type ca = dist2int(ila2 * dot(a, s));
+            const float_type cb = dist2int(ila2 * dot(b, s));
+            const float_type dv = util<float_type>::log2(trim(crt, util<float_type>::norm(cc, ca, cb)) + delta);
+            ksum(sval, rest, dv);
         }
-        return sval - n_spots;
+        return sval;
     }
 
     // -----------------------------------
@@ -1468,10 +1460,7 @@ namespace {
             const float_type* sz = &in.z[spot_offset];
             const float_type triml = data->crt.triml;
             const float_type trimh = data->crt.trimh;
-            vabc = sample2(data->crt, a, b, sx, sy, sz, n_spots);
-            
-            const float_type vvalue = data->candidate_value[cand_grp * n_cand + cand];
-            vabc += vvalue;
+            vabc = sample3(data->crt, z, a, b, sx, sy, sz, vlength, n_spots);
         }
 
         // Get best output cells for block
@@ -1507,7 +1496,7 @@ namespace {
 
     // expand {cand, rsample, cell_vec} to coordinates of unit cell vectors
     // threadIdx.x = output cell index
-    // n_rsamples   number of rotation angle samples
+    // n_rsamples   number of rotation angle samples rounded up to n_threads (must match n_rsamples in gpu_find_cells)
     template<typename float_type>
     __global__ void gpu_expand_cells(indexer_device_data<float_type>* data, const unsigned n_rsamples)
     {
@@ -1527,15 +1516,18 @@ namespace {
 
         sample_cell(z, a, b, in.x, in.y, in.z, vlength, vsample, n_vsamples, rsample, n_rsamples, cell_vec);
 
-        ox[cell_base] = z[0] * vlength;
-        ox[cell_base + 1u] = a[0];
-        ox[cell_base + 2u] = b[0];
-        oy[cell_base] = z[1] * vlength;
-        oy[cell_base + 1u] = a[1];
-        oy[cell_base + 2u] = b[1];
-        oz[cell_base] = z[2] * vlength;
-        oz[cell_base + 1u] = a[2];
-        oz[cell_base + 2u] = b[2];
+        const unsigned iz = cell_vec % 3u;
+        const unsigned ia = (iz + 1u) % 3u;
+        const unsigned ib = (iz + 2u) % 3u;
+        ox[cell_base + iz] = z[0] * vlength;
+        ox[cell_base + ia] = a[0];
+        ox[cell_base + ib] = b[0];
+        oy[cell_base + iz] = z[1] * vlength;
+        oy[cell_base + ia] = a[1];
+        oy[cell_base + ib] = b[1];
+        oz[cell_base + iz] = z[2] * vlength;
+        oz[cell_base + ia] = a[2];
+        oz[cell_base + ib] = b[2];
     }
 
 } // anonymous namespace
