@@ -1291,7 +1291,7 @@ namespace {
             const float_type s[3] = { sx[i], sy[i], sz[i] };
             const float_type cc = dist2int(ilz * dot(z, s));
             const float_type ca = dist2int(ila2 * dot(a, s));
-            const float_type cb = dist2int(ila2 * dot(b, s));
+            const float_type cb = dist2int(ilb2 * dot(b, s));
             const float_type dv = util<float_type>::log2(trim(crt, util<float_type>::norm(cc, ca, cb)) + delta);
             ksum(sval, rest, dv);
         }
