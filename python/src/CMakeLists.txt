@@ -7,6 +7,11 @@ option(PYTHON_MODULE_RPATH "Set python module RPATH to fast indexer library inst
 set(PYTHON_MODULE_PATH "${CMAKE_INSTALL_LIBDIR}/ffbidx" CACHE PATH "Indexer python module installation path")
 
 if(PYTHON_MODULE)
+        find_package(Eigen3 3 NO_MODULE)
+        if(NOT ${Eigen3_FOUND})
+                message(FATAL_ERROR
+                        "Eigen3 library not found! Install a distro specific package, or use 'git submodule update' to download the submodule.")
+        endif()
         find_package(Python3 COMPONENTS NumPy Development.Module Development.Embed)
         if(NOT ${Python3_Development.Module_FOUND})
                 message(FATAL_ERROR "Python3 module development components not found!")
@@ -29,7 +34,8 @@ if(PYTHON_MODULE)
         target_link_libraries(ffbidx
                 PRIVATE fast_indexer
                 PUBLIC Python3::NumPy
-                PUBLIC Python3::Module)
+                PUBLIC Python3::Module
+                INTERFACE Eigen3::Eigen)
         set(ffbidx_INSTALL_PATH ${PYTHON_MODULE_PATH}/ffbidx)
         set(ffbidx_INSTALL_RPATH $ORIGIN)
         if (PYTHON_MODULE_RPATH)

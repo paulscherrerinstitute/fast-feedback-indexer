@@ -11,7 +11,7 @@ option(BUILD_FAST_INDEXER_STATIC "Build fast indexer static library" ON)
 if (BUILD_FAST_INDEXER OR BUILD_FAST_INDEXER_STATIC)
         set(THREADS_PREFER_PTHREAD_FLAG ON)
         find_package(Threads REQUIRED)
-        find_package(Eigen3 3.3 NO_MODULE)
+        find_package(Eigen3 3 NO_MODULE)
         if(NOT ${Eigen3_FOUND})
                 message(FATAL_ERROR
                         "Eigen3 library not found! Install a distro specific package, or use 'git submodule update' to download the submodule.")

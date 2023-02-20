@@ -822,6 +822,11 @@ namespace {
             return log2f(x);
         }
 
+        __device__ __forceinline__ static float exp2(const float x) noexcept
+        {
+            return exp2f(x);
+        }
+
         __device__ __forceinline__ static float sqrt(const float x) noexcept
         {
             return sqrtf(x);
@@ -1256,16 +1261,17 @@ namespace {
     {
         float_type sval = float_type{0.f};
         float_type rest = float_type{0.f};
+        unsigned n_good = 0u;
 
-        const float_type t_vl = float_type{1.f} / vlength;
         const float_type delta = crt.delta;
         for (unsigned i=0u; i<n_spots; i++) {
             const float_type s[3] = { sx[i], sy[i], sz[i] };
-            const float_type dp = dot(v, s);
-            const float_type dv = util<float_type>::log2(trim(crt, dist2int(t_vl * dp)) + delta);
+            const float_type d = dist2int(vlength * dot(v, s));
+            n_good += (d < crt.trimh) ? 1u : 0u;
+            const float_type dv = util<float_type>::log2(trim(crt, d) + delta);
             ksum(sval, rest, dv);
         }
-        return sval;
+        return util<float_type>::exp2(sval / (float_type)n_spots) - delta - (float_type)n_good;
     }
 
     // sum(s ∈ spots) sum(log2(trim[triml..trimh](sqrt(sum[i=a,b,c](dist2int(s 🞄 vi / |vi|²)²))) + delta))
@@ -1282,20 +1288,20 @@ namespace {
     {
         float_type sval = float_type{0.f};
         float_type rest = float_type{0.f};
-        constexpr float_type f1{1.f};
-        const float_type ilz = f1 / lz;
-        const float_type ila2 = f1 / norm2(a);
-        const float_type ilb2 = f1 / norm2(b);
+        unsigned n_good = 0u;
+
         const float_type delta = crt.delta;
         for (unsigned i=0u; i<n_spots; i++) {
             const float_type s[3] = { sx[i], sy[i], sz[i] };
-            const float_type cc = dist2int(ilz * dot(z, s));
-            const float_type ca = dist2int(ila2 * dot(a, s));
-            const float_type cb = dist2int(ilb2 * dot(b, s));
-            const float_type dv = util<float_type>::log2(trim(crt, util<float_type>::norm(cc, ca, cb)) + delta);
+            const float_type cc = dist2int(lz * dot(z, s));
+            const float_type ca = dist2int(dot(a, s));
+            const float_type cb = dist2int(dot(b, s));
+            const float_type dn = util<float_type>::norm(cc, ca, cb);
+            n_good += (dn < crt.trimh) ? 1u : 0u;
+            const float_type dv = util<float_type>::log2(trim(crt, dn) + delta);
             ksum(sval, rest, dv);
         }
-        return sval;
+        return util<float_type>::exp2(sval / (float_type)n_spots) - delta - (float_type)n_good;
     }
 
     // -----------------------------------

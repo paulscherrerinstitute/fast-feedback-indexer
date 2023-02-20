@@ -2,6 +2,7 @@
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include <Python.h>
 #include <numpy/ndarrayobject.h>
+#include <Eigen/Core>
 #include <iostream>
 #include <sstream>
 #include <limits>
@@ -9,7 +10,8 @@
 #include <map>
 #include <exception>
 #include <stdexcept>
-#include "indexer.h"
+#include <string>
+#include "refine.h"
 
 namespace {
     using indexer_t = fast_feedback::indexer<float>;
@@ -63,15 +65,30 @@ namespace {
     {
         using std::numeric_limits;
 
-        constexpr const char* kw[] = {"handle", "length_threshold", "triml", "trimh", "delta", "num_sample_points", "n_output_cells", "n_input_cells", "data", nullptr};
-        double length_threshold, triml, trimh, delta;
-        long handle, num_sample_points, n_output_cells, n_input_cells;
+        constexpr const char* kw[] = {"handle", "data",
+                                      "method", "length_threshold", "triml", "trimh", "delta", "num_sample_points", "n_output_cells", "n_input_cells",
+                                      "contraction", "min_spots", "n_iter",
+                                      nullptr};
+        long handle;
         PyArrayObject* ndarray;
-        if (PyArg_ParseTupleAndKeywords(args, kwds, "lddddlllO!", (char**)kw, &handle, &length_threshold, &triml, &trimh, &delta, &num_sample_points, &n_output_cells, &n_input_cells, &PyArray_Type, &ndarray) == 0)
+        const char* method = "ifss";
+        double length_threshold=1e-9, triml=.05, trimh=.15, delta=.1;
+        long num_sample_points=32*1024, n_output_cells=1, n_input_cells=1;
+        double contraction=.8;
+        long min_spots=6, n_iter=15;
+        if (PyArg_ParseTupleAndKeywords(args, kwds, "lO!|sddddllldll", (char**)kw, &handle, &PyArray_Type, &ndarray,
+                                        &method, &length_threshold, &triml, &trimh, &delta, &num_sample_points, &n_output_cells, &n_input_cells,
+                                        &contraction, &min_spots, &n_iter) == 0)
             return nullptr;
 
         if (handle < 0 || handle > numeric_limits<unsigned>::max()) {
             PyErr_SetString(PyExc_ValueError, "handle out of bounds for an unsigned integer");
+            return nullptr;
+        }
+
+        const std::string smethod{method};
+        if ((smethod != "raw") && (smethod != "ifss") && (smethod != "ifse")) {
+            PyErr_SetString(PyExc_ValueError, "method must be either raw, ifss, or ifse");
             return nullptr;
         }
 
@@ -90,8 +107,8 @@ namespace {
             return nullptr;
         }
 
-        if (delta <= .0) {
-            PyErr_SetString(PyExc_ValueError, "delta <= 0");
+        if (delta + triml <= .0) {
+            PyErr_SetString(PyExc_ValueError, "delta + triml <= 0");
             return nullptr;
         }
 
@@ -107,6 +124,26 @@ namespace {
 
         if (n_input_cells < 0 || n_input_cells > numeric_limits<unsigned>::max()) {
             PyErr_SetString(PyExc_ValueError, "n_input_cells out of bounds for an unsigned integer");
+            return nullptr;
+        }
+
+        if (contraction <= .0) {
+            PyErr_SetString(PyExc_ValueError, "contraction parameter <= 0");
+            return nullptr;
+        }
+
+        if (smethod == "ifss" && contraction >= 1.) {
+            PyErr_SetString(PyExc_ValueError, "contraction parameter >= 1");
+            return nullptr;
+        }
+
+        if (min_spots < 4 || min_spots > numeric_limits<unsigned>::max()) {
+            PyErr_SetString(PyExc_ValueError, "min_spots outside of [4..max_uint]");
+            return nullptr;
+        }
+
+        if (n_iter < 0 || n_iter > numeric_limits<unsigned>::max()) {
+            PyErr_SetString(PyExc_ValueError, "n_iter out of bounds for an unsigned integer");
             return nullptr;
         }
 
@@ -196,10 +233,27 @@ namespace {
             fast_feedback::memory_pin pin_out{out_data, (std::size_t)out_bytes};
             fast_feedback::memory_pin pin_in{in_data, (std::size_t)in_bytes};
 
-            const fast_feedback::input<float> input{&in_data[0], &in_data[n_vecs], &in_data[2*n_vecs], (unsigned)n_input_cells, (unsigned)(n_vecs - 3*n_input_cells)};
+            unsigned n_spots = n_vecs - 3*n_input_cells;
+            const fast_feedback::input<float> input{&in_data[0], &in_data[n_vecs], &in_data[2*n_vecs], (unsigned)n_input_cells, n_spots};
             fast_feedback::output<float> output{&out_data[0], &out_data[3*n_out], &out_data[6*n_out], &score_data[0], n_out};
 
             indexer->index(input, output, crt);
+
+            if (smethod != "raw") {
+                    using namespace Eigen;
+                    using namespace fast_feedback::refine;
+                    Map<MatrixX3f> coords{in_data, n_vecs, 3};
+                    Map<MatrixX3f> cells{out_data, 3*n_out, 3};
+                    Map<VectorXf> scores{score_data, n_out};
+
+                if (smethod == "ifss") {
+                    config_ifss<float> cifss{(float)contraction, (unsigned)min_spots};
+                    indexer_ifss<float>::refine(coords, cells, scores, indexer->cpers, crt, cifss, n_spots);
+                } else { // ifse
+                    config_ifse<float> cifse{(float)contraction, (unsigned)min_spots, (unsigned)n_iter};
+                    indexer_ifse<float>::refine(coords, cells, scores, indexer->cpers, crt, cifse, n_spots);
+                }
+            }
         } catch (std::exception& ex) {
             PyErr_SetString(PyExc_RuntimeError, ex.what());
             return nullptr;

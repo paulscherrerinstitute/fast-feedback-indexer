@@ -34,8 +34,7 @@ Author: hans-christian.stadler@psi.ch
 #include <stdexcept>
 #include <iostream>
 #include <vector>
-#include <Eigen/Core>
-#include <Eigen/LU>
+#include <array>
 
 namespace {
 
@@ -132,14 +131,6 @@ namespace simple_data {
                 unit_cell[0] = read_coordinates<float_type, error_function>(line, error);
                 unit_cell[1] = read_coordinates<float_type, error_function>(line, error);
                 unit_cell[2] = read_coordinates<float_type, error_function>(line, error);
-                Eigen::Matrix<float_type, 3, 3> A;
-                A << unit_cell[0].x, unit_cell[1].x, unit_cell[2].x,
-                     unit_cell[0].y, unit_cell[1].y, unit_cell[2].y,
-                     unit_cell[0].z, unit_cell[1].z, unit_cell[2].z;
-                A = A.inverse().transpose();    // transform into reciprocal space
-                unit_cell[0].x = A(0,0); unit_cell[1].x = A(0,1); unit_cell[2].x = A(0,2);
-                unit_cell[0].y = A(1,0); unit_cell[1].y = A(1,1); unit_cell[2].y = A(1,2);
-                unit_cell[0].z = A(2,0); unit_cell[1].z = A(2,1); unit_cell[2].z = A(2,2);
             }
 
             do {

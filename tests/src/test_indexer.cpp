@@ -29,8 +29,7 @@ Author: hans-christian.stadler@psi.ch
 #include <vector>
 #include <array>
 #include <thread>
-#include <Eigen/Core>
-#include <Eigen/LU>
+#include <cmath>
 #include "simple_data.h"
 #include "indexer.h"
 
@@ -106,7 +105,7 @@ int main (int argc, char *argv[])
         indexer.index(in, out, crt);                    // run indexer
         parallel.join();
 
-        constexpr float max_score = -200.0f;            // maximum acceptable output score
+        constexpr float max_score = -100.0f;            // maximum acceptable output score
         std::cout << "score: " << out.score[0];
         if (out.score[0] > max_score) {
             std::cout << " > " << max_score << " => bad\n";
@@ -116,19 +115,14 @@ int main (int argc, char *argv[])
         }
         
         constexpr float delta = .2f;                    // it's a match if spot indices are all around delta from an integer
-        constexpr unsigned n_matches = 20u;             // accept output cell if it matches so many spots
+        constexpr unsigned n_matches = 100u;            // accept output cell if it matches so many spots
         unsigned spots_matched = 0u;
-        Eigen::Matrix<float, 3, 3> B;                   // unit cell base
-        B << out.x[0], out.x[1], out.x[2],
-             out.y[0], out.y[1], out.y[2],
-             out.z[0], out.z[1], out.z[2];
-        std::cout << "cell:\n" << B << '\n';
-        Eigen::Matrix<float, 3, 1> s;                   // spot
 
         for (const auto& spot : data.spots) {          // check for spots that match
-            s << spot.x, spot.y, spot.z;
-            auto m = B.inverse() * s;
-            std::cout << "spot: " << s[0] << ' ' << s[1] << ' ' << s[2] << " --> " << m[0] << ' ' << m[1] << ' ' << m[2]; 
+            std::array<float, 3> m{};
+            for (unsigned i=0; i<3u; i++)
+                m[i] = spot.x * out.x[0] + spot.y * out.x[1] + spot.z * out.x[2];
+            std::cout << "spot: " << spot.x << ' ' << spot.y << ' ' << spot.z << " --> " << m[0] << ' ' << m[1] << ' ' << m[2]; 
             int i = 0;
             while (i<3) {
                 if (std::abs(m[i] - std::round(m[i])) > delta)

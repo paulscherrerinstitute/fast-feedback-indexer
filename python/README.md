@@ -31,29 +31,35 @@ Handle to the indexer object
 
 This allocates space on the GPU for all the data structures used in the computation. The GPU device is parsed from the *INDEXER_GPU_DEVICE* environment variable. If it is not set, the current GPU device is used.
 
-#### ffbidx.index(handle, length_threshold, triml, trimh, num_sample_points, n_output_cells, n_input_cells, data)
+#### ffbidx.index(handle, data, method='ifss', length_threshold=1e-9, triml=.05, trimh=.15, delta0.1, num_sample_points=32*1024, n_output_cells=1, n_input_cells=1, contraction=.8, min_spots=6, n_iter=15)
 
 Run the fast feedback indexer on given 3D space input cells and spots packed in the **data** numpy array and return oriented cells and their scores.
-The cell score is $\sum_{v \in cell} \sum_{s \in spots} \log_2(trim(dist(\frac{v \cdot s}{|v|^2})) + delta)$, where $trim$ stands for trimming and $dist$ for distance to nearest integer.
+The cell score is $-#\{s \in spots: dist(s, clp) < h\} + 2^{\frac{\sum_{s \in spots} \log_2(trim_l^h(dist(s, clp)) + delta))}{#spots}} - delta$, where $trim$ stands for trimming, $dist(s, clp)$ for the distance of a spot to the closest lattice point, and $l,h$ are the lower and higher trimming thresholds.
 
 **Return**:
 
 A tuple of numpy arrays *(output_cells, scores)*
 
-- **output_cells** is an array with *N* computed cells in 3D space with shape *(3, 3N)*. The first cell is *\[:,:3\]* and it's first vector is *\[:,0\]*.
+- **output_cells** is an array with *N* computed cells in 3D space with shape *(3, 3N), order='C'* or *(3N, 3), order='F'*. The first cell is *\[:,:3\]* and it's first vector is *\[:,0\]* with order='C', or *\[:3,:\]* and *\[0,:\]* with order='F'.
 - **scores** is a one dimensional numpy array of shape *(N,)* containing the score (objective function value) for each output cell.
 
 **Arguments**:
 
 - **handle** is the indexer object handle
+- **data** array of vector coordinates. In memory, all x coordinates followed by all y coordinates and finally all z coordinates. If there are *M* input cells and *K* spots, the first *3M* vectors are the given unit cells in real space, the rest are *K* spots in reciprocal space. The array shape is either *(3, 3(3M+K)), order='C'*, or *(3(3M+K), 3), order='F'*.
+- **method** refinement method: one of *'raw'* (no refinement), *'ifss'* (iterative fit to selected spots), *'ifse'* (iterative fit to selected errors)
 - **length_threshold**: consider input cell vector length the same if they differ by less than this
 - **triml**: >= 0, low trim value, 0 means no trimming
 - **trimh**: <= 0.5, high trim value, 0.5 means no trimming
-- **delta**: > 0, $\log_2$ curve position, lower values will be more selective in choosing close spots
-- **num_sample_points** is the number of sampling points per length on the half sphere
+- **delta**: > 0 - triml, $\log_2$ curve position, lower values will be more selective in choosing close spots
+- **num_sample_points** is the number of sampling points per sample vector length on the half sphere
 - **n_output_cells** is the number of desired output cells
 - **n_input_cells** is the number of given unit cells *N* in the data array
-- **data** array of vectors with shape *(3,3N+S)*, the first *3N* vectors are the given unit cells, the rest are spots (all in 3D space, the origin is implicitly assumed to be part of the lattice)
+- **contraction** threshold contraction parameter for method='ifss', contraction speed parameter for method='ifse'
+
+**TODO**:
+
+Describe methods.
 
 #### ffbidx.release(handle)
 

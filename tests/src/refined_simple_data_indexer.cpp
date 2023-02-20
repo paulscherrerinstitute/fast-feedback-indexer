@@ -28,7 +28,6 @@ Author: hans-christian.stadler@psi.ch
 #include <sstream>
 #include <stdexcept>
 #include <chrono>
-#include <Eigen/Dense>
 #include "simple_data.h"
 #include "refine.h"
 
@@ -61,7 +60,7 @@ int main (int argc, char *argv[])
 
     try {
         if ((argc <= 8) || ((std::string{argv[6]} == "ifse") && (argc <= 9)))
-            throw std::runtime_error("missing arguments, use\n<file name> <max number of spots> <max number of output cells> <number of kept candidate vectors> <number of half sphere sample points> ((lsq <threshold contraction> <min spots>) | (ifse <contraction speed> <min spots> <max iterations>))");
+            throw std::runtime_error("missing arguments, use\n<file name> <max number of spots> <max number of output cells> <number of kept candidate vectors> <number of half sphere sample points> ((ifss <threshold contraction> <min spots>) | (ifse <contraction speed> <min spots> <max iterations>))");
 
         fast_feedback::config_runtime<float> crt{};         // default runtime config
         {
@@ -105,29 +104,29 @@ int main (int argc, char *argv[])
 
         auto t0 = clock::now();
 
-        if (method == "lsq") {
-            fast_feedback::refine::config_lsq clsq{};   // default lsq refinement config
+        if (method == "ifss") {
+            fast_feedback::refine::config_ifss cifss{};   // default ifss refinement config
             {
                 {
                     std::istringstream iss(argv[7]);
-                    iss >> clsq.threshold_contraction;
+                    iss >> cifss.threshold_contraction;
                     if (! iss)
                         throw std::runtime_error("unable to parse sixth argument: threshold contraction");
-                    std::cout << "threshold_contraction=" << clsq.threshold_contraction << '\n';
-                    if ((clsq.threshold_contraction <= .0f) || (clsq.threshold_contraction >= 1.f))
+                    std::cout << "threshold_contraction=" << cifss.threshold_contraction << '\n';
+                    if ((cifss.threshold_contraction <= .0f) || (cifss.threshold_contraction >= 1.f))
                         throw std::runtime_error("threshold_contraction must be in range (0..1)");
                 }
                 {
                     std::istringstream iss(argv[8]);
-                    iss >> clsq.min_spots;
+                    iss >> cifss.min_spots;
                     if (! iss)
                         throw std::runtime_error("unable to parse seventh argument: minimum number of spots for fitting");
-                    std::cout << "min_spots=" << clsq.min_spots << '\n';
-                    if (clsq.min_spots <= 3u)
+                    std::cout << "min_spots=" << cifss.min_spots << '\n';
+                    if (cifss.min_spots <= 3u)
                         throw std::runtime_error("min_spots must be >= 3");
                 }
             }
-            indexer_p = new fast_feedback::refine::indexer_lsq{cpers, crt, clsq};
+            indexer_p = new fast_feedback::refine::indexer_ifss{cpers, crt, cifss};
         } else if (method == "ifse") {
             fast_feedback::refine::config_ifse cifse{}; // default ifse refinement config
             {
@@ -161,7 +160,7 @@ int main (int argc, char *argv[])
             }
             indexer_p = new fast_feedback::refine::indexer_ifse{cpers, crt, cifse};
         } else {
-            throw std::runtime_error("indexer method must be one of 'lsq', 'ifse'");
+            throw std::runtime_error("indexer method must be one of 'ifss', 'ifse'");
         }
 
         fast_feedback::refine::indexer<float>& indexer = *indexer_p;
