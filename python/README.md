@@ -34,7 +34,7 @@ This allocates space on the GPU for all the data structures used in the computat
 #### ffbidx.index(handle, data, method='ifss', length_threshold=1e-9, triml=.05, trimh=.15, delta0.1, num_sample_points=32*1024, n_output_cells=1, n_input_cells=1, contraction=.8, min_spots=6, n_iter=15)
 
 Run the fast feedback indexer on given 3D space input cells and spots packed in the **data** numpy array and return oriented cells and their scores.
-The cell score is $-#\{s \in spots: dist(s, clp) < h\} + 2^{\frac{\sum_{s \in spots} \log_2(trim_l^h(dist(s, clp)) + delta))}{#spots}} - delta$, where $trim$ stands for trimming, $dist(s, clp)$ for the distance of a spot to the closest lattice point, and $l,h$ are the lower and higher trimming thresholds.
+The cell score is $-\#\{s \in spots: dist(s, clp) < h\} + 2^{\frac{\sum_{s \in spots} \log_2(trim_l^h(dist(s, clp)) + delta))}{\#spots}} - delta$, where $trim$ stands for trimming, $dist(s, clp)$ for the distance of a spot to the closest lattice point, and $l,h$ are the lower and higher trimming thresholds.
 
 **Return**:
 
