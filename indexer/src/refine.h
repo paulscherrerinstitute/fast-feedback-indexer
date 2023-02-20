@@ -377,12 +377,18 @@ namespace fast_feedback {
                         FullPivHouseholderQR<Mx3> qr{sel.select(spots, .0f)};
                         cell = qr.solve(sel.select(miller, .0f));
                     } while (true);
-                    cells.block(3u * j, 0u, 3u, 3u) = cell.transpose();
-                    ArrayX<float_type> dist = resid.rowwise().norm().array();
-                    std::make_heap(std::begin(dist), std::end(dist), std::greater<>{});
+                    ArrayX<float_type> dist = resid.rowwise().norm();
+                    std::make_heap(std::begin(dist), std::end(dist));
                     for (unsigned i=0u; i<cifss.min_spots-1u; i++)
-                        std::pop_heap(std::begin(dist), std::end(dist) - i, std::greater<>{});
+                        std::pop_heap(std::begin(dist), std::end(dist) - i);
                     scores(j) = *(std::end(dist) - cifss.min_spots);
+                    LOG_START(logger::l_debug) {
+                        logger::debug << stanza << "refined " << j << ", score: " << scores(j) << '\n'
+                                      << stanza << cell(0,0) << ' ' << cell(0,1) << ' ' << cell(0,2) << '\n'
+                                      << stanza << cell(1,0) << ' ' << cell(1,1) << ' ' << cell(1,2) << '\n'
+                                      << stanza << cell(2,0) << ' ' << cell(2,1) << ' ' << cell(2,2) << '\n';
+                    } LOG_END;
+                    cells.block(3u * j, 0u, 3u, 3u) = cell.transpose();
                 }
             }
 
@@ -477,21 +483,22 @@ namespace fast_feedback {
                 Mx3 miller;
                 Mx3 spots = coords.block(3u * cpers.max_input_cells, 0u, nspots, 3u);
                 for (unsigned j=0u; j<cpers.max_output_cells; j++) {
-                    M3 cell = cells.block(3u * j, 0u, 3u, 3u).transpose().inverse();  // cell: col vectors
-                    const float_type score = indexer<float_type>::score_parts(scores[j]).second;
+                    const float_type score = indexer<float_type>::score_parts(scores(j)).second;
                     LOG_START(logger::l_debug) {
-                        logger::debug << stanza << "cell " << j << ", score: " << scores[j] << " (normalized: " << score << ")\n"
+                        M3 cell = cells.block(3u * j, 0u, 3u, 3u);
+                        logger::debug << stanza << "cell " << j << ", score: " << scores(j) << " (normalized: " << score << ")\n"
                                       << stanza << cell(0,0) << ' ' << cell(0,1) << ' ' << cell(0,2) << '\n'
                                       << stanza << cell(1,0) << ' ' << cell(1,1) << ' ' << cell(1,2) << '\n'
                                       << stanza << cell(2,0) << ' ' << cell(2,1) << ' ' << cell(2,2) << '\n';
                     } LOG_END;
+                    M3 cell = cells.block(3u * j, 0u, 3u, 3u).transpose().inverse();  // cell: col vectors
                     for (unsigned i=0; i<cifse.max_iter; i++) {
                         miller = round((spots * cell.inverse()).array());
                         resid = spots - miller * cell;
-                        dist = resid.rowwise().norm().array();
+                        dist = resid.rowwise().norm();
                         auto [min, max] = std::minmax_element(std::cbegin(dist), std::cend(dist));
                         const float_type threshold = *min + (*max - *min) * score * cifse.contraction_speed / (i + cifse.contraction_speed);
-                        below = (dist < threshold);
+                        below = (dist.array() < threshold);
                         LOG_START(logger::l_debug) {
                             logger::debug << stanza << i << " threshold: " << threshold << " spots: " << below.count() << '\n';
                         } LOG_END;
@@ -503,10 +510,17 @@ namespace fast_feedback {
                         cell += qr.solve(sel.select(resid, .0f));
                     }
                     cells.block(3u * j, 0u, 3u, 3u) = cell.transpose().inverse();
-                    std::make_heap(std::begin(dist), std::end(dist), std::greater<>{});
+                    std::make_heap(std::begin(dist), std::end(dist));
                     for (unsigned i=0u; i<cifse.min_spots-1u; i++)
-                        std::pop_heap(std::begin(dist), std::end(dist) - i, std::greater<>{});
+                        std::pop_heap(std::begin(dist), std::end(dist) - i);
                     scores(j) = *(std::end(dist) - cifse.min_spots);
+                    LOG_START(logger::l_debug) {
+                        cell = cells.block(3u * j, 0u, 3u, 3u);
+                        logger::debug << stanza << "refined " << j << ", score: " << scores(j) << '\n'
+                                      << stanza << cell(0,0) << ' ' << cell(0,1) << ' ' << cell(0,2) << '\n'
+                                      << stanza << cell(1,0) << ' ' << cell(1,1) << ' ' << cell(1,2) << '\n'
+                                      << stanza << cell(2,0) << ' ' << cell(2,1) << ' ' << cell(2,2) << '\n';
+                    } LOG_END;
                 }
             }
 
