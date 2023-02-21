@@ -31,6 +31,7 @@ Author: hans-christian.stadler@psi.ch
 #include <exception.h>
 #include <numeric>
 #include <functional>
+#include <algorithm>
 #include "indexer.h"
 #include "log.h"
 
@@ -377,11 +378,16 @@ namespace fast_feedback {
                         FullPivHouseholderQR<Mx3> qr{sel.select(spots, .0f)};
                         cell = qr.solve(sel.select(miller, .0f));
                     } while (true);
-                    ArrayX<float_type> dist = resid.rowwise().norm();
-                    std::make_heap(std::begin(dist), std::end(dist));
-                    for (unsigned i=0u; i<cifss.min_spots-1u; i++)
-                        std::pop_heap(std::begin(dist), std::end(dist) - i);
-                    scores(j) = *(std::end(dist) - cifss.min_spots);
+                    {
+                        ArrayX<float_type> dist = resid.rowwise().norm();
+                        const auto front = std::begin(dist);
+                        auto back = std::end(dist);
+                        const std::greater<float> greater{};
+                        std::make_heap(front, back, greater);
+                        for (unsigned i=0u; i<=cifss.min_spots; i++)
+                            std::pop_heap(front, back, greater), --back;
+                        scores(j) = *back;
+                    }
                     LOG_START(logger::l_debug) {
                         logger::debug << stanza << "refined " << j << ", score: " << scores(j) << '\n'
                                       << stanza << cell(0,0) << ' ' << cell(0,1) << ' ' << cell(0,2) << '\n'
@@ -482,6 +488,7 @@ namespace fast_feedback {
                 Mx3 resid;
                 Mx3 miller;
                 Mx3 spots = coords.block(3u * cpers.max_input_cells, 0u, nspots, 3u);
+                VectorX<unsigned> argsort(nspots);
                 for (unsigned j=0u; j<cpers.max_output_cells; j++) {
                     const float_type score = indexer<float_type>::score_parts(scores(j)).second;
                     LOG_START(logger::l_debug) {
@@ -510,10 +517,16 @@ namespace fast_feedback {
                         cell += qr.solve(sel.select(resid, .0f));
                     }
                     cells.block(3u * j, 0u, 3u, 3u) = cell.transpose().inverse();
-                    std::make_heap(std::begin(dist), std::end(dist));
-                    for (unsigned i=0u; i<cifse.min_spots-1u; i++)
-                        std::pop_heap(std::begin(dist), std::end(dist) - i);
-                    scores(j) = *(std::end(dist) - cifse.min_spots);
+                    {
+                        const auto front = std::begin(dist);
+                        auto back = std::end(dist);
+                        const std::greater<float> greater{};
+                        std::make_heap(front, back, greater);
+                        for (unsigned i=0u; i<=cifse.min_spots; i++)
+                            std::pop_heap(front, back, greater), --back;
+                        scores(j) = *back;
+
+                    }
                     LOG_START(logger::l_debug) {
                         cell = cells.block(3u * j, 0u, 3u, 3u);
                         logger::debug << stanza << "refined " << j << ", score: " << scores(j) << '\n'
