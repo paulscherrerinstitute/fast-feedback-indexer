@@ -1261,17 +1261,18 @@ namespace {
     {
         float_type sval = float_type{0.f};
         float_type rest = float_type{0.f};
-        unsigned n_good = 0u;
+        // unsigned n_good = 0u;
 
         const float_type delta = crt.delta;
         for (unsigned i=0u; i<n_spots; i++) {
             const float_type s[3] = { sx[i], sy[i], sz[i] };
             const float_type d = dist2int(vlength * dot(v, s));
-            n_good += (d < crt.trimh) ? 1u : 0u;
+            // n_good += (d < crt.trimh) ? 1u : 0u;
             const float_type dv = util<float_type>::log2(trim(crt, d) + delta);
             ksum(sval, rest, dv);
         }
-        return util<float_type>::exp2(sval / (float_type)n_spots) - delta - (float_type)n_good;
+        // return util<float_type>::exp2(sval / (float_type)n_spots) - delta - (float_type)n_good;
+        return sval;
     }
 
     // sum(s ∈ spots) sum(log2(trim[triml..trimh](sqrt(sum[i=a,b,c](dist2int(s 🞄 vi / |vi|²)²))) + delta))
