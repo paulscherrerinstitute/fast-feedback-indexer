@@ -11,6 +11,25 @@ enable_testing()
 
 set(fast_feedback_indexer_ENV_SETUP "" CACHE INTERNAL ENV)
 
+set(SOURCE_VERSION_FILE "${CMAKE_CURRENT_BINARY_DIR}/source_version.txt")
+set(SOURCE_UNKNOWN_VERSION "unknown:non-git-version")
+if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+    find_package(Git)
+    if (GIT_FOUND)
+        add_custom_command(
+            COMMAND ${GIT_EXECUTABLE} describe --tags --always > "${SOURCE_VERSION_FILE}"
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            OUTPUT "${SOURCE_VERSION_FILE}"
+            VERBATIM)
+    else()
+        file(WRITE "${SOURCE_VERSION_FILE}" "${SOURCE_UNKNOWN_VERSION}")
+    endif()
+else()
+    file(WRITE "${SOURCE_VERSION_FILE}" "${SOURCE_UNKNOWN_VERSION}")
+endif()
+add_custom_target(source_version ALL
+  DEPENDS ${SOURCE_VERSION_FILE})
+
 if (EXISTS ${CMAKE_SOURCE_DIR}/eigen/CMakeLists.txt)
     add_subdirectory(eigen)
 endif()
