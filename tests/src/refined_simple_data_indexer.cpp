@@ -132,12 +132,12 @@ int main (int argc, char *argv[])
             {
                 {
                     std::istringstream iss(argv[7]);
-                    iss >> cifse.contraction_speed;
+                    iss >> cifse.threshold_contraction;
                     if (! iss)
                         throw std::runtime_error("unable to parse sixth argument: contraction speed for iterated fit to selected errors");
-                    std::cout << "contraction_speed=" << cifse.contraction_speed << '\n';
-                    if (cifse.contraction_speed <= .0f)
-                        throw std::runtime_error("contraction_speed must be positive");
+                    std::cout << "threshold_contraction=" << cifse.threshold_contraction << '\n';
+                    if (cifse.threshold_contraction <= .0f)
+                        throw std::runtime_error("threshold_contraction must be positive");
                 }
                 {
                     std::istringstream iss(argv[8]);

@@ -349,33 +349,25 @@ namespace fast_feedback {
                 using namespace Eigen;
                 using Mx3 = Matrix<float_type, Dynamic, 3>;
                 using M3 = Matrix<float_type, 3, 3>;
-                VectorX<bool> below;
-                Mx3 resid;
-                Mx3 miller;
+                VectorX<bool> below{nspots};
+                MatrixX3<bool> sel{nspots, 3u};
+                Mx3 resid{nspots, 3u};
+                Mx3 miller{nspots, 3u};
                 Mx3 spots = coords.block(3u * cpers.max_input_cells, 0u, nspots, 3u);
+                M3 cell;
                 for (unsigned j=0u; j<cpers.max_output_cells; j++) {
-                    M3 cell = cells.block(3u * j, 0u, 3u, 3u).transpose();  // cell: col vectors
+                    cell = cells.block(3u * j, 0u, 3u, 3u).transpose();  // cell: col vectors
                     float_type threshold = indexer<float_type>::score_parts(scores[j]).second;
-                    LOG_START(logger::l_debug) {
-                        logger::debug << stanza << "cell " << j << ", score: " << scores[j] << " (normalized: " << threshold << ")\n"
-                                      << stanza << cell(0,0) << ' ' << cell(0,1) << ' ' << cell(0,2) << '\n'
-                                      << stanza << cell(1,0) << ' ' << cell(1,1) << ' ' << cell(1,2) << '\n'
-                                      << stanza << cell(2,0) << ' ' << cell(2,1) << ' ' << cell(2,2) << '\n';
-                    } LOG_END;
                     do {
                         resid = spots * cell;   // coordinates in system <cell>
                         miller = round(resid.array());
                         resid -= miller;
                         below = (resid.rowwise().norm().array() < threshold);
-                        LOG_START(logger::l_debug) {
-                            logger::debug << stanza << "threshold: " << threshold << " spots: " << below.count() << '\n';
-                        } LOG_END;
                         if (below.count() < cifss.min_spots)
                             break;
                         threshold *= cifss.threshold_contraction;
-                        Matrix<bool, Dynamic, 3u> sel{below.size(), 3u};
                         sel.colwise() = below;
-                        FullPivHouseholderQR<Mx3> qr{sel.select(spots, .0f)};
+                        HouseholderQR<Mx3> qr{sel.select(spots, .0f)};
                         cell = qr.solve(sel.select(miller, .0f));
                     } while (true);
                     {
@@ -388,12 +380,6 @@ namespace fast_feedback {
                             std::pop_heap(front, back, greater), --back;
                         scores(j) = *back;
                     }
-                    LOG_START(logger::l_debug) {
-                        logger::debug << stanza << "refined " << j << ", score: " << scores(j) << '\n'
-                                      << stanza << cell(0,0) << ' ' << cell(0,1) << ' ' << cell(0,2) << '\n'
-                                      << stanza << cell(1,0) << ' ' << cell(1,1) << ' ' << cell(1,2) << '\n'
-                                      << stanza << cell(2,0) << ' ' << cell(2,1) << ' ' << cell(2,2) << '\n';
-                    } LOG_END;
                     cells.block(3u * j, 0u, 3u, 3u) = cell.transpose();
                 }
             }
@@ -438,9 +424,9 @@ namespace fast_feedback {
         // iterative fit to modified errors refinement indexer extra config
         template <typename float_type=float>
         struct config_ifse final {
-            float_type contraction_speed=.8;    // upper threshold will be multiplied by contraction_speed / (iteration + contraction_speed)
-            unsigned min_spots=6;               // minimum number of spots to fit against
-            unsigned max_iter=10;               // max number of iterations
+            float_type threshold_contraction=.8;    // upper threshold will be multiplied by contraction_speed / (iteration + contraction_speed)
+            unsigned min_spots=6;                   // minimum number of spots to fit against
+            unsigned max_iter=15;                   // max number of iterations
         };
 
         // iterative fit to selected errors refinement indexer
@@ -483,41 +469,29 @@ namespace fast_feedback {
                 using namespace Eigen;
                 using Mx3 = Matrix<float_type, Dynamic, 3>;
                 using M3 = Matrix<float_type, 3, 3>;
-                VectorX<bool> below;
-                ArrayX<float_type> dist;
-                Mx3 resid;
-                Mx3 miller;
+                VectorX<bool> below{nspots};
+                MatrixX3<bool> sel{nspots, 3u};
+                Mx3 resid{nspots, 3u};
+                Mx3 miller{nspots, 3u};
                 Mx3 spots = coords.block(3u * cpers.max_input_cells, 0u, nspots, 3u);
-                VectorX<unsigned> argsort(nspots);
+                M3 cell;
                 for (unsigned j=0u; j<cpers.max_output_cells; j++) {
-                    const float_type score = indexer<float_type>::score_parts(scores(j)).second;
-                    LOG_START(logger::l_debug) {
-                        M3 cell = cells.block(3u * j, 0u, 3u, 3u);
-                        logger::debug << stanza << "cell " << j << ", score: " << scores(j) << " (normalized: " << score << ")\n"
-                                      << stanza << cell(0,0) << ' ' << cell(0,1) << ' ' << cell(0,2) << '\n'
-                                      << stanza << cell(1,0) << ' ' << cell(1,1) << ' ' << cell(1,2) << '\n'
-                                      << stanza << cell(2,0) << ' ' << cell(2,1) << ' ' << cell(2,2) << '\n';
-                    } LOG_END;
-                    M3 cell = cells.block(3u * j, 0u, 3u, 3u).transpose().inverse();  // cell: col vectors
-                    for (unsigned i=0; i<cifse.max_iter; i++) {
-                        miller = round((spots * cell.inverse()).array());
-                        resid = spots - miller * cell;
-                        dist = resid.rowwise().norm();
-                        auto [min, max] = std::minmax_element(std::cbegin(dist), std::cend(dist));
-                        const float_type threshold = *min + (*max - *min) * score * cifse.contraction_speed / (i + cifse.contraction_speed);
-                        below = (dist.array() < threshold);
-                        LOG_START(logger::l_debug) {
-                            logger::debug << stanza << i << " threshold: " << threshold << " spots: " << below.count() << '\n';
-                        } LOG_END;
+                    cell = cells.block(3u * j, 0u, 3u, 3u).transpose();  // cell: col vectors
+                    float_type threshold = indexer<float_type>::score_parts(scores[j]).second;
+                    for (unsigned niter=0; niter<cifse.max_iter; niter++) {
+                        resid = spots * cell;   // coordinates in system <cell>
+                        miller = round(resid.array());
+                        resid -= miller;
+                        below = (resid.rowwise().norm().array() < threshold);
                         if (below.count() < cifse.min_spots)
                             break;
-                        Matrix<bool, Dynamic, 3u> sel{below.size(), 3u};
+                        threshold *= cifse.threshold_contraction;
                         sel.colwise() = below;
-                        FullPivHouseholderQR<Mx3> qr{sel.select(miller, .0f)};
-                        cell += qr.solve(sel.select(resid, .0f));
+                        HouseholderQR<Mx3> qr{sel.select(spots, .0f)};
+                        cell -= qr.solve(sel.select(resid, .0f));
                     }
-                    cells.block(3u * j, 0u, 3u, 3u) = cell.transpose().inverse();
                     {
+                        ArrayX<float_type> dist = resid.rowwise().norm();
                         const auto front = std::begin(dist);
                         auto back = std::end(dist);
                         const std::greater<float> greater{};
@@ -525,15 +499,8 @@ namespace fast_feedback {
                         for (unsigned i=0u; i<=cifse.min_spots; i++)
                             std::pop_heap(front, back, greater), --back;
                         scores(j) = *back;
-
                     }
-                    LOG_START(logger::l_debug) {
-                        cell = cells.block(3u * j, 0u, 3u, 3u);
-                        logger::debug << stanza << "refined " << j << ", score: " << scores(j) << '\n'
-                                      << stanza << cell(0,0) << ' ' << cell(0,1) << ' ' << cell(0,2) << '\n'
-                                      << stanza << cell(1,0) << ' ' << cell(1,1) << ' ' << cell(1,2) << '\n'
-                                      << stanza << cell(2,0) << ' ' << cell(2,1) << ' ' << cell(2,2) << '\n';
-                    } LOG_END;
+                    cells.block(3u * j, 0u, 3u, 3u) = cell.transpose();
                 }
             }
 
