@@ -9,7 +9,7 @@ project(simple_data
 option(BUILD_SIMPLE_DATA_READER "Build reader API for simple data" OFF)
 
 if(BUILD_SIMPLE_DATA_READER)
-        set(simple_data_PUB_HEADER_LIST simple_data.h)
+        set(simple_data_PUB_HEADER_LIST ffbidx/simple_data.h)
         add_library(simple_data INTERFACE)
         set_target_properties(simple_data PROPERTIES
                 VERSION 1.0.0)

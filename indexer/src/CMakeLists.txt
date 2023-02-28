@@ -20,22 +20,23 @@ if (BUILD_FAST_INDEXER OR BUILD_FAST_INDEXER_STATIC)
                 set(CMAKE_CUDA_ARCHITECTURES "75;80")
         endif()
         find_package(CUDAToolkit REQUIRED)
+        message("CMAKE_CUDA_ARCHITECTURES=${CMAKE_CUDA_ARCHITECTURES}")
         set(fast_indexer_PUB_HEADER_LIST
-                indexer.h
-                refine.h
-                log.h
-                exception.h)
+                ffbidx/indexer.h
+                ffbidx/refine.h
+                ffbidx/log.h
+                ffbidx/exception.h)
         cmake_path(ABSOLUTE_PATH CMAKE_INSTALL_LIBDIR
                 BASE_DIRECTORY ${CMAKE_INSTALL_PREFIX}
                 NORMALIZE
                 OUTPUT_VARIABLE ffbidx_LIBRARY_PATH)
         set(ffbidx_PKG_PATH ${CMAKE_INSTALL_DATADIR}/ffbidx/pkgconfig)
-        set(ffbidx_INCLUDE_PATH ${CMAKE_INSTALL_INCLUDEDIR}/ffbidx)
+        set(ffbidx_INCLUDE_PATH ${CMAKE_INSTALL_INCLUDEDIR})
 endif()
 
 if(BUILD_FAST_INDEXER)
         add_library(fast_indexer SHARED
-                indexer_gpu.cu indexer_gpu.h
+                indexer_gpu.cu ffbidx/indexer_gpu.h
                 indexer.cpp
                 log.cpp
                 ${fast_indexer_PUB_HEADER_LIST})
@@ -67,7 +68,7 @@ endif(BUILD_FAST_INDEXER)
 
 if(BUILD_FAST_INDEXER_STATIC)
         add_library(fast_indexer_static STATIC
-                indexer_gpu.cu indexer_gpu.h
+                indexer_gpu.cu ffbidx/indexer_gpu.h
                 indexer.cpp
                 log.cpp
                 ${fast_indexer_PUB_HEADER_LIST})

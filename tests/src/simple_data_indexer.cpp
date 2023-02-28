@@ -30,8 +30,8 @@ Author: hans-christian.stadler@psi.ch
 #include <stdexcept>
 #include <vector>
 #include <array>
-#include "simple_data.h"
-#include "indexer.h"
+#include "ffbidx/simple_data.h"
+#include "ffbidx/indexer.h"
 
 namespace {
 

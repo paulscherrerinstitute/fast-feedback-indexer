@@ -26,7 +26,7 @@ Author: hans-christian.stadler@psi.ch
 #ifndef INDEXER_GPU_H
 #define INDEXER_GPU_H
 
-#include "indexer.h"
+#include "ffbidx/indexer.h"
 
 namespace gpu {
     using namespace fast_feedback;

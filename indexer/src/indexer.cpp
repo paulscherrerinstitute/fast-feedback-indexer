@@ -23,9 +23,9 @@ DAMAGE.
 Author: hans-christian.stadler@psi.ch
 */
 
-#include "exception.h"
-#include "indexer.h"
-#include "indexer_gpu.h"
+#include "ffbidx/exception.h"
+#include "ffbidx/indexer.h"
+#include "ffbidx/indexer_gpu.h"
 
 namespace fast_feedback {
 

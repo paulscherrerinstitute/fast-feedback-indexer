@@ -25,7 +25,7 @@ Author: hans-christian.stadler@psi.ch
 
 #include <iostream>
 #include <string>
-#include "exception.h"
+#include "ffbidx/exception.h"
 
 namespace {
     fast_feedback::exception create_copy()

@@ -11,7 +11,7 @@
 #include <exception>
 #include <stdexcept>
 #include <string>
-#include "refine.h"
+#include "ffbidx/refine.h"
 
 namespace {
     using indexer_t = fast_feedback::indexer<float>;

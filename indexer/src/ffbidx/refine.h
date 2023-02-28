@@ -28,12 +28,12 @@ Author: hans-christian.stadler@psi.ch
 
 #include <Eigen/Dense>
 #include <Eigen/LU>
-#include <exception.h>
 #include <numeric>
 #include <functional>
 #include <algorithm>
-#include "indexer.h"
-#include "log.h"
+#include <ffbidx/exception.h>
+#include "ffbidx/indexer.h"
+#include "ffbidx/log.h"
 
 namespace fast_feedback {
     namespace refine {

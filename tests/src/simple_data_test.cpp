@@ -24,7 +24,7 @@ Author: hans-christian.stadler@psi.ch
 */
 
 #include <iostream>
-#include "simple_data.h"
+#include "ffbidx/simple_data.h"
 
 int main (int argc, char *argv[])
 {

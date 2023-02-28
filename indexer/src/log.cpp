@@ -31,8 +31,8 @@ Author: hans-christian.stadler@psi.ch
 #include <sstream>
 #include <atomic>
 #include <mutex>
-#include "log.h"
-#include "exception.h"
+#include "ffbidx/log.h"
+#include "ffbidx/exception.h"
 
 namespace {
 

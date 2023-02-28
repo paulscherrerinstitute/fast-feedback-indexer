@@ -28,8 +28,8 @@ Author: hans-christian.stadler@psi.ch
 #include <sstream>
 #include <stdexcept>
 #include <chrono>
-#include "simple_data.h"
-#include "refine.h"
+#include "ffbidx/simple_data.h"
+#include "ffbidx/refine.h"
 
 namespace {
 

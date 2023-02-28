@@ -27,7 +27,7 @@ Author: hans-christian.stadler@psi.ch
 #include <iostream>
 #include <stdexcept>
 #include <map>
-#include "indexer.h"
+#include "ffbidx/indexer.h"
 
 namespace {
 

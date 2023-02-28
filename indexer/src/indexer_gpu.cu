@@ -34,9 +34,9 @@ Author: hans-christian.stadler@psi.ch
 #include <chrono>
 #include <algorithm>
 #include <limits>
-#include "exception.h"
-#include "log.h"
-#include "indexer_gpu.h"
+#include "ffbidx/exception.h"
+#include "ffbidx/log.h"
+#include "ffbidx/indexer_gpu.h"
 #include "cuda_runtime.h"
 #include <cub/block/block_radix_sort.cuh>
 
