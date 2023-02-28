@@ -95,7 +95,7 @@ endif(BUILD_FAST_INDEXER_STATIC)
 
 if (BUILD_FAST_INDEXER OR BUILD_FAST_INDEXER_STATIC)
         install(FILES ${fast_indexer_PUB_HEADER_LIST}
-                DESTINATION ${ffbidx_INCLUDE_PATH}
+                DESTINATION ${ffbidx_INCLUDE_PATH}/ffbidx
                 COMPONENT ffbidx_development)
         cmake_path(ABSOLUTE_PATH ffbidx_INCLUDE_PATH
                 BASE_DIRECTORY ${CMAKE_INSTALL_PREFIX}
