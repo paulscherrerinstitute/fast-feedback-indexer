@@ -29,39 +29,36 @@ Author: hans-christian.stadler@psi.ch
 #include "ffbidx/indexer.h"
 
 namespace gpu {
-    using namespace fast_feedback;
+   using namespace fast_feedback;
 
-    // GPU part of indexer::init
-    template <typename float_type>
-    void init (const indexer<float_type>& instance);
+   // GPU part of indexer::init
+   template <typename float_type>
+   void init (const indexer<float_type>& instance);
 
-    // GPU part of indexer::drop
-    template <typename float_type>
-    void drop (const indexer<float_type>& instance);
+   // GPU part of indexer::drop
+   template <typename float_type>
+   void drop (const indexer<float_type>& instance);
 
-    // GPU part of future::ready
-    template <typename float_type>
-    bool is_ready (future<float_type>& fut);
+   // GPU part of indexer::index_start
+   template <typename float_type>
+   void index_start (const indexer<float_type>& instance, const input<float_type>& in, output<float_type>& out, const config_runtime<float_type>& conf_rt,
+                     void(*callback)(void*), void* data);
 
-    // GPU part of future::ready
-    template <typename float_type>
-    void wait_for (future<float_type>& fut);
+   // GPU part of indexer::index_end
+   template <typename float_type>
+   void index_end (const indexer<float_type>& instance, output<float_type>& out);
 
-    // GPU part of indexer::index
-    template <typename float_type>
-    void index_async (const indexer<float_type>& instance, const input<float_type>& in, output<float_type>& out, const config_runtime<float_type>& conf_rt);
+   // Register host memory
+   void pin_memory(void* ptr, std::size_t size);
 
-    // Register host memory
-    void pin_memory(void* ptr, std::size_t size);
+   // Unregister host memory
+   void unpin_memory(void* ptr);
 
-    // Unregister host memory
-    void unpin_memory(void* ptr);
+   // Allocate pinned host memory
+   void* alloc_pinned(std::size_t num_bytes);
 
-    // Allocate pinned host memory
-    void* alloc_pinned(std::size_t num_bytes);
-
-    // Deallocate pinned host memory
-    void dealloc_pinned(void* ptr);
+   // Deallocate pinned host memory
+   void dealloc_pinned(void* ptr);
 
 } // namespace gpu
 

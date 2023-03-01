@@ -29,18 +29,6 @@ Author: hans-christian.stadler@psi.ch
 
 namespace fast_feedback {
 
-    template<typename float_type>
-    bool future<float_type>::is_ready ()
-    {
-        return gpu::is_ready(*this);
-    }
-
-    template<typename float_type>
-    void future<float_type>::wait_for ()
-    {
-        gpu::wait_for(*this);
-    }
-
     template <typename float_type>
     void indexer<float_type>::init (indexer<float_type>& instance, const config_persistent<float_type>& conf)
     {
@@ -60,10 +48,16 @@ namespace fast_feedback {
     }
 
     template <typename float_type>
-    future<float_type> indexer<float_type>::index_async(const input<float_type>& in, output<float_type>& out, const config_runtime<float_type>& conf_rt)
+    void indexer<float_type>::index_start(const input<float_type>& in, output<float_type>& out, const config_runtime<float_type>& conf_rt,
+                                          void(*callback)(void*), void* data)
     {
-        gpu::index_async(*this, in, out, conf_rt);
-        return future<float_type>{*this, in, out, conf_rt};
+        gpu::index_start(*this, in, out, conf_rt, callback, data);
+    }
+
+    template <typename float_type>
+    void indexer<float_type>::index_end (output<float_type>& out)
+    {
+        gpu::index_end(*this, out);
     }
 
     void memory_pin::pin(void* ptr, std::size_t size)
@@ -88,8 +82,7 @@ namespace fast_feedback {
 
     template void indexer<float>::init(indexer<float>&, const config_persistent<float>&);
     template void indexer<float>::drop(indexer<float>&);
-    template bool future<float>::is_ready();
-    template void future<float>::wait_for();
-    template future<float> indexer<float>::index_async(const input<float>&, output<float>&, const config_runtime<float>&);
+    template void indexer<float>::index_start(const input<float>&, output<float>&, const config_runtime<float>&, void(*)(void*), void*);
+    template void indexer<float>::index_end(output<float>&);
 
 } // namespace fast_feedback

@@ -31,6 +31,7 @@ Author: hans-christian.stadler@psi.ch
 #include <numeric>
 #include <functional>
 #include <algorithm>
+#include <chrono>
 #include <ffbidx/exception.h>
 #include "ffbidx/indexer.h"
 #include "ffbidx/log.h"
@@ -39,13 +40,6 @@ namespace fast_feedback {
     namespace refine {
         using logger::stanza;
 
-        template<typename float_type=float>
-        struct future final {
-            fast_feedback::input<float_type> input;
-            fast_feedback::output<float_type> output;
-            fast_feedback::future<float_type> fut;
-        };
-
         // Base indexer class for refinement
         // - controlling all indexer data
         // - getter/setter interface
@@ -53,16 +47,17 @@ namespace fast_feedback {
         template<typename float_type=float>
         class indexer {
           protected:
+            fast_feedback::indexer<float_type> idx;
             Eigen::Matrix<float_type, Eigen::Dynamic, 3u> coords;  // for input cells + spots in 3D space
             Eigen::Matrix<float_type, Eigen::Dynamic, 3u> cells;   // output cells coordinate container
             Eigen::Vector<float_type, Eigen::Dynamic> scores;      // output cell scores container
+            fast_feedback::input<float_type> input;
+            fast_feedback::output<float_type> output;
             fast_feedback::config_runtime<float_type> crt;
-            fast_feedback::indexer<float_type> idx;
             fast_feedback::memory_pin pin_coords;                   // pin input coordinate container
             fast_feedback::memory_pin pin_cells;                    // pin output cells coordinate container
             fast_feedback::memory_pin pin_scores;                   // pin output cell scores container
             fast_feedback::memory_pin pin_crt;                      // pin runtime config memory
-            future<float_type> fut;                                 // for asynchronous indexing
           public:
             inline static void check_config (const fast_feedback::config_persistent<float_type>& cp,
                                              const fast_feedback::config_runtime<float_type>& cr)
@@ -89,16 +84,13 @@ namespace fast_feedback {
 
             inline indexer (const fast_feedback::config_persistent<float_type>& cp,
                             const fast_feedback::config_runtime<float_type>& cr)
-                : coords{cp.max_spots + 3u * cp.max_input_cells, 3u},
+                : idx{cp},
+                  coords{cp.max_spots + 3u * cp.max_input_cells, 3u},
                   cells{3u * cp.max_output_cells, 3u}, scores{cp.max_output_cells},
-                  crt{cr}, idx{cp},
+                  input{}, output{&cells(0,0), &cells(0,1), &cells(0,2), scores.data(), idx.cpers.max_output_cells},
+                  crt{cr},
                   pin_coords{coords}, pin_cells{cells}, pin_scores{scores},
-                  pin_crt{fast_feedback::memory_pin::on(cr)},
-                  fut{
-                    fast_feedback::input<float_type>{&coords(0,0), &coords(0,1), &coords(0,2), 0, 0},
-                    fast_feedback::output<float_type>{&cells(0,0), &cells(0,1), &cells(0,2), scores.data(), idx.cpers.max_output_cells},
-                    {idx, fut.input, fut.output, crt}
-                  }
+                  pin_crt{fast_feedback::memory_pin::on(cr)}
             {
                 check_config(cp, cr);
             }
@@ -111,29 +103,25 @@ namespace fast_feedback {
             indexer (const indexer&) = delete;
             indexer& operator= (const indexer&) = delete;
 
-            inline void index_async (unsigned n_input_cells, unsigned n_spots)
+            inline void index_start (unsigned n_input_cells, unsigned n_spots, void(*callback)(void*)=nullptr, void* data=nullptr)
             {
-                fut.input.n_cells = n_input_cells;
-                fut.input.n_spots = n_spots;
-                fut.input.x = &coords(idx.cpers.max_input_cells - n_input_cells,0);
-                fut.input.y = &coords(idx.cpers.max_input_cells - n_input_cells,1);
-                fut.input.z = &coords(idx.cpers.max_input_cells - n_input_cells,2);
-                fut.fut = idx.index_async(fut.input, fut.output, crt);
+                input.n_cells = n_input_cells;
+                input.n_spots = n_spots;
+                input.x = &coords(idx.cpers.max_input_cells - n_input_cells,0);
+                input.y = &coords(idx.cpers.max_input_cells - n_input_cells,1);
+                input.z = &coords(idx.cpers.max_input_cells - n_input_cells,2);
+                idx.index_start(input, output, crt, callback, data);
             }
 
-            inline virtual bool is_ready ()
-            { return fut.fut.is_ready(); }
-
-            inline void wait_for ()
+            inline virtual void index_end ()
             {
-                fut.fut.wait_for();
-                is_ready();
+                idx.index_end(output);
             }
 
             inline void index (unsigned n_input_cells, unsigned n_spots)
             {
-                index_async(n_input_cells, n_spots);
-                wait_for();
+                index_start(n_input_cells, n_spots);
+                index_end();
             }
 
             // spot access: spot i
@@ -346,6 +334,7 @@ namespace fast_feedback {
                                        const config_ifss<float_type>& cifss,
                                        unsigned nspots)
             {
+                using clock = std::chrono::high_resolution_clock;
                 using namespace Eigen;
                 using Mx3 = Matrix<float_type, Dynamic, 3>;
                 using M3 = Matrix<float_type, 3, 3>;
@@ -385,12 +374,10 @@ namespace fast_feedback {
             }
 
             // refined result
-            inline bool is_ready () override
+            inline void index_end () override
             {
-                if (! this->fut.fut.is_ready())
-                    return false;
-                refine(this->coords, this->cells, this->scores, this->idx.cpers, this->crt, cifss, this->fut.input.n_spots);
-                return true;
+                indexer<float_type>::index_end();
+                refine(this->coords, this->cells, this->scores, this->idx.cpers, this->crt, cifss, this->input.n_spots);
             }
 
             // ifss configuration access
@@ -466,6 +453,7 @@ namespace fast_feedback {
                                        const config_ifse<float_type>& cifse,
                                        unsigned nspots)
             {
+                using clock = std::chrono::high_resolution_clock;
                 using namespace Eigen;
                 using Mx3 = Matrix<float_type, Dynamic, 3>;
                 using M3 = Matrix<float_type, 3, 3>;
@@ -505,12 +493,10 @@ namespace fast_feedback {
             }
 
             // refined result
-            inline bool is_ready () override
+            inline void index_end () override
             {
-                if (! indexer<float_type>::fut.fut.is_ready())
-                    return false;
-                refine(this->coords, this->cells, this->scores, this->idx.cpers, this->crt, cifse, this->fut.input.n_spots);
-                return true;
+                indexer<float_type>::index_end();
+                refine(this->coords, this->cells, this->scores, this->idx.cpers, this->crt, cifse, this->input.n_spots);
             }
 
             // ifse configuration access

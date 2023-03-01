@@ -84,7 +84,7 @@ int main (int argc, char *argv[])
 
         std::array<float, 20> buf;                      // 2x output coordinate/score container
         fast_feedback::config_runtime<float> crt{};     // default runtime config
-        fast_feedback::indexer indexer;                 // indexer object with default config
+        fast_feedback::indexer<float> indexer;          // indexer object with default config
 
         fast_feedback::memory_pin pin_x{x};             // pin input coordinate containers
         fast_feedback::memory_pin pin_y{y};

@@ -106,42 +106,10 @@ namespace fast_feedback {
         }
     };
 
-    template <typename float_type=float> struct indexer;    // Forward declaration
-
-    // Future to retrieve asynchronous result
-    // NOTE: Make sure the data underlying the pointers survives this object
-    template <typename float_type=float>
-    struct future final {
-        indexer<float_type>* idx;
-        const input<float_type>* in;
-        output<float_type>* out;
-        const config_runtime<float_type>* crt;
-        bool ready = false;
-
-        inline future (indexer<float_type>& indexer,
-                       const input<float_type>& input,
-                       output<float_type>& output,
-                       const config_runtime<float_type>& conf_rt)
-            : idx{&indexer}, in{&input}, out{&output}, crt{&conf_rt}
-        {}
-
-        ~future () = default;
-        future (const future&) = default;
-        future& operator= (const future&) = default;
-        future (future&&) = default;
-        future& operator= (future&&) = default;
-
-        // Is output data ready?
-        bool is_ready ();
-
-        // Wait for ready output data.
-        void wait_for ();
-    };
-
     // Indexer object
     //
     // Keeps persistent state, like GPU memory allocations.
-    template <typename float_type>
+    template <typename float_type=float>
     struct indexer final {
         config_persistent<float_type> cpers;    // persistent configuration
         const state_id::type state;             // object instance private state identifier
@@ -195,15 +163,26 @@ namespace fast_feedback {
             }
         }
 
-        // Run indexing asynchronously according to conf_rt on in data.
-        // All coordinate data and the runtime config memory must be pinned
-        future<float_type> index_async (const input<float_type>& in, output<float_type>& out, const config_runtime<float_type>& conf_rt);
+        // Run indexing asynchronously according to conf_rt on in data
+        // All coordinate data and the runtime config memory must be pinned.
+        // Before accessing output data, index_end() must be called.
+        // If callback is set, it will be called with the data argument as
+        // soon as the result is ready to be handled with index_end().
+        // The callback is not allowed to call any indexer method.
+        void index_start (const input<float_type>& in, output<float_type>& out, const config_runtime<float_type>& conf_rt,
+                          void(*callback)(void*)=nullptr, void* data=nullptr);
+        
+        // Finish indexing for output access
+        // Must follow an index_start() call if no callback was given to index_start().
+        // Must follow a callback() call if a callback was given to index_start().
+        void index_end (output<float_type>& out);
 
         // Run indexing according to conf_rt on in data, put result into out data
         // All coordinate data and the runtime config memory must be pinned
         inline void index (const input<float_type>& in, output<float_type>& out, const config_runtime<float_type>& conf_rt)
         {
-            index_async(in, out, conf_rt).wait_for();
+            index_start(in, out, conf_rt);
+            index_end(out);
         }
     };
 
