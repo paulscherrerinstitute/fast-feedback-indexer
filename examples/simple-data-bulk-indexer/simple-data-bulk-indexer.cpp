@@ -29,6 +29,7 @@ Author: hans-christian.stadler@psi.ch
 #include <cstdint>
 #include <iostream>
 #include <sstream>
+#include <fstream>
 #include <stdexcept>
 #include <chrono>
 #include <cerrno>
@@ -523,6 +524,43 @@ namespace {
         work_queue.push_back(work->id); // work item is now progressible again
     }
 
+    template<std::size_t N>
+    void read_data (work_item* work, std::array<char, N>& buffer)
+    {
+        using logger::debug;
+        using logger::stanza;
+
+        std::ifstream ifs(work->filename);
+        if (! ifs)
+            throw std::invalid_argument(std::string{"unable to open file "} + work->filename);
+
+        unsigned n = 0u;        // coordinate tripple number
+        float* x = work->in.x;
+        float* y = work->in.y;
+        float* z = work->in.z;
+
+        for (unsigned line=1u; ifs.getline(buffer.data(), N); line++) {
+            std::istringstream iss(buffer.data());
+            while ((bool)(iss >> x[n])) {
+                if (!(iss >> y[n] >> z[n]))
+                    throw std::invalid_argument(std::string{"wrong file format for file "} + work->filename);
+                n++;
+                if (n >= maxspot + 3u)
+                    goto stop_reading;
+            }
+        }
+    stop_reading:
+        if (n < minpts + 3u)
+            throw std::invalid_argument(std::string{"not enough spots in file "} + work->filename);
+        work->in.n_spots = n - 3u;
+
+        LOG_START(logger::l_debug) {
+            debug << stanza << "input cell:\n";
+            for (unsigned i=0u; i<3; i++)
+                debug << stanza << work->in.x[i] << " " << work->in.y[i] << " " << work->in.z[i] << '\n';
+        } LOG_END;
+    }
+
     // worker thread
     void worker (const cfgps_t& cpers, const cfgrt_t& crt, const cifss_t& cifss, const cifse_t& cifse, unsigned id)
     {
@@ -530,6 +568,8 @@ namespace {
             double read_time_priv = .0;     // thread private accumulator for simple data reading time
             double indexer_time_priv = .0;  // thread private accumulator for indexing time
             double refine_time_priv = .0;   // thread private accumulator for refinement time
+
+            std::array<char, 1024> buffer;  // buffer for file reading
 
             while (! pool_start.load());    // wait for start switch
 
@@ -545,9 +585,12 @@ namespace {
 
                         case read_file: {   // read simple file data and accumulate reading time
                                 // std::cout << id << ": " << witem_id << "-read_file " << work->filename << '\n';
+
                                 auto t = clock::now();
-                                work->data_ptr.reset(new SimpleData{work->filename});
                                 work->state = index_start;
+
+                                read_data(work.get(), buffer);
+
                                 read_time_priv += duration{clock::now() - t}.count();
                             }
                             // fall through
@@ -560,38 +603,11 @@ namespace {
                                     std::this_thread::yield();
                                 } else {
                                     // std::cout << id << ": " << witem_id << "-index_start(" << idx << ") " << work->filename << '\n';
-                                    using logger::debug;
-                                    using logger::stanza;
-
                                     work->tp = clock::now();    // indexing start time
                                     work->indexer = idx;        // associated indexer (currently idle)
                                     work->state = index_end;
 
-                                    auto& ind = *indexer[idx];
-                                    unsigned i=0u;
-                                    debug << stanza << "input cell:\n";
-                                    for (const auto& coord : work->data_ptr->unit_cell) {   // copy cell coordinates
-                                        work->coords(i,0) = coord.x;
-                                        work->coords(i,1) = coord.y;
-                                        work->coords(i,2) = coord.z;
-                                        i++;
-                                        debug << stanza << coord.x << " " << coord.y << " " << coord.z << '\n';
-                                    }
-
-                                    if (i != 3u)
-                                        throw std::logic_error("simple data contains more than one input cell");
-
-                                    for (const auto& coord : work->data_ptr->spots) {       // copy spot coordinates
-                                        work->coords(i,0) = coord.x;
-                                        work->coords(i,1) = coord.y;
-                                        work->coords(i,2) = coord.z;
-                                        if (++i == 3u + maxspot)
-                                            break;
-                                    }
-
-                                    work->in.n_spots = i - 3u;
-                                    //std::cout << "data: " << work->id << '\n';
-                                    ind.index_start(work->in, work->out, crt, result_ready, work.get()); // launch indexer asynchronously
+                                    indexer[idx]->index_start(work->in, work->out, crt, result_ready, work.get()); // launch indexer asynchronously
                                 }
                             } break;
 
@@ -679,6 +695,8 @@ int main (int argc, char *argv[])
     using logger::stanza;
 
     try {
+        logger::init_log_level();
+
         cfgps_t cpers{};
         cfgrt_t crt{};
         cifss_t cifss{};
