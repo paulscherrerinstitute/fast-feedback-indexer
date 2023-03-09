@@ -40,16 +40,26 @@ namespace logger {
     constexpr unsigned l_warn = 2u;     // Log warnings
     constexpr unsigned l_info = 3u;     // Log useful information
     constexpr unsigned l_debug = 4u;    // Log debug information
+    constexpr unsigned l_undef = 10u;   // Undefined (only returned by get_init_log_level())
 
     // Current log level, default is l_error
     // Logging will react to changes dynamically
     inline std::atomic<unsigned> level{l_error};
 
-    // Initialize log level from environment, if given
+    // Get log level from environment, if given
     // Parses the environment variable INDEXER_LOG_LEVEL
     // which should contain one of {"fatal", "error", "warn", "info", "debug"}
+    // If the variable is undefined, l_undef is returned.
+    unsigned get_init_log_level();
+
+    // Initalize log level using read_init_log_level()
     // If the variable is undefined, the log level is not changed.
-    void init_log_level();
+    inline void init_log_level()
+    {
+        unsigned new_level = get_init_log_level();
+        if (new_level != l_undef)
+            level.store(new_level);
+    }
 
     // Get string representation for log level
     const char* level_to_string(unsigned log_level);

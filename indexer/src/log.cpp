@@ -36,11 +36,15 @@ Author: hans-christian.stadler@psi.ch
 
 namespace {
 
-    // Is logging initialized?
-    std::atomic_bool logging_initialized = false;
+    using namespace logger;
 
-    // Protect logging initalisation
-    std::mutex logging_init_lock;
+    const std::map<std::string, unsigned> string_to_level = {
+        {"fatal", l_fatal},
+        {"error", l_error},
+        {"warn", l_warn},
+        {"info", l_info},
+        {"debug", l_debug}
+    };
 
     // Protect log output
     std::mutex logging_output_lock;
@@ -51,39 +55,22 @@ namespace {
 
 namespace logger {
 
-    void init_log_level()
+    unsigned get_init_log_level()
     {
-        if (logging_initialized.load())
-            return;
-        
-        {
-            std::lock_guard<std::mutex> lock(logging_init_lock);
-
-            if (logging_initialized.load())
-                return;
-
-            const std::map<std::string, unsigned> string_to_level = {
-                {"fatal", l_fatal},
-                {"error", l_error},
-                {"warn", l_warn},
-                {"info", l_info},
-                {"debug", l_debug}
-            };
-
-            char* l_string = std::getenv(INDEXER_LOG_LEVEL);
-            if (l_string != nullptr) {
-                auto entry = string_to_level.find(l_string);
-                if (entry == string_to_level.end()) {
-                    std::ostringstream oss;
-                    for (const auto& e : string_to_level)
-                        oss << e.first << ", ";
-                    std::string levels_list = oss.str();
-                    levels_list.erase(levels_list.size() - 2);
-                    throw FF_EXCEPTION_OBJ << "illegal value for " << INDEXER_LOG_LEVEL << ": " << l_string << " (should be in [" << levels_list << "])\n";
-                }
-                level.store(entry->second);
+        char* l_string = std::getenv(INDEXER_LOG_LEVEL);
+        if (l_string != nullptr) {
+            auto entry = string_to_level.find(l_string);
+            if (entry == string_to_level.end()) {
+                std::ostringstream oss;
+                for (const auto& e : string_to_level)
+                    oss << e.first << ", ";
+                std::string levels_list = oss.str();
+                levels_list.erase(levels_list.size() - 2);
+                throw FF_EXCEPTION_OBJ << "illegal value for " << INDEXER_LOG_LEVEL << ": " << l_string << " (should be in [" << levels_list << "])\n";
             }
-        } // release logging_init_lock
+            return entry->second;
+        }
+        return l_undef;
     }
 
     const char* level_to_string(unsigned log_level)
