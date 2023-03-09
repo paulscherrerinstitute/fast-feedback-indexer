@@ -54,7 +54,7 @@ As a quick installation test you could do
 ```
 $ refined_simple_data_indexer \
   ${FFBIDX_INSTALL_DIR}/share/ffbidx/data/files/image0_local.txt \
-  300 1 8 $((32*1024)) .2 .1
+  300 1 1 $((32*1024)) ifss .8 6 15
 $ python -c "import ffbidx; print('OK')"
 ```
 
