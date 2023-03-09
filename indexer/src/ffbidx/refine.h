@@ -330,11 +330,9 @@ namespace fast_feedback {
                                        Eigen::DenseBase<MatX3>& cells,
                                        Eigen::DenseBase<VecX>& scores,
                                        const fast_feedback::config_persistent<float_type>& cpers,
-                                       const fast_feedback::config_runtime<float_type>& crt,
                                        const config_ifss<float_type>& cifss,
-                                       unsigned nspots)
+                                       unsigned nspots, unsigned block=0, unsigned nblocks=1)
             {
-                using clock = std::chrono::high_resolution_clock;
                 using namespace Eigen;
                 using Mx3 = Matrix<float_type, Dynamic, 3>;
                 using M3 = Matrix<float_type, 3, 3>;
@@ -344,7 +342,10 @@ namespace fast_feedback {
                 Mx3 miller{nspots, 3u};
                 Mx3 spots = coords.block(3u * cpers.max_input_cells, 0u, nspots, 3u);
                 M3 cell;
-                for (unsigned j=0u; j<cpers.max_output_cells; j++) {
+                const unsigned blocksize = (cpers.max_output_cells + nblocks - 1u) / nblocks;
+                const unsigned startcell = block * blocksize;
+                const unsigned endcell = std::min(startcell + blocksize, cpers.max_output_cells);
+                for (unsigned j=startcell; j<endcell; j++) {
                     cell = cells.block(3u * j, 0u, 3u, 3u).transpose();  // cell: col vectors
                     float_type threshold = indexer<float_type>::score_parts(scores[j]).second;
                     do {
@@ -377,7 +378,7 @@ namespace fast_feedback {
             inline void index_end () override
             {
                 indexer<float_type>::index_end();
-                refine(this->coords, this->cells, this->scores, this->idx.cpers, this->crt, cifss, this->input.n_spots);
+                refine(this->coords, this->cells, this->scores, this->idx.cpers, cifss, this->input.n_spots);
             }
 
             // ifss configuration access
@@ -449,11 +450,9 @@ namespace fast_feedback {
                                        Eigen::DenseBase<MatX3>& cells,
                                        Eigen::DenseBase<VecX>& scores,
                                        const fast_feedback::config_persistent<float_type>& cpers,
-                                       const fast_feedback::config_runtime<float_type>& crt,
                                        const config_ifse<float_type>& cifse,
-                                       unsigned nspots)
+                                       unsigned nspots, unsigned block=0, unsigned nblocks=1)
             {
-                using clock = std::chrono::high_resolution_clock;
                 using namespace Eigen;
                 using Mx3 = Matrix<float_type, Dynamic, 3>;
                 using M3 = Matrix<float_type, 3, 3>;
@@ -463,7 +462,10 @@ namespace fast_feedback {
                 Mx3 miller{nspots, 3u};
                 Mx3 spots = coords.block(3u * cpers.max_input_cells, 0u, nspots, 3u);
                 M3 cell;
-                for (unsigned j=0u; j<cpers.max_output_cells; j++) {
+                const unsigned blocksize = (cpers.max_output_cells + nblocks - 1u) / nblocks;
+                const unsigned startcell = block * blocksize;
+                const unsigned endcell = std::min(startcell + blocksize, cpers.max_output_cells);
+                for (unsigned j=startcell; j<endcell; j++) {
                     cell = cells.block(3u * j, 0u, 3u, 3u).transpose();  // cell: col vectors
                     float_type threshold = indexer<float_type>::score_parts(scores[j]).second;
                     for (unsigned niter=0; niter<cifse.max_iter; niter++) {
@@ -496,7 +498,7 @@ namespace fast_feedback {
             inline void index_end () override
             {
                 indexer<float_type>::index_end();
-                refine(this->coords, this->cells, this->scores, this->idx.cpers, this->crt, cifse, this->input.n_spots);
+                refine(this->coords, this->cells, this->scores, this->idx.cpers, cifse, this->input.n_spots);
             }
 
             // ifse configuration access

@@ -175,7 +175,7 @@ namespace {
                 iss >> dev;
                 if (!iss || !iss.eof())
                     throw FF_EXCEPTION_OBJ << "wrong format for " << INDEXER_GPU_DEVICE << ": " << dev_string << " (should be an integer)";
-                if ((dev < 0) || (dev >= list.size()))
+                if ((dev < 0) || (dev >= (int)list.size()))
                     throw FF_EXCEPTION_OBJ << "illegal value for " << INDEXER_GPU_DEVICE << ": " << dev << " (should be in [0.." << list.size() << "[)";
             }
 
@@ -189,7 +189,7 @@ namespace {
         // Set current CUDA device
         static void set(int dev)
         {
-            if ((dev < 0) || (dev >= list.size()))
+            if ((dev < 0) || (dev >= (int)list.size()))
                 throw FF_EXCEPTION_OBJ << "illegal value for GPU device";
 
             CU_CHECK(cudaSetDevice(dev));

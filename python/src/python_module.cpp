@@ -248,10 +248,10 @@ namespace {
 
                 if (smethod == "ifss") {
                     config_ifss<float> cifss{(float)contraction, (unsigned)min_spots};
-                    indexer_ifss<float>::refine(coords, cells, scores, indexer->cpers, crt, cifss, n_spots);
+                    indexer_ifss<float>::refine(coords, cells, scores, indexer->cpers, cifss, n_spots);
                 } else { // ifse
                     config_ifse<float> cifse{(float)contraction, (unsigned)min_spots, (unsigned)n_iter};
-                    indexer_ifse<float>::refine(coords, cells, scores, indexer->cpers, crt, cifse, n_spots);
+                    indexer_ifse<float>::refine(coords, cells, scores, indexer->cpers, cifse, n_spots);
                 }
             }
         } catch (std::exception& ex) {
