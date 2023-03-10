@@ -524,10 +524,13 @@ namespace {
         work_queue.push_back(work->id); // work item is now progressible again
     }
 
+    // read data and return false if the file should be dropped
+    // because there are to few spots
     template<std::size_t N>
-    void read_data (work_item* work, std::array<char, N>& buffer)
+    bool read_data (work_item* work, std::array<char, N>& buffer)
     {
         using logger::debug;
+        using logger::info;
         using logger::stanza;
 
         std::ifstream ifs(work->filename);
@@ -550,8 +553,13 @@ namespace {
             }
         }
     stop_reading:
-        if (n < minpts + 3u)
-            throw std::invalid_argument(std::string{"not enough spots in file "} + work->filename);
+        if (n < 4u) {
+            LOG_START(logger::l_info) {
+                info << stanza << "file " << work->filename << " dropped\n";
+            } LOG_END;
+            work->in.n_spots = 0u;
+            return false;
+        }
         work->in.n_spots = n - 3u;
 
         LOG_START(logger::l_debug) {
@@ -559,6 +567,8 @@ namespace {
             for (unsigned i=0u; i<3; i++)
                 debug << stanza << work->in.x[i] << " " << work->in.y[i] << " " << work->in.z[i] << '\n';
         } LOG_END;
+
+        return true;
     }
 
     // worker thread
@@ -587,11 +597,19 @@ namespace {
                                 // std::cout << id << ": " << witem_id << "-read_file " << work->filename << '\n';
 
                                 auto t = clock::now();
-                                work->state = index_start;
 
-                                read_data(work.get(), buffer);
+                                bool ok = read_data(work.get(), buffer);
 
                                 read_time_priv += duration{clock::now() - t}.count();
+
+                                if (! ok) { // drop file
+                                    work->cells.setZero();
+                                    work->scores.setZero();
+                                    counter++;
+                                    break;
+                                }
+
+                                work->state = index_start;
                             }
                             // fall through
                         case index_start: { // launch indexer asynchronously, set start time
