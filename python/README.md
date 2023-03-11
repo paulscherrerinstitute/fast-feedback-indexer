@@ -34,7 +34,7 @@ This allocates space on the GPU for all the data structures used in the computat
 #### ffbidx.index(handle, data, method='ifss', length_threshold=1e-9, triml=.05, trimh=.15, delta0.1, num_sample_points=32*1024, n_output_cells=1, n_input_cells=1, contraction=.8, min_spots=6, n_iter=15)
 
 Run the fast feedback indexer on given 3D real space space input cells and reciprocal spots packed in the **data** numpy array and return oriented cells and their scores. The still experimental *'raw'* method first finds candidate vectors according to the score $\sum_{s \in spots} \log_2(trim_l^h(dist(s, clp)) + delta))$, which are then used as rotation axes for the input cell. The cell score for the *'raw'* method is
-$-| \{ s \in spots: dist(s, clp) < h \} | + 2^{\frac{\sum_{s \in spots} \log_2(trim_l^h(dist(s, clp)) + delta))}{|spots|}} - delta$, where $trim$ stands for trimming, $dist(s, clp)$ for the distance of a spot to the closest lattice point, and $l,h$ are the lower and higher trimming thresholds.
+$-| \langle s \in spots: dist(s, clp) < h \rangle | + 2^{\frac{\sum_{s \in spots} \log_2(trim_l^h(dist(s, clp)) + delta))}{|spots|}} - delta$, where $trim$ stands for trimming, $dist(s, clp)$ for the distance of a spot to the closest lattice point, and $l,h$ are the lower and higher trimming thresholds.
 
 **Return**:
 
@@ -64,9 +64,9 @@ A tuple of numpy arrays *(output_cells, scores)*
 After running the *'raw'* method, there's the possibility to refine the cells using two experimental methods currently.
 Both methods use the normalized sum of logarithms part from the *'raw'* cell score as the initial threshold $t$.
 
-*'ifss'*: Iteratively fit a new cell to $ \{ s \in spots: dist(s, clp) < t \} $ and contract the threshold. Stop when the number of spots is below the minimum number of spots.
+*'ifss'*: Iteratively fit a new cell to $\langle s \in spots: dist(s, clp) < t \rangle$ and contract the threshold. Stop when the number of spots is below the minimum number of spots.
 
-*'ifse'*: Iteratively fit an additive delta to the errors $ \{ dist(s, clp) : s \in spots \land dist(s, clp) < t \} $ and contract the threshold. Stop when the maximum number of iterations is reached, or the errors set size is below the minimum number of spots.
+*'ifse'*: Iteratively fit an additive delta to the errors $\langle dist(s, clp) : s \in spots \land dist(s, clp) < t \rangle$ and contract the threshold. Stop when the maximum number of iterations is reached, or the errors set size is below the minimum number of spots.
 
 #### ffbidx.release(handle)
 
