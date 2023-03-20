@@ -412,7 +412,7 @@ namespace fast_feedback {
         // iterative fit to modified errors refinement indexer extra config
         template <typename float_type=float>
         struct config_ifse final {
-            float_type threshold_contraction=.8;    // upper threshold will be multiplied by contraction_speed / (iteration + contraction_speed)
+            float_type threshold_contraction=.8;    // contract error threshold by this value in every iteration
             unsigned min_spots=6;                   // minimum number of spots to fit against
             unsigned max_iter=15;                   // max number of iterations
         };
@@ -424,7 +424,7 @@ namespace fast_feedback {
           public:
             inline static void check_config (const config_ifse<float_type>& c)
             {
-                if (c.contraction_speed <= float_type{.0})
+                if (c.threshold_contraction <= float_type{.0})
                     throw FF_EXCEPTION("nonpositive contraction speed");
                 if (c.min_spots <= 3)
                     throw FF_EXCEPTION("min spots <= 3");
@@ -502,15 +502,17 @@ namespace fast_feedback {
             }
 
             // ifse configuration access
-            inline void contraction_speed (float_type cs)
+            inline void threshold_contraction (float_type tc)
             {
-                if (cs <= float_type{.0})
-                    throw FF_EXCEPTION("nonpositive contraction speed");
-                cifse.contraction_speed = cs;
+                if (tc <= float_type{.0})
+                    throw FF_EXCEPTION("nonpositive threshold contraction");
+                if (tc >= float_type{1.})
+                    throw FF_EXCEPTION("threshold contraction >= 1");
+                cifse.threshold_contraction = tc;
             }
-
-            inline float_type contraction_speed () const noexcept
-            { return cifse.contraction_speed; }
+            
+            inline float_type threshold_contraction () const noexcept
+            { return cifse.threshold_contraction; }
 
             inline void min_spots (unsigned ms)
             {
