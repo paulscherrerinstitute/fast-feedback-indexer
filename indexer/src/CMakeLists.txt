@@ -31,6 +31,7 @@ if (BUILD_FAST_INDEXER OR BUILD_FAST_INDEXER_STATIC)
                 NORMALIZE
                 OUTPUT_VARIABLE ffbidx_LIBRARY_PATH)
         set(ffbidx_PKG_PATH ${CMAKE_INSTALL_DATADIR}/ffbidx/pkgconfig)
+        set(ffbidx_PKG_PATH_IN_LIB ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
         set(ffbidx_INCLUDE_PATH ${CMAKE_INSTALL_INCLUDEDIR})
 endif()
 
@@ -62,6 +63,9 @@ if(BUILD_FAST_INDEXER)
                 fast_indexer.pc
                 @ONLY)
         install(FILES ${CMAKE_CURRENT_BINARY_DIR}/fast_indexer.pc
+                DESTINATION ${ffbidx_PKG_PATH_IN_LIB}
+                COMPONENT ffbidx_development_extra)
+        install(FILES ${CMAKE_CURRENT_BINARY_DIR}/fast_indexer.pc
                 DESTINATION ${ffbidx_PKG_PATH}
                 COMPONENT ffbidx_development)
 endif(BUILD_FAST_INDEXER)
@@ -88,6 +92,9 @@ if(BUILD_FAST_INDEXER_STATIC)
         configure_file(fast_indexer_static.pc.in
                 fast_indexer_static.pc
                 @ONLY)
+        install(FILES ${CMAKE_CURRENT_BINARY_DIR}/fast_indexer_static.pc
+                DESTINATION ${ffbidx_PKG_PATH_IN_LIB}
+                COMPONENT ffbidx_development_extra)
         install(FILES ${CMAKE_CURRENT_BINARY_DIR}/fast_indexer_static.pc
                 DESTINATION ${ffbidx_PKG_PATH}
                 COMPONENT ffbidx_development)
