@@ -38,6 +38,22 @@ Author: hans-christian.stadler@psi.ch
 
 namespace fast_feedback {
     namespace refine {
+        // Provide convenience classes for the fast feedback indexer
+        // - indexer: calls the raw fast_feedback::indexer
+        // - indexer_ifss: calls indexer and refined the output cells
+        // - indexer_ifse: calls indexer and refines the output cells
+        //
+        // Like the raw indexer these indexers (idx) provide several call possibilities
+        //
+        // - synchronous: idx.index(..)
+        // - asynchronous: idx.index_start(.., callback, data)
+        //                      callback(data) by GPU <-- result is ready
+        //                 idx.index_end() <-- will do the refinement on CPU
+        //
+        // For multithreaded refinement use the base indexer, split the output cells into
+        // logical blocks, and let threads call the refine(..) static methods on individual
+        // output cell blocks.
+
         using logger::stanza;
 
         // Base indexer class for refinement
@@ -47,13 +63,13 @@ namespace fast_feedback {
         template<typename float_type=float>
         class indexer {
           protected:
-            fast_feedback::indexer<float_type> idx;
-            Eigen::Matrix<float_type, Eigen::Dynamic, 3u> coords;  // for input cells + spots in 3D space
-            Eigen::Matrix<float_type, Eigen::Dynamic, 3u> cells;   // output cells coordinate container
-            Eigen::Vector<float_type, Eigen::Dynamic> scores;      // output cell scores container
-            fast_feedback::input<float_type> input;
-            fast_feedback::output<float_type> output;
-            fast_feedback::config_runtime<float_type> crt;
+            fast_feedback::indexer<float_type> idx;                 // raw indexer
+            Eigen::Matrix<float_type, Eigen::Dynamic, 3u> coords;   // coordinates for max_input_cells + max_spots in 3D space
+            Eigen::Matrix<float_type, Eigen::Dynamic, 3u> cells;    // max_output_cells coordinate container
+            Eigen::Vector<float_type, Eigen::Dynamic> scores;       // output cell scores container
+            fast_feedback::input<float_type> input;                 // raw indexer input
+            fast_feedback::output<float_type> output;               // raw indexer output
+            fast_feedback::config_runtime<float_type> crt;          // raw indexer runtime config
             fast_feedback::memory_pin pin_coords;                   // pin input coordinate container
             fast_feedback::memory_pin pin_cells;                    // pin output cells coordinate container
             fast_feedback::memory_pin pin_scores;                   // pin output cell scores container
@@ -82,6 +98,9 @@ namespace fast_feedback {
                     throw FF_EXCEPTION("nonpositive delta value");
             }
 
+            // Create base indexer object
+            // - allocate (pinned) memory for all input and output data
+            // - store configuration
             inline indexer (const fast_feedback::config_persistent<float_type>& cp,
                             const fast_feedback::config_runtime<float_type>& cr)
                 : idx{cp},
@@ -90,7 +109,7 @@ namespace fast_feedback {
                   input{}, output{&cells(0,0), &cells(0,1), &cells(0,2), scores.data(), idx.cpers.max_output_cells},
                   crt{cr},
                   pin_coords{coords}, pin_cells{cells}, pin_scores{scores},
-                  pin_crt{fast_feedback::memory_pin::on(cr)}
+                  pin_crt{fast_feedback::memory_pin::on(crt)}
             {
                 check_config(cp, cr);
             }
@@ -103,6 +122,10 @@ namespace fast_feedback {
             indexer (const indexer&) = delete;
             indexer& operator= (const indexer&) = delete;
 
+            // Asynchronouly launch indexing operation on GPU
+            // - n_input_cells must be less than max_input_cells
+            // - n_spots must be less than max_spots
+            // - if callback is given, it will be called with data as the argument as soon as  index_end can be called
             inline void index_start (unsigned n_input_cells, unsigned n_spots, void(*callback)(void*)=nullptr, void* data=nullptr)
             {
                 input.n_cells = n_input_cells;
@@ -113,22 +136,27 @@ namespace fast_feedback {
                 idx.index_start(input, output, crt, callback, data);
             }
 
+            // Finish indexing
+            // - index_start must have been called before this
             inline virtual void index_end ()
             {
                 idx.index_end(output);
             }
 
+            // Synchronous indexing
+            // - n_input_cells must be less than max_input_cells
+            // - n_spots must be less than max_spots
             inline void index (unsigned n_input_cells, unsigned n_spots)
             {
                 index_start(n_input_cells, n_spots);
                 index_end();
             }
 
-            // spot access: spot i
+            // Spot access: spot i
             inline float_type& spotX (unsigned i=0u) noexcept
             { return coords(3u * idx.cpers.max_input_cells + i, 0u); }
 
-            inline const float_type& spotX (unsigned i) const noexcept
+            inline const float_type& spotX (unsigned i=0u) const noexcept
             { return &coords(3u * idx.cpers.max_input_cells + i, 0u); }
 
             inline float_type& spotY (unsigned i=0u) noexcept
@@ -143,10 +171,11 @@ namespace fast_feedback {
             inline const float_type& spotZ (unsigned i=0u) const noexcept
             { return coords(3u * idx.cpers.max_input_cells + i, 2u); }
 
+            // Coords area designated for spots, fill top down
             inline auto spotM ()
             { return coords.bottomRows(coords.rows() - 3u * idx.cpers.max_input_cells); }
 
-            // input cell access: cell i, vector j
+            // Input cell access: cell i, vector j
             inline float_type& iCellX (unsigned i=0u, unsigned j=0u) noexcept
             { return coords(3u * (idx.cpers.max_input_cells - i - 1u) + j, 0u); }
 
@@ -165,31 +194,70 @@ namespace fast_feedback {
             inline const float_type& iCellZ (unsigned i=0u, unsigned j=0u) const noexcept
             { return coords(3u * (idx.cpers.max_input_cells - i - 1u) + j, 2u); }
 
-            // fill from bottom up
-            inline auto iCellM ()
+            // Coords area for input cell i
+            inline auto iCell (unsigned i=0u) noexcept
+            { return coords.block(3u * (idx.cpers.max_input_cells - i - 1u), 0u, 3u, 3u); }
+
+            inline const auto iCell (unsigned i=0u) const noexcept
+            { return coords.block(3u * (idx.cpers.max_input_cells - i - 1u), 0u, 3u, 3u); }
+
+            // Coords area designated for input cells, fill cellwise bottom up
+            inline auto iCellM () noexcept
             { return coords.topRows(3u * idx.cpers.max_input_cells); }
 
-            // output cell access: cell i, vector j
+            // All input coordinates
+            inline auto iCoordM () noexcept
+            { return coords; }
+
+            // Input size access
+            inline unsigned n_input_cells () noexcept
+            { return input.n_cells; }
+
+            inline unsigned n_spots () noexcept
+            { return input.n_spots; }
+
+            // Output cell access: cell i, vector j
+            inline float_type& oCellX (unsigned i=0u, unsigned j=0u) noexcept
+            { return cells(3u * i + j, 0u); }
+
             inline const float_type& oCellX (unsigned i=0u, unsigned j=0u) const noexcept
             { return cells(3u * i + j, 0u); }
+
+            inline float_type& oCellY (unsigned i=0u, unsigned j=0u) noexcept
+            { return cells(3u * i + j, 1u); }
 
             inline const float_type& oCellY (unsigned i=0u, unsigned j=0u) const noexcept
             { return cells(3u * i + j, 1u); }
 
+            inline float_type& oCellZ (unsigned i=0u, unsigned j=0u) noexcept
+            { return cells(3u * i + j, 2u); }
+
             inline const float_type& oCellZ (unsigned i=0u, unsigned j=0u) const noexcept
             { return cells(3u * i + j, 2u); }
 
+            // Output cell i
+            inline auto oCell (unsigned i) noexcept
+            { return cells.block(3u * i, 0u, 3u, 3u); }
+
+            inline const auto oCell (unsigned i) const noexcept
+            { return cells.block(3u * i, 0u, 3u, 3u); }
+
+            // All output cells
             inline auto& oCellM () noexcept
             { return cells; }
 
-            // output cell score access: cell i
+            // Output cell score access: cell i
+            inline float_type& oScore (unsigned i=0u) noexcept
+            { return scores(i); }
+
             inline const float_type& oScore (unsigned i=0u) const noexcept
             { return scores(i); }
 
+            // All output scores
             inline auto& oScoreV () noexcept
             { return scores; }
 
-            // Dissect the score into two parts:
+            // Dissect the base indexer score into two parts:
             // - main score: number of spots within a distance of trimh to closest lattice point
             // - sub score: exp2(sum[spots](log2(trim[triml..trimh](dist2int(dot(v,spot))) + delta)) / #spots) - delta
             inline static std::pair<float_type, float_type> score_parts (float_type score)
@@ -199,7 +267,11 @@ namespace fast_feedback {
                 return std::make_pair(nsp, s);
             }
 
-            // runtime configuration access
+            // Output size access
+            inline unsigned n_output_cells ()
+            { return output.n_cells; }
+
+            // Runtime configuration access
             inline void length_threshold (float_type lt)
             {
                 if (lt < float_type{.0f})
@@ -267,7 +339,7 @@ namespace fast_feedback {
             const config_runtime<float_type>& conf_runtime () const noexcept
             { return crt; }
 
-            // persistent configuration access
+            // Persistent configuration access
             // - to change the persistent config, create another indexer instance
             inline unsigned max_output_cells () const noexcept
             { return idx.cpers.max_output_cells; }
@@ -284,16 +356,18 @@ namespace fast_feedback {
             const config_persistent<float_type>& conf_persistent () const noexcept
             { return idx.cpers; }
 
+
+
         }; // indexer
 
-        // iterative fit to selected spots refinement indexer extra config
+        // Iterative fit to selected spots refinement indexer extra config
         template <typename float_type=float>
         struct config_ifss final {
             float_type threshold_contraction=.8;        // contract error threshold by this value in every iteration
             unsigned min_spots=6;                       // minimum number of spots to fit against
         };
 
-        // iterative fit to selected spots refinement indexer
+        // Iterative fit to selected spots refinement indexer
         template <typename float_type=float>
         class indexer_ifss : public indexer<float_type> {
             config_ifss<float_type> cifss;
@@ -324,7 +398,23 @@ namespace fast_feedback {
             indexer_ifss (const indexer_ifss&) = delete;
             indexer_ifss& operator= (const indexer_ifss&) = delete;
 
-            // refine output
+            // Refine cells
+            //
+            // This call splits cells into nblocks cell blocks to allow multithreaded cell refinement.
+            // All threads must use a common nblocks parameter and each thread an individual block parameter.
+            //
+            // input:
+            // - coords     coordinate matrix like the one in the base indexer
+            // - cells      output cells matrix like the one in the base indexer
+            // - scores     output cell scores matrix with scores coming from the base indexer
+            // - cpers      persistent config for the matrices
+            // - cifss      ifss config
+            // - nspots     actual number of spots in coords
+            // - block      which of the N cell blocks
+            // - nblocks    use N cell blocks
+            // output:
+            // - cells      the refined cells
+            // - scores     refined cell scores: largest distance of the min_spots closest to their approximated lattice points
             template<typename MatX3, typename VecX>
             inline static void refine (const Eigen::Matrix<float_type, Eigen::Dynamic, 3u>& coords,
                                        Eigen::DenseBase<MatX3>& cells,
@@ -374,7 +464,7 @@ namespace fast_feedback {
                 }
             }
 
-            // refined result
+            // Refined result
             inline void index_end () override
             {
                 indexer<float_type>::index_end();
@@ -409,7 +499,7 @@ namespace fast_feedback {
 
         }; // indexer_ifss
             
-        // iterative fit to modified errors refinement indexer extra config
+        // Iterative fit to selected errors refinement indexer extra config
         template <typename float_type=float>
         struct config_ifse final {
             float_type threshold_contraction=.8;    // contract error threshold by this value in every iteration
@@ -417,7 +507,7 @@ namespace fast_feedback {
             unsigned max_iter=15;                   // max number of iterations
         };
 
-        // iterative fit to selected errors refinement indexer
+        // Iterative fit to selected errors refinement indexer
         template <typename float_type=float>
         class indexer_ifse : public indexer<float_type> {
             config_ifse<float_type> cifse;
@@ -444,7 +534,23 @@ namespace fast_feedback {
             indexer_ifse (const indexer_ifse&) = delete;
             indexer_ifse& operator= (const indexer_ifse&) = delete;
 
-            // refine output
+            // Refine cells
+            //
+            // This call splits cells into nblocks cell blocks to allow multithreaded cell refinement.
+            // All threads must use a common nblocks parameter and each thread an individual block parameter.
+            //
+            // input:
+            // - coords     coordinate matrix like the one in the base indexer
+            // - cells      output cells matrix like the one in the base indexer
+            // - scores     output cell scores matrix with scores coming from the base indexer
+            // - cpers      persistent config for the matrices
+            // - cifse      ifse config
+            // - nspots     actual number of spots in coords
+            // - block      which of the N cell blocks
+            // - nblocks    use N cell blocks
+            // output:
+            // - cells      the refined cells
+            // - scores     refined cell scores: largest distance of the min_spots closest to their approximated lattice points
             template<typename MatX3, typename VecX>
             inline static void refine (const Eigen::Matrix<float_type, Eigen::Dynamic, 3u>& coords,
                                        Eigen::DenseBase<MatX3>& cells,
@@ -494,7 +600,7 @@ namespace fast_feedback {
                 }
             }
 
-            // refined result
+            // Refined result
             inline void index_end () override
             {
                 indexer<float_type>::index_end();
