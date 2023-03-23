@@ -89,6 +89,8 @@ namespace {
                      "  --ths          worker threads\n"
                      "  --rblks        refinement blocks\n"
                      "  --ipg          indexer objects per gpu\n"
+                     "  --rep          repetitions, every file will be indexer that many times\n"
+                     "  --quiet        no indexing result output\n"
                      "  --method       output cell refinement method, one of raw, ifss(default), ifse\n\n";
         if (! msg.empty())
             error(msg);
@@ -111,6 +113,8 @@ namespace {
     unsigned worker_threads = 1u;       // number of worker threads
     unsigned refinement_blocks = 1u;    // number of output cell blocks for parallel refinement
     unsigned indexers_per_gpu = 1u;     // number of indexer objects per cuda device
+    unsigned repetitions = 1u;          // number of times each file is indexed
+    bool quiet = false;                 // don't produce indexing result output
     std::string method{};               // refinement method
 
     void check_method()
@@ -180,8 +184,10 @@ namespace {
             { "ths",      1, nullptr, 11},
             { "rblks",    1, nullptr, 12},
             { "ipg",      1, nullptr, 13},
-            { "method",   1, nullptr, 14},
-            { "help",     0, nullptr, 15},
+            { "rep",      1, nullptr, 14},
+            { "quiet",    0, nullptr, 15},
+            { "method",   1, nullptr, 16},
+            { "help",     0, nullptr, 17},
             { nullptr,    0, nullptr, -1}
         };
 
@@ -230,11 +236,19 @@ namespace {
                         error("no indexers");
                     break;
                 case 14:
+                    parse_val(repetitions, optarg);
+                    if (repetitions < 1u)
+                        error("no repetitions");
+                    break;
+                case 15:
+                    quiet = true;
+                    break;
+                case 16:
                     if (! method.empty())
                         error("method already set");
                     parse_val(method, optarg);
                     break;
-                case 15:
+                case 17:
                     usage();
                 default:
                     error("internal: unknown option id");
@@ -441,6 +455,8 @@ namespace {
         mempin_t pin_cells;                     // pin object for cells matrix
         mempin_t pin_scores;                    // pin object for scores vector
 
+        unsigned repetition = 0u;               // repetition counter
+
         unsigned rblock;                        // output cell block number to be refined next
         int id;                                 // index into work item list
 
@@ -455,6 +471,11 @@ namespace {
               out{&cells(0,0), &cells(0,1), &cells(0,2), scores.data(), ncells},
               pin_coords{coords}, pin_cells{cells}, pin_scores(scores), rblock{0u}, id{wid}
         {}
+
+        void reset ()
+        {
+            
+        }
     };
 
     std::vector<std::unique_ptr<work_item>> witem_list; // list of work items
@@ -641,7 +662,14 @@ namespace {
 
                                 if (method == "raw") {
                                     counter++;
-                                    work->state = finished;
+                                    work->repetition++;
+                                    if (work->repetition < repetitions) {
+                                        work->state = index_start;
+                                        work->reset();
+                                        work_queue.push_back(witem_id);
+                                    } else {
+                                        work->state = finished;
+                                    }
                                     break;
                                 }
 
@@ -668,8 +696,16 @@ namespace {
 
                                 refine_time_priv += duration{clock::now() - t}.count();
 
-                                if (block + 1u >= refinement_blocks)
-                                    work->state = finished;
+                                if (block + 1u >= refinement_blocks) {
+                                    work->repetition++;
+                                    if (work->repetition < repetitions) {
+                                        work->state = index_start;
+                                        work->reset();
+                                        work_queue.push_back(witem_id);
+                                    } else {
+                                        work->state = finished;
+                                    }
+                                }
                             } break;
 
                         default: {
@@ -679,7 +715,7 @@ namespace {
                     }
                 }
 
-            } while (counter.load() < files.size()); // while not all files indexed and refined
+            } while (counter.load() < repetitions * files.size()); // while not all files indexed and refined
 
             atomic_add(read_time, read_time_priv);
             atomic_add(indexer_time, indexer_time_priv);
@@ -747,19 +783,21 @@ int main (int argc, char *argv[])
         auto t1 = clock::now();
         double elapsed_sec = duration{t1 - t0}.count();
 
-        std::cout.precision(12);
-        for (const auto& res : witem_list) {
-            std::cout << res->filename <<":\n";
-            for (unsigned j=0u; j<cpers.max_output_cells; j++) {
-                std::cout << res->cells.block(3u * j, 0u, 3u, 3u) << "\n\n";
+        if (! quiet) {
+            std::cout.precision(12);
+            for (const auto& res : witem_list) {
+                std::cout << res->filename <<":\n";
+                for (unsigned j=0u; j<cpers.max_output_cells; j++) {
+                    std::cout << res->cells.block(3u * j, 0u, 3u, 3u) << "\n\n";
+                }
             }
         }
 
         std::cout << "per file average timings:\n";
-        std::cout << "    clock time: " << (elapsed_sec / files.size()) << "s\n";
-        std::cout << "  reading time: " << (read_time / files.size()) << "s\n";
-        std::cout << "    index time: " << (indexer_time / files.size()) << "s\n";
-        std::cout << "   refine time: " << (refine_time / files.size()) << "s\n";
+        std::cout << "    clock time: " << (elapsed_sec / counter.load()) << "s\n";
+        std::cout << "  reading time: " << (read_time / counter.load()) << "s\n";
+        std::cout << "    index time: " << (indexer_time / counter.load()) << "s\n";
+        std::cout << "   refine time: " << (refine_time / counter.load()) << "s\n";
 
     } catch (std::exception& ex) {
         std::cerr << "indexing failed: " << ex.what() << '\n' << failure;
