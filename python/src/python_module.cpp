@@ -234,7 +234,12 @@ namespace {
             fast_feedback::memory_pin pin_in{in_data, (std::size_t)in_bytes};
 
             unsigned n_spots = n_vecs - 3*n_input_cells;
-            const fast_feedback::input<float> input{&in_data[0], &in_data[n_vecs], &in_data[2*n_vecs], (unsigned)n_input_cells, n_spots};
+            const fast_feedback::input<float> input{
+                {&in_data[0], &in_data[n_vecs], &in_data[2*n_vecs]},
+                {&in_data[3*n_input_cells], &in_data[n_vecs + 3*n_input_cells], &in_data[2*n_vecs + 3*n_input_cells]},
+                (unsigned)n_input_cells, n_spots,
+                true, true
+            };
             fast_feedback::output<float> output{&out_data[0], &out_data[3*n_out], &out_data[6*n_out], &score_data[0], n_out};
 
             indexer->index(input, output, crt);

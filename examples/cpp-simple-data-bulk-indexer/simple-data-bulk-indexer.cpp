@@ -467,7 +467,7 @@ namespace {
         work_item (const std::string& fname, int wid)
             : filename{fname}, coords{3u + maxspot, 3u},
               cells{3u * ncells, 3u}, scores{ncells},
-              in{&coords(0,0), &coords(0,1), &coords(0,2), 1u, maxspot},
+              in{{&coords(0,0), &coords(0,1), &coords(0,2)}, {&coords(3,0), &coords(3,1), &coords(3,2)}, 1u, maxspot, true, true},
               out{&cells(0,0), &cells(0,1), &cells(0,2), scores.data(), ncells},
               pin_coords{coords}, pin_cells{cells}, pin_scores(scores), rblock{0u}, id{wid}
         {}
@@ -559,9 +559,9 @@ namespace {
             throw std::invalid_argument(std::string{"unable to open file "} + work->filename);
 
         unsigned n = 0u;        // coordinate tripple number
-        float* x = work->in.x;
-        float* y = work->in.y;
-        float* z = work->in.z;
+        float* x = work->in.cell.x;
+        float* y = work->in.cell.y;
+        float* z = work->in.cell.z;
 
         for (unsigned line=1u; ifs.getline(buffer.data(), N); line++) {
             std::istringstream iss(buffer.data());
@@ -586,7 +586,7 @@ namespace {
         LOG_START(logger::l_debug) {
             debug << stanza << "input cell:\n";
             for (unsigned i=0u; i<3; i++)
-                debug << stanza << work->in.x[i] << " " << work->in.y[i] << " " << work->in.z[i] << '\n';
+                debug << stanza << work->in.cell.x[i] << " " << work->in.cell.y[i] << " " << work->in.cell.z[i] << '\n';
         } LOG_END;
 
         return true;

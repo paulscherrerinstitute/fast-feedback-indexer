@@ -40,15 +40,24 @@ namespace fast_feedback {
     // Input data consists of the (x,y,z) 3D space coordinates
     // coordinates
     // - of given unit cells        [0..3*n_cells[
-    // - of the spots               [3*n_cells..3*n_cells+n_spots[
+    // - of the spots               [0..n_spots[
     // The origin is implicitly assumed to be part of the lattice.
     template <typename float_type=float>
     struct input final {
-        float_type* x;      // x coordinates, pinned memory
-        float_type* y;      // y coordinates, pinned memory
-        float_type* z;      // z coordinates, pinned memory
-        unsigned n_cells;   // number of given unit cells (must be before n_spots in memory, see copy_in())
-        unsigned n_spots;   // number of spots (must be after n_cells in memory, see copy_in())
+        struct {
+            float_type* x;  // x coordinates, pinned memory
+            float_type* y;  // y coordinates, pinned memory
+            float_type* z;  // z coordinates, pinned memory
+        } cell;
+        struct {
+            float_type* x;  // x coordinates, pinned memory
+            float_type* y;  // y coordinates, pinned memory
+            float_type* z;  // z coordinates, pinned memory
+        } spot;
+        unsigned n_cells;   // number of given unit cells
+        unsigned n_spots;   // number of spots
+        bool new_cells;     // set to true if cells are new or have changed
+        bool new_spots;     // set to true if spots are new or have changed
     };
 
     // Output data for fast feedback indexer

@@ -125,7 +125,7 @@ int main (int argc, char *argv[])
         fast_feedback::memory_pin pin_buf{buf};         // pin output coordinate container
         fast_feedback::memory_pin pin_crt{fast_feedback::memory_pin::on(crt)};  // pin runtime config memory
 
-        fast_feedback::input<float> in{x.data(), y.data(), z.data(), 1u, i-3u}; // create indexer input object
+        fast_feedback::input<float> in{{&x[0], &y[0], &z[0]}, {&x[3], &y[3], &z[3]}, 1u, i-3u, true, true}; // create indexer input object
         fast_feedback::output<float> out{&buf[0], &buf[3u*cpers.max_output_cells],
                                          &buf[6u*cpers.max_output_cells], &buf[9u*cpers.max_output_cells],
                                          cpers.max_output_cells};               // create indexer output object

@@ -569,35 +569,30 @@ namespace {
             CU_CHECK(cudaMemcpyAsync(&device_data->input.n_cells, &pinned_tmp.max_input_cells, sizeof(n_input_cells) + sizeof(n_spots), cudaMemcpyHostToDevice, stream));
 
             if (n_input_cells + n_spots > 0u) {
-                if (n_input_cells == input.n_cells) {
-                    const auto combi_sz = (3u * n_input_cells + n_spots) * sizeof(float_type);
-                    CU_CHECK(cudaMemcpyAsync(gpu_state.ix, input.x, combi_sz, cudaMemcpyHostToDevice, stream));
-                    CU_CHECK(cudaMemcpyAsync(gpu_state.iy, input.y, combi_sz, cudaMemcpyHostToDevice, stream));
-                    CU_CHECK(cudaMemcpyAsync(gpu_state.iz, input.z, combi_sz, cudaMemcpyHostToDevice, stream));
-                } else {
-                    if (n_input_cells > 0u) {
-                        const auto cell_sz = 3u * n_input_cells * sizeof(float_type);
-                        CU_CHECK(cudaMemcpyAsync(gpu_state.ix, input.x, cell_sz, cudaMemcpyHostToDevice, stream));
-                        CU_CHECK(cudaMemcpyAsync(gpu_state.iy, input.y, cell_sz, cudaMemcpyHostToDevice, stream));
-                        CU_CHECK(cudaMemcpyAsync(gpu_state.iz, input.z, cell_sz, cudaMemcpyHostToDevice, stream));
-                    }
-                    if (n_spots > 0) {
-                        const auto dst_offset = 3u * cpers.max_input_cells;
-                        const auto src_offset = 3u * input.n_cells;
-                        const auto spot_sz = n_spots * sizeof(float_type);
-                        CU_CHECK(cudaMemcpyAsync(&gpu_state.ix[dst_offset], &input.x[src_offset], spot_sz, cudaMemcpyHostToDevice, stream));
-                        CU_CHECK(cudaMemcpyAsync(&gpu_state.iy[dst_offset], &input.y[src_offset], spot_sz, cudaMemcpyHostToDevice, stream));
-                        CU_CHECK(cudaMemcpyAsync(&gpu_state.iz[dst_offset], &input.z[src_offset], spot_sz, cudaMemcpyHostToDevice, stream));
-                    }
+                if (input.new_cells && n_input_cells > 0u) {
+                    const auto cell_sz = 3u * n_input_cells * sizeof(float_type);
+                    CU_CHECK(cudaMemcpyAsync(gpu_state.ix, input.cell.x, cell_sz, cudaMemcpyHostToDevice, stream));
+                    CU_CHECK(cudaMemcpyAsync(gpu_state.iy, input.cell.y, cell_sz, cudaMemcpyHostToDevice, stream));
+                    CU_CHECK(cudaMemcpyAsync(gpu_state.iz, input.cell.z, cell_sz, cudaMemcpyHostToDevice, stream));
+                }
+                if (input.new_spots && n_spots > 0) {
+                    const auto dst_offset = 3u * cpers.max_input_cells;
+                    const auto spot_sz = n_spots * sizeof(float_type);
+                    CU_CHECK(cudaMemcpyAsync(&gpu_state.ix[dst_offset], input.spot.x, spot_sz, cudaMemcpyHostToDevice, stream));
+                    CU_CHECK(cudaMemcpyAsync(&gpu_state.iy[dst_offset], input.spot.y, spot_sz, cudaMemcpyHostToDevice, stream));
+                    CU_CHECK(cudaMemcpyAsync(&gpu_state.iz[dst_offset], input.spot.z, spot_sz, cudaMemcpyHostToDevice, stream));
                 }
             }
 
             LOG_START(logger::l_debug) {
                 logger::debug << stanza << "copy in: " << n_input_cells << " cells(in), " << output.n_cells << " cells(out), "
-                            << n_spots << " spots, elements=" << gpu_state.elements.get() << ": "
-                            << input.x << "-->" << gpu_state.ix << ", "
-                            << input.y << "-->" << gpu_state.iy << ", "
-                            << input.z << "-->" << gpu_state.iz << '\n';
+                            << n_spots << " spots, elements=" << gpu_state.elements.get() << ": (cells) "
+                            << input.cell.x << "-->" << gpu_state.ix << ", "
+                            << input.cell.y << "-->" << gpu_state.iy << ", "
+                            << input.cell.z << "-->" << gpu_state.iz << ", (spots) "
+                            << input.cell.x << "-->" << &gpu_state.ix[3u * cpers.max_input_cells] << ", "
+                            << input.cell.y << "-->" << &gpu_state.iy[3u * cpers.max_input_cells] << ", "
+                            << input.cell.z << "-->" << &gpu_state.iz[3u * cpers.max_input_cells] << '\n';
             } LOG_END;
         }
 
@@ -682,9 +677,9 @@ namespace {
         
         // All vector lengths
         for (unsigned i=0u; i<n_vecs; i++) {
-            const auto x = in.x[i];
-            const auto y = in.y[i];
-            const auto z = in.z[i];
+            const auto x = in.cell.x[i];
+            const auto y = in.cell.y[i];
+            const auto z = in.cell.z[i];
             cand_len[i] = std::sqrt(x*x + y*y + z*z);
         }
 
@@ -712,9 +707,9 @@ namespace {
             } while(++j != n_vecs);
             n_cand_groups = i + 1;
             for (unsigned i=0u; i<n_vecs; i++) {
-                const auto x = in.x[i];
-                const auto y = in.y[i];
-                const auto z = in.z[i];
+                const auto x = in.cell.x[i];
+                const auto y = in.cell.y[i];
+                const auto z = in.cell.z[i];
                 float_type length = std::sqrt(x*x + y*y + z*z);
                 auto it = std::lower_bound(std::cbegin(cand_len), std::cbegin(cand_len) + n_cand_groups, length,
                                         [l_threshold](const float_type& a, const float_type& l) -> bool {
@@ -1391,14 +1386,9 @@ namespace {
             float_type sv[3];                                       // unit vector in sample direction
             sample_point(sample, n_samples, sv);
 
-            const unsigned spot_offset = 3 * data->cpers.max_input_cells;
             const fast_feedback::input<float_type>& in = data->input;
             const unsigned n_spots = in.n_spots;
-            const float_type* sx = &in.x[spot_offset];
-            const float_type* sy = &in.y[spot_offset];
-            const float_type* sz = &in.z[spot_offset];
-            
-            v = sample1(data->crt, sv, sl, sx, sy, sz, n_spots);
+            v = sample1(data->crt, sv, sl, in.spot.x, in.spot.y, in.spot.z, n_spots);
         }
 
         {   // sort within block {objective function value, sample} ascending by objective function value
@@ -1462,16 +1452,12 @@ namespace {
             const float_type vlength = data->candidate_length[cand_grp];
             float_type z[3], a[3], b[3];
 
-            sample_cell(z, a, b, in.x, in.y, in.z, vlength, vsample, n_vsamples, rsample, n_rsamples, cell_vec);
+            sample_cell(z, a, b, in.cell.x, in.cell.y, in.cell.z, vlength, vsample, n_vsamples, rsample, n_rsamples, cell_vec);
 
             const unsigned n_spots = in.n_spots;
-            const unsigned spot_offset = 3u * data->cpers.max_input_cells;
-            const float_type* sx = &in.x[spot_offset];
-            const float_type* sy = &in.y[spot_offset];
-            const float_type* sz = &in.z[spot_offset];
             const float_type triml = data->crt.triml;
             const float_type trimh = data->crt.trimh;
-            vabc = sample3(data->crt, z, a, b, sx, sy, sz, vlength, n_spots);
+            vabc = sample3(data->crt, z, a, b, in.spot.x, in.spot.y, in.spot.z, vlength, n_spots);
         }
 
         // Get best output cells for block
@@ -1525,7 +1511,7 @@ namespace {
         const float_type vlength = data->candidate_length[cand_grp];
         float_type z[3], a[3], b[3];
 
-        sample_cell(z, a, b, in.x, in.y, in.z, vlength, vsample, n_vsamples, rsample, n_rsamples, cell_vec);
+        sample_cell(z, a, b, in.cell.x, in.cell.y, in.cell.z, vlength, vsample, n_vsamples, rsample, n_rsamples, cell_vec);
 
         const unsigned iz = cell_vec % 3u;
         const unsigned ia = (iz + 1u) % 3u;
@@ -1676,8 +1662,9 @@ namespace gpu {
         }
 
         {
+            const unsigned so = 3 * cpers.max_input_cells; // spot offset
             device_data _data{cpers, fast_feedback::config_runtime<float_type>{},
-                              fast_feedback::input<float_type>{ix, iy, iz, 0, 0},
+                              fast_feedback::input<float_type>{{ix, iy, iz}, {&ix[so], &iy[so], &iz[so]}, 0, 0, true, true},
                               fast_feedback::output<float_type>{ox, oy, oz, scores, 0},
                               candidate_length, candidate_value,
                               candidate_sample, cellvec_to_cand,
@@ -1750,8 +1737,8 @@ namespace gpu {
         unsigned n_cand_groups = calc_cand_groups(candidate_idx, candidate_length, in, conf_rt, n_cells_in);
         unsigned n_vec_cgrps = calc_cell_cand(cell_candidate, vec_cgrps, candidate_idx, n_cells_in);
         LOG_START(logger::l_debug) {
-            logger::debug << stanza << "index on " << state.device << ", n_cells = " << n_cells_in << "(in)/"
-                                    << n_cells_out << "(out), n_spots = " << in.n_spots << '\n'
+            logger::debug << stanza << "index on " << state.device << ", n_cells = " << n_cells_in << "(in:" << (in.new_cells?"new":"old") << ")/"
+                                    << n_cells_out << "(out), n_spots = " << in.n_spots << (in.new_spots?"new":"old") << '\n'
                           << stanza << "  candidate_idx =";
             for (const auto& e : candidate_idx)
                 logger::debug << ' ' << e;

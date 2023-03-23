@@ -128,11 +128,16 @@ namespace fast_feedback {
             // - if callback is given, it will be called with data as the argument as soon as  index_end can be called
             inline void index_start (unsigned n_input_cells, unsigned n_spots, void(*callback)(void*)=nullptr, void* data=nullptr)
             {
+                input.cell.x = &coords(idx.cpers.max_input_cells - n_input_cells,0);
+                input.cell.y = &coords(idx.cpers.max_input_cells - n_input_cells,1);
+                input.cell.z = &coords(idx.cpers.max_input_cells - n_input_cells,2);
+                input.spot.x = &coords(idx.cpers.max_input_cells,0);
+                input.spot.y = &coords(idx.cpers.max_input_cells,1);
+                input.spot.z = &coords(idx.cpers.max_input_cells,2);
                 input.n_cells = n_input_cells;
                 input.n_spots = n_spots;
-                input.x = &coords(idx.cpers.max_input_cells - n_input_cells,0);
-                input.y = &coords(idx.cpers.max_input_cells - n_input_cells,1);
-                input.z = &coords(idx.cpers.max_input_cells - n_input_cells,2);
+                input.new_cells = true;
+                input.new_spots = true;
                 idx.index_start(input, output, crt, callback, data);
             }
 
