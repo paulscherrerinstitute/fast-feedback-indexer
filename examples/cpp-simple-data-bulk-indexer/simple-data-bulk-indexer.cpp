@@ -680,9 +680,9 @@ namespace {
                                 auto t = clock::now();
 
                                 if (method == "ifss")
-                                    indexer_ifss::refine(work->coords, work->cells, work->scores, cpers, cifss, work->in.n_spots, block, refinement_blocks);
+                                    indexer_ifss::refine(work->coords.bottomRows(work->in.n_spots), work->cells, work->scores, cifss, block, refinement_blocks);
                                 else if (method == "ifse")
-                                    indexer_ifse::refine(work->coords, work->cells, work->scores, cpers, cifse, work->in.n_spots, block, refinement_blocks);
+                                    indexer_ifse::refine(work->coords.bottomRows(work->in.n_spots), work->cells, work->scores, cifse, block, refinement_blocks);
 
                                 refine_time_priv += duration{clock::now() - t}.count();
 

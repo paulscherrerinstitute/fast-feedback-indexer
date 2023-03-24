@@ -31,9 +31,9 @@ Handle to the indexer object
 
 This allocates space on the GPU for all the data structures used in the computation. The GPU device is parsed from the *INDEXER_GPU_DEVICE* environment variable. If it is not set, the current GPU device is used.
 
-#### ffbidx.index(handle, data, method='ifss', length_threshold=1e-9, triml=.05, trimh=.15, delta0.1, num_sample_points=32*1024, n_output_cells=1, n_input_cells=1, contraction=.8, min_spots=6, n_iter=15)
+#### ffbidx.index(handle, spots, input_cells, method='ifss', length_threshold=1e-9, triml=.05, trimh=.15, delta0.1, num_sample_points=32*1024, n_output_cells=1, n_input_cells=1, contraction=.8, min_spots=6, n_iter=15)
 
-Run the fast feedback indexer on given 3D real space space input cells and reciprocal spots packed in the **data** numpy array and return oriented cells and their scores. The still experimental *'raw'* method first finds candidate vectors according to the score $\sum_{s \in spots} \log_2(trim_l^h(dist(s, clp)) + delta))$, which are then used as rotation axes for the input cell. The cell score for the *'raw'* method is
+Run the fast feedback indexer on given 3D real space input cells and reciprocal spots packed in the **input_cells** and **spots** numpy array and return oriented cells and their scores. The still experimental *'raw'* method first finds candidate vectors according to the score $\sum_{s \in spots} \log_2(trim_l^h(dist(s, clp)) + delta))$, which are then used as rotation axes for the input cell. The cell score for the *'raw'* method is
 $-| \\{ s \in spots: dist(s, clp) < h \\} | + 2^{\frac{\sum_{s \in spots} \log_2(trim_l^h(dist(s, clp)) + delta))}{|spots|}} - delta$, where $trim$ stands for trimming, $dist(s, clp)$ for the distance of a spot to the closest lattice point, and $l,h$ are the lower and higher trimming thresholds.
 
 **Return**:
@@ -46,7 +46,8 @@ A tuple of numpy arrays *(output_cells, scores)*
 **Arguments**:
 
 - **handle** is the indexer object handle
-- **data** array of vector coordinates. In memory, all x coordinates followed by all y coordinates and finally all z coordinates. If there are *M* input cells and *K* spots, the first *3M* vectors are the given unit cells in real space, the rest are *K* spots in reciprocal space. The array shape is either *(3, 3(3M+K)), order='C'*, or *(3(3M+K), 3), order='F'*.
+- **spots** is a numpy array of spot coordinates in reciprocal space. In memory, all x coordinates followed by all y coordinates and finally all z coordinates. If there are *K* spots, the array shape is either *(3, K), order='C'*, or *(K, 3), order='F'*.
+- **input_cells** is a numpy array of input cell vector coordinates in real space. In memory, all x coordinates followed by all y coordinates and finally all z coordinates in consecutive packs of 3 coordinates. If there are *M* input cells, the array shape is either *(3, 3M), order='C'*, or *(3M, 3), order='F'*.
 - **method** refinement method: one of *'raw'* (no refinement), *'ifss'* (iterative fit to selected spots), *'ifse'* (iterative fit to selected errors)
 - **length_threshold**: consider input cell vector length the same if they differ by less than this
 - **triml**: >= 0, low trim value, 0 means no trimming

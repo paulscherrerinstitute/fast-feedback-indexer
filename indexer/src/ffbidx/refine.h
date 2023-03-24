@@ -157,7 +157,7 @@ namespace fast_feedback {
                 index_end();
             }
 
-            // Spot access: spot i
+            // Reciprocal space spot access: spot i
             inline float_type& spotX (unsigned i=0u) noexcept
             { return coords(3u * idx.cpers.max_input_cells + i, 0u); }
 
@@ -176,11 +176,11 @@ namespace fast_feedback {
             inline const float_type& spotZ (unsigned i=0u) const noexcept
             { return coords(3u * idx.cpers.max_input_cells + i, 2u); }
 
-            // Coords area designated for spots, fill top down
+            // Coords area designated for reciprocal space spots, fill top down
             inline auto spotM ()
             { return coords.bottomRows(coords.rows() - 3u * idx.cpers.max_input_cells); }
 
-            // Input cell access: cell i, vector j
+            // Real space input cell access: cell i, vector j
             inline float_type& iCellX (unsigned i=0u, unsigned j=0u) noexcept
             { return coords(3u * (idx.cpers.max_input_cells - i - 1u) + j, 0u); }
 
@@ -199,14 +199,14 @@ namespace fast_feedback {
             inline const float_type& iCellZ (unsigned i=0u, unsigned j=0u) const noexcept
             { return coords(3u * (idx.cpers.max_input_cells - i - 1u) + j, 2u); }
 
-            // Coords area for input cell i
+            // Coords area for real space input cell i
             inline auto iCell (unsigned i=0u) noexcept
             { return coords.block(3u * (idx.cpers.max_input_cells - i - 1u), 0u, 3u, 3u); }
 
             inline const auto iCell (unsigned i=0u) const noexcept
             { return coords.block(3u * (idx.cpers.max_input_cells - i - 1u), 0u, 3u, 3u); }
 
-            // Coords area designated for input cells, fill cellwise bottom up
+            // Coords area designated for real space input cells, fill cellwise bottom up
             inline auto iCellM () noexcept
             { return coords.topRows(3u * idx.cpers.max_input_cells); }
 
@@ -221,7 +221,7 @@ namespace fast_feedback {
             inline unsigned n_spots () noexcept
             { return input.n_spots; }
 
-            // Output cell access: cell i, vector j
+            // Real space output cell access: cell i, vector j
             inline float_type& oCellX (unsigned i=0u, unsigned j=0u) noexcept
             { return cells(3u * i + j, 0u); }
 
@@ -240,7 +240,7 @@ namespace fast_feedback {
             inline const float_type& oCellZ (unsigned i=0u, unsigned j=0u) const noexcept
             { return cells(3u * i + j, 2u); }
 
-            // Output cell i
+            // Real space output cell i
             inline auto oCell (unsigned i) noexcept
             { return cells.block(3u * i, 0u, 3u, 3u); }
 
@@ -410,37 +410,36 @@ namespace fast_feedback {
             // All threads must use a common nblocks parameter and each thread an individual block parameter.
             //
             // input:
-            // - coords     coordinate matrix like the one in the base indexer
-            // - cells      output cells matrix like the one in the base indexer
+            // - spots      spot reciprocal coordinates matrix
+            // - cells      output cells real space coordinates matrix like the one in the base indexer
             // - scores     output cell scores matrix with scores coming from the base indexer
             // - cpers      persistent config for the matrices
             // - cifss      ifss config
-            // - nspots     actual number of spots in coords
             // - block      which of the N cell blocks
             // - nblocks    use N cell blocks
             // output:
             // - cells      the refined cells
             // - scores     refined cell scores: largest distance of the min_spots closest to their approximated lattice points
             template<typename MatX3, typename VecX>
-            inline static void refine (const Eigen::Matrix<float_type, Eigen::Dynamic, 3u>& coords,
+            inline static void refine (const Eigen::Matrix<float_type, Eigen::Dynamic, 3u>& spots,
                                        Eigen::DenseBase<MatX3>& cells,
                                        Eigen::DenseBase<VecX>& scores,
-                                       const fast_feedback::config_persistent<float_type>& cpers,
                                        const config_ifss<float_type>& cifss,
-                                       unsigned nspots, unsigned block=0, unsigned nblocks=1)
+                                       unsigned block=0, unsigned nblocks=1)
             {
                 using namespace Eigen;
                 using Mx3 = Matrix<float_type, Dynamic, 3>;
                 using M3 = Matrix<float_type, 3, 3>;
+                const unsigned nspots = spots.rows();
+                const unsigned ncells = scores.rows();
                 VectorX<bool> below{nspots};
                 MatrixX3<bool> sel{nspots, 3u};
                 Mx3 resid{nspots, 3u};
                 Mx3 miller{nspots, 3u};
-                Mx3 spots = coords.block(3u * cpers.max_input_cells, 0u, nspots, 3u);
                 M3 cell;
-                const unsigned blocksize = (cpers.max_output_cells + nblocks - 1u) / nblocks;
+                const unsigned blocksize = (ncells + nblocks - 1u) / nblocks;
                 const unsigned startcell = block * blocksize;
-                const unsigned endcell = std::min(startcell + blocksize, cpers.max_output_cells);
+                const unsigned endcell = std::min(startcell + blocksize, ncells);
                 for (unsigned j=startcell; j<endcell; j++) {
                     cell = cells.block(3u * j, 0u, 3u, 3u).transpose();  // cell: col vectors
                     float_type threshold = indexer<float_type>::score_parts(scores[j]).second;
@@ -474,7 +473,7 @@ namespace fast_feedback {
             inline void index_end () override
             {
                 indexer<float_type>::index_end();
-                refine(this->coords, this->cells, this->scores, this->idx.cpers, cifss, this->input.n_spots);
+                refine(this->coords.block(3u * this->idx.cpers.max_input_cells, 0u, this->input.n_spots, 3u), this->cells, this->scores, cifss);
             }
 
             // ifss configuration access
@@ -552,37 +551,36 @@ namespace fast_feedback {
             // All threads must use a common nblocks parameter and each thread an individual block parameter.
             //
             // input:
-            // - coords     coordinate matrix like the one in the base indexer
+            // - spots      spot coordinate matrix
             // - cells      output cells matrix like the one in the base indexer
             // - scores     output cell scores matrix with scores coming from the base indexer
             // - cpers      persistent config for the matrices
             // - cifse      ifse config
-            // - nspots     actual number of spots in coords
             // - block      which of the N cell blocks
             // - nblocks    use N cell blocks
             // output:
             // - cells      the refined cells
             // - scores     refined cell scores: largest distance of the min_spots closest to their approximated lattice points
             template<typename MatX3, typename VecX>
-            inline static void refine (const Eigen::Matrix<float_type, Eigen::Dynamic, 3u>& coords,
+            inline static void refine (const Eigen::Matrix<float_type, Eigen::Dynamic, 3u>& spots,
                                        Eigen::DenseBase<MatX3>& cells,
                                        Eigen::DenseBase<VecX>& scores,
-                                       const fast_feedback::config_persistent<float_type>& cpers,
                                        const config_ifse<float_type>& cifse,
-                                       unsigned nspots, unsigned block=0, unsigned nblocks=1)
+                                       unsigned block=0, unsigned nblocks=1)
             {
                 using namespace Eigen;
                 using Mx3 = Matrix<float_type, Dynamic, 3>;
                 using M3 = Matrix<float_type, 3, 3>;
+                const unsigned nspots = spots.rows();
+                const unsigned ncells = scores.rows();
                 VectorX<bool> below{nspots};
                 MatrixX3<bool> sel{nspots, 3u};
                 Mx3 resid{nspots, 3u};
                 Mx3 miller{nspots, 3u};
-                Mx3 spots = coords.block(3u * cpers.max_input_cells, 0u, nspots, 3u);
                 M3 cell;
-                const unsigned blocksize = (cpers.max_output_cells + nblocks - 1u) / nblocks;
+                const unsigned blocksize = (ncells + nblocks - 1u) / nblocks;
                 const unsigned startcell = block * blocksize;
-                const unsigned endcell = std::min(startcell + blocksize, cpers.max_output_cells);
+                const unsigned endcell = std::min(startcell + blocksize, ncells);
                 for (unsigned j=startcell; j<endcell; j++) {
                     cell = cells.block(3u * j, 0u, 3u, 3u).transpose();  // cell: col vectors
                     float_type threshold = indexer<float_type>::score_parts(scores[j]).second;
@@ -616,7 +614,7 @@ namespace fast_feedback {
             inline void index_end () override
             {
                 indexer<float_type>::index_end();
-                refine(this->coords, this->cells, this->scores, this->idx.cpers, cifse, this->input.n_spots);
+                refine(this->coords.block(3u * this->idx.cpers.max_input_cells, 0u, this->input.n_spots, 3u), this->cells, this->scores, cifse);
             }
 
             // ifse configuration access

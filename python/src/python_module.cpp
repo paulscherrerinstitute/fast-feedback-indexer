@@ -11,6 +11,7 @@
 #include <exception>
 #include <stdexcept>
 #include <string>
+#include <memory>
 #include "ffbidx/refine.h"
 
 namespace {
@@ -18,7 +19,13 @@ namespace {
 
     std::atomic_uint32_t next_handle{};
 
-    std::map<uint32_t, indexer_t> indexers{};
+    struct map_t {
+        indexer_t indexer;
+        unsigned n_spots;
+        unsigned n_input_cells;
+    };
+
+    std::map<uint32_t, map_t> indexers{};
 
     PyObject* ffbidx_indexer_(PyObject *args, PyObject *kwds)
     {
@@ -52,7 +59,7 @@ namespace {
             handle = next_handle.fetch_add(1u);
             if (indexers.count(handle) > 0)
                 throw std::runtime_error("unable to allocate handle: handle counter wraparound occurred");
-            indexers.emplace(handle, indexer_t{cpers});
+            indexers.emplace(handle, map_t{indexer_t{cpers}, 0u, 0u});
         } catch (std::exception& e) {
             PyErr_SetString(PyExc_RuntimeError, e.what());
             return nullptr;
@@ -65,19 +72,22 @@ namespace {
     {
         using std::numeric_limits;
 
-        constexpr const char* kw[] = {"handle", "data",
-                                      "method", "length_threshold", "triml", "trimh", "delta", "num_sample_points", "n_output_cells", "n_input_cells",
+        constexpr const char* kw[] = {"handle",
+                                      "spots", "input_cells",
+                                      "method", "length_threshold", "triml", "trimh", "delta", "num_sample_points", "n_output_cells",
                                       "contraction", "min_spots", "n_iter",
                                       nullptr};
         long handle;
-        PyArrayObject* ndarray;
+        PyArrayObject* spots_ndarray = nullptr;
+        PyArrayObject* input_cells_ndarray = nullptr;
         const char* method = "ifss";
         double length_threshold=1e-9, triml=.05, trimh=.15, delta=.1;
-        long num_sample_points=32*1024, n_output_cells=1, n_input_cells=1;
+        long num_sample_points=32*1024, n_output_cells=1;
         double contraction=.8;
         long min_spots=6, n_iter=15;
-        if (PyArg_ParseTupleAndKeywords(args, kwds, "lO!|sddddllldll", (char**)kw, &handle, &PyArray_Type, &ndarray,
-                                        &method, &length_threshold, &triml, &trimh, &delta, &num_sample_points, &n_output_cells, &n_input_cells,
+        if (PyArg_ParseTupleAndKeywords(args, kwds, "lO!O!|sddddlldll", (char**)kw,
+                                        &handle, &PyArray_Type, &spots_ndarray, &PyArray_Type, &input_cells_ndarray,
+                                        &method, &length_threshold, &triml, &trimh, &delta, &num_sample_points, &n_output_cells,
                                         &contraction, &min_spots, &n_iter) == 0)
             return nullptr;
 
@@ -122,11 +132,6 @@ namespace {
             return nullptr;
         }
 
-        if (n_input_cells < 0 || n_input_cells > numeric_limits<unsigned>::max()) {
-            PyErr_SetString(PyExc_ValueError, "n_input_cells out of bounds for an unsigned integer");
-            return nullptr;
-        }
-
         if (contraction <= .0) {
             PyErr_SetString(PyExc_ValueError, "contraction parameter <= 0");
             return nullptr;
@@ -147,52 +152,99 @@ namespace {
             return nullptr;
         }
 
-        if (PyArray_NDIM(ndarray) != 2) {
-            PyErr_SetString(PyExc_RuntimeError, "data array must be 2 dimensional");
+        map_t* entry = nullptr;
+        try {
+            entry = &indexers.at((unsigned)handle);
+        } catch (std::out_of_range&) {
+            PyErr_SetString(PyExc_RuntimeError, "invalid handle");
             return nullptr;
         }
 
-        if (PyArray_TYPE(ndarray) != NPY_FLOAT32) {
-            PyErr_SetString(PyExc_RuntimeError, "only float32 data is supported");
+        npy_intp n_spots = 0;
+
+        if (PyArray_NDIM(spots_ndarray) != 2) {
+            PyErr_SetString(PyExc_RuntimeError, "spots array must be 2 dimensional");
             return nullptr;
         }
 
-        npy_intp n_vecs = 0;
+        if (PyArray_TYPE(spots_ndarray) != NPY_FLOAT32) {
+            PyErr_SetString(PyExc_RuntimeError, "only float32 spot data is supported");
+            return nullptr;
+        }
+
         {
-            auto* shape = PyArray_DIMS(ndarray);
+            auto* shape = PyArray_DIMS(spots_ndarray);
 
-            if (PyArray_ISCARRAY(ndarray)) {
+            if (PyArray_ISCARRAY(spots_ndarray)) {
                 if (shape[0] != 3) {
-                    PyErr_SetString(PyExc_RuntimeError, "only shape (3, -1) CARRAY data is supported");
+                    PyErr_SetString(PyExc_RuntimeError, "only shape (3, -1) CARRAY spot data is supported");
                     return nullptr;
                 }
-                n_vecs = shape[1];
-            } else if (PyArray_ISFARRAY(ndarray)) {
+                n_spots = shape[1];
+            } else if (PyArray_ISFARRAY(spots_ndarray)) {
                 if (shape[1] != 3) {
-                    PyErr_SetString(PyExc_RuntimeError, "only shape (-1, 3) FARRAY data is supported");
+                    PyErr_SetString(PyExc_RuntimeError, "only shape (-1, 3) FARRAY spot data is supported");
                     return nullptr;
                 }
-                n_vecs = shape[0];
+                n_spots = shape[0];
+            } else {
+                PyErr_SetString(PyExc_RuntimeError, "only NPY_ARRAY_CARRAY or NPY_ARRAY_FARRAY spot data is supported");
+                return nullptr;
+            }
+        }
+        
+        if (n_spots <= 0) {
+            PyErr_SetString(PyExc_RuntimeError, "no spots");
+            return nullptr;
+        }
+
+        npy_intp n_input_cells = 0;
+
+        if (PyArray_NDIM(input_cells_ndarray) != 2) {
+            PyErr_SetString(PyExc_RuntimeError, "input cells array must be 2 dimensional");
+            return nullptr;
+        }
+
+        if (PyArray_TYPE(input_cells_ndarray) != NPY_FLOAT32) {
+            PyErr_SetString(PyExc_RuntimeError, "only float32 input cell data is supported");
+            return nullptr;
+        }
+
+        {
+            auto* shape = PyArray_DIMS(input_cells_ndarray);
+
+            if (PyArray_ISCARRAY(input_cells_ndarray)) {
+                if (shape[0] != 3) {
+                    PyErr_SetString(PyExc_RuntimeError, "only shape (3, -1) CARRAY input cell data is supported");
+                    return nullptr;
+                }
+                if (shape[1] % 3 != 0) {
+                    PyErr_SetString(PyExc_RuntimeError, "incomplete CARRAY input cell data");
+                    return nullptr;
+                }
+                n_input_cells = shape[1] / 3;
+            } else if (PyArray_ISFARRAY(input_cells_ndarray)) {
+                if (shape[1] != 3) {
+                    PyErr_SetString(PyExc_RuntimeError, "only shape (-1, 3) FARRAY input cell data is supported");
+                    return nullptr;
+                }
+                if (shape[0] % 3 != 0) {
+                    PyErr_SetString(PyExc_RuntimeError, "incomplete FARRAY input cell data");
+                    return nullptr;
+                }
+                n_input_cells = shape[0] / 3;
             } else {
                 PyErr_SetString(PyExc_RuntimeError, "only NPY_ARRAY_CARRAY or NPY_ARRAY_FARRAY data is supported");
                 return nullptr;
             }
         }
 
-        if (3*n_input_cells >= n_vecs) {
-            PyErr_SetString(PyExc_RuntimeError, "not enough data for n_cells plus spots");
+        if (n_input_cells <= 0) {
+            PyErr_SetString(PyExc_RuntimeError, "no input cells");
             return nullptr;
         }
 
-        indexer_t* indexer = nullptr;
-        try {
-            indexer = &indexers.at((unsigned)handle);
-        } catch (std::out_of_range&) {
-            PyErr_SetString(PyExc_RuntimeError, "invalid handle");
-            return nullptr;
-        }
-
-        unsigned n_out = std::min((unsigned)n_output_cells, indexer->cpers.max_output_cells);
+        unsigned n_out = std::min((unsigned)n_output_cells, entry->indexer.cpers.max_output_cells);
 
         PyArrayObject* result;
         {
@@ -217,8 +269,11 @@ namespace {
         }
 
         try {
-            float* in_data = (float*)PyArray_DATA(ndarray);
-            npy_intp in_bytes = PyArray_NBYTES(ndarray);
+            float* spot_data = (float*)PyArray_DATA(spots_ndarray);
+            npy_intp spot_bytes = PyArray_NBYTES(spots_ndarray);
+
+            float* input_cell_data = (float*)PyArray_DATA(input_cells_ndarray);
+            npy_intp input_cell_bytes = PyArray_NBYTES(input_cells_ndarray);
 
             float* out_data = (float*)PyArray_DATA(result);
             npy_intp out_bytes = PyArray_NBYTES(result);
@@ -231,35 +286,41 @@ namespace {
             fast_feedback::memory_pin pin_crt{fast_feedback::memory_pin::on(crt)};
             fast_feedback::memory_pin pin_score{score_data, (std::size_t)score_bytes};
             fast_feedback::memory_pin pin_out{out_data, (std::size_t)out_bytes};
-            fast_feedback::memory_pin pin_in{in_data, (std::size_t)in_bytes};
+            fast_feedback::memory_pin pin_spots{spot_data, (std::size_t)spot_bytes};
+            fast_feedback::memory_pin pin_input_cells{input_cell_data, (std::size_t)input_cell_bytes};
 
-            unsigned n_spots = n_vecs - 3*n_input_cells;
             const fast_feedback::input<float> input{
-                {&in_data[0], &in_data[n_vecs], &in_data[2*n_vecs]},
-                {&in_data[3*n_input_cells], &in_data[n_vecs + 3*n_input_cells], &in_data[2*n_vecs + 3*n_input_cells]},
-                (unsigned)n_input_cells, n_spots,
+                {&input_cell_data[0], &input_cell_data[3*n_input_cells], &input_cell_data[6*n_input_cells]},
+                {&spot_data[0], &spot_data[n_spots], &spot_data[2*n_spots]},
+                (unsigned)n_input_cells, (unsigned)n_spots,
                 true, true
             };
             fast_feedback::output<float> output{&out_data[0], &out_data[3*n_out], &out_data[6*n_out], &score_data[0], n_out};
 
-            indexer->index(input, output, crt);
+            entry->indexer.index(input, output, crt);
+
+            entry->n_spots = n_spots;
+            entry->n_input_cells = n_input_cells;
 
             if (smethod != "raw") {
-                    using namespace Eigen;
-                    using namespace fast_feedback::refine;
-                    Map<MatrixX3f> coords{in_data, n_vecs, 3};
-                    Map<MatrixX3f> cells{out_data, 3*n_out, 3};
-                    Map<VectorXf> scores{score_data, n_out};
+                using namespace Eigen;
+                using namespace fast_feedback::refine;
+                Map<MatrixX3f> spots{spot_data, n_spots, 3};
+                Map<MatrixX3f> cells{out_data, 3*n_out, 3};
+                Map<VectorXf> scores{score_data, n_out};
 
                 if (smethod == "ifss") {
                     config_ifss<float> cifss{(float)contraction, (unsigned)min_spots, (unsigned)n_iter};
-                    indexer_ifss<float>::refine(coords, cells, scores, indexer->cpers, cifss, n_spots);
+                    indexer_ifss<float>::refine(spots, cells, scores, cifss);
                 } else { // ifse
                     config_ifse<float> cifse{(float)contraction, (unsigned)min_spots, (unsigned)n_iter};
-                    indexer_ifse<float>::refine(coords, cells, scores, indexer->cpers, cifse, n_spots);
+                    indexer_ifse<float>::refine(spots, cells, scores, cifse);
                 }
             }
+
         } catch (std::exception& ex) {
+            entry->n_spots = 0u;
+            entry->n_input_cells = 0u;
             PyErr_SetString(PyExc_RuntimeError, ex.what());
             return nullptr;
         }
