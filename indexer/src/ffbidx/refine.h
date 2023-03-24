@@ -500,6 +500,12 @@ namespace fast_feedback {
             inline unsigned min_spots () const noexcept
             { return cifss.min_spots; }
 
+            inline void max_iter (unsigned n) noexcept
+            { cifss.max_iter = n; }
+
+            inline unsigned max_iter () const noexcept
+            { return cifss.max_iter; }
+
             inline const config_ifss<float_type>& conf_ifss () const noexcept
             { return cifss; }
 
