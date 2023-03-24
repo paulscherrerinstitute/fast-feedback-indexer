@@ -299,24 +299,12 @@ namespace {
         crt.triml = triml;
         crt.trimh = trimh;
         crt.delta = delta;
-        if (method == "ifss") {
-            if (contr < .0f)
-                contr = cifss.threshold_contraction;
-            if (minpts == 0u)
-                minpts = cifss.min_spots;
-        } else if (method == "ifse") {
-            if (contr < .0f)
-                contr = cifse.threshold_contraction;
-            if (minpts == 0u)
-                minpts = cifse.min_spots;
-        }
+        if (contr >= .0f)
+            cifss.threshold_contraction = cifse.threshold_contraction = contr;
+        if (minpts > 0u)
+            cifss.min_spots = cifse.min_spots = minpts;
         if (iter == 0u)
-            iter = cifse.max_iter;
-        cifss.threshold_contraction = contr;
-        cifss.min_spots = minpts;
-        cifse.threshold_contraction = contr;
-        cifse.min_spots = minpts;
-        cifse.max_iter = iter;
+            cifss.max_iter = cifse.max_iter = iter;
     }
 
     // cyclic nonnegative integer queue

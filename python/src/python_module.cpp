@@ -252,7 +252,7 @@ namespace {
                     Map<VectorXf> scores{score_data, n_out};
 
                 if (smethod == "ifss") {
-                    config_ifss<float> cifss{(float)contraction, (unsigned)min_spots};
+                    config_ifss<float> cifss{(float)contraction, (unsigned)min_spots, (unsigned)n_iter};
                     indexer_ifss<float>::refine(coords, cells, scores, indexer->cpers, cifss, n_spots);
                 } else { // ifse
                     config_ifse<float> cifse{(float)contraction, (unsigned)min_spots, (unsigned)n_iter};

@@ -57,14 +57,14 @@ A tuple of numpy arrays *(output_cells, scores)*
 - **n_input_cells** is the number of given unit cells *N* in the data array
 - **contraction** threshold contraction parameter for methods *'ifss'* and *'ifse'*
 - **min_spots** minimum number of spots to fit against for methods *'ifss'* and *'ifse'*
-- **n_iter** maximum number of iterations for method *'ifse'*
+- **n_iter** maximum number of iterations for methods *'ifss'* and *'ifse'*
 
 **Refinement Methods**:
 
 After running the *'raw'* method, there's the possibility to refine the cells using two experimental methods currently.
 Both methods use the normalized sum of logarithms part from the *'raw'* cell score as the initial threshold $t$.
 
-*'ifss'*: Iteratively fit a new cell to $\\{ s \in spots: dist(s, clp) < t \\}$ and contract the threshold. Stop when the number of spots is below the minimum number of spots.
+*'ifss'*: Iteratively fit a new cell to the spots $\\{ s \in spots: dist(s, clp) < t \\}$ and contract the threshold. Stop when the maximum number of iterations is reached, or the spot set size is below the minimum number of spots.
 
 *'ifse'*: Iteratively fit an additive delta to the errors $\\{ dist(s, clp) : s \in spots \land dist(s, clp) < t \\}$ and contract the threshold. Stop when the maximum number of iterations is reached, or the errors set size is below the minimum number of spots.
 

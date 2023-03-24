@@ -50,6 +50,38 @@ namespace {
         std::exit((EXIT_FAILURE));
     }
 
+    template<typename config_type>
+    void parse_conf(config_type& conf, char* argv[])
+    {
+        {
+            std::istringstream iss(argv[7]);
+            iss >> conf.threshold_contraction;
+            if (! iss)
+                throw std::runtime_error("unable to parse sixth argument: threshold contraction");
+            std::cout << "threshold_contraction=" << conf.threshold_contraction << '\n';
+            if ((conf.threshold_contraction <= .0f) || (conf.threshold_contraction >= 1.f))
+                throw std::runtime_error("threshold_contraction must be in range (0..1)");
+        }
+        {
+            std::istringstream iss(argv[8]);
+            iss >> conf.min_spots;
+            if (! iss)
+                throw std::runtime_error("unable to parse seventh argument: minimum number of spots for fitting");
+            std::cout << "min_spots=" << conf.min_spots << '\n';
+            if (conf.min_spots <= 3u)
+                throw std::runtime_error("min_spots must be > 3");
+        }
+        {
+            std::istringstream iss(argv[9]);
+            iss >> conf.max_iter;
+            if (! iss)
+                throw std::runtime_error("unable to parse eight argument: max iterations");
+            std::cout << "max_iter=" << conf.max_iter << '\n';
+            if (conf.max_iter <= 0)
+                throw std::runtime_error("max iterations must be positive");
+        }        
+    }
+
 } // namespace
 
 int main (int argc, char *argv[])
@@ -106,58 +138,11 @@ int main (int argc, char *argv[])
 
         if (method == "ifss") {
             fast_feedback::refine::config_ifss cifss{};   // default ifss refinement config
-            {
-                {
-                    std::istringstream iss(argv[7]);
-                    iss >> cifss.threshold_contraction;
-                    if (! iss)
-                        throw std::runtime_error("unable to parse sixth argument: threshold contraction");
-                    std::cout << "threshold_contraction=" << cifss.threshold_contraction << '\n';
-                    if ((cifss.threshold_contraction <= .0f) || (cifss.threshold_contraction >= 1.f))
-                        throw std::runtime_error("threshold_contraction must be in range (0..1)");
-                }
-                {
-                    std::istringstream iss(argv[8]);
-                    iss >> cifss.min_spots;
-                    if (! iss)
-                        throw std::runtime_error("unable to parse seventh argument: minimum number of spots for fitting");
-                    std::cout << "min_spots=" << cifss.min_spots << '\n';
-                    if (cifss.min_spots <= 3u)
-                        throw std::runtime_error("min_spots must be >= 3");
-                }
-            }
+            parse_conf(cifss, argv);
             indexer_p = new fast_feedback::refine::indexer_ifss{cpers, crt, cifss};
         } else if (method == "ifse") {
             fast_feedback::refine::config_ifse cifse{}; // default ifse refinement config
-            {
-                {
-                    std::istringstream iss(argv[7]);
-                    iss >> cifse.threshold_contraction;
-                    if (! iss)
-                        throw std::runtime_error("unable to parse sixth argument: contraction speed for iterated fit to selected errors");
-                    std::cout << "threshold_contraction=" << cifse.threshold_contraction << '\n';
-                    if (cifse.threshold_contraction <= .0f)
-                        throw std::runtime_error("threshold_contraction must be positive");
-                }
-                {
-                    std::istringstream iss(argv[8]);
-                    iss >> cifse.min_spots;
-                    if (! iss)
-                        throw std::runtime_error("unable to parse seventh argument: min spots for iterated fit to selected errors");
-                    std::cout << "min_spots=" << cifse.min_spots << '\n';
-                    if (cifse.min_spots <= 3)
-                        throw std::runtime_error("min spots must be bigger than 3");
-                }
-                {
-                    std::istringstream iss(argv[9]);
-                    iss >> cifse.max_iter;
-                    if (! iss)
-                        throw std::runtime_error("unable to parse eight argument: max iterations for iterated fit to selected errors");
-                    std::cout << "max_iter=" << cifse.max_iter << '\n';
-                    if (cifse.max_iter <= 0)
-                        throw std::runtime_error("max iterations must be positive");
-                }
-            }
+            parse_conf(cifse, argv);
             indexer_p = new fast_feedback::refine::indexer_ifse{cpers, crt, cifse};
         } else {
             throw std::runtime_error("indexer method must be one of 'ifss', 'ifse'");

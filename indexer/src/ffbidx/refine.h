@@ -368,8 +368,9 @@ namespace fast_feedback {
         // Iterative fit to selected spots refinement indexer extra config
         template <typename float_type=float>
         struct config_ifss final {
-            float_type threshold_contraction=.8;        // contract error threshold by this value in every iteration
-            unsigned min_spots=6;                       // minimum number of spots to fit against
+            float_type threshold_contraction=.8;    // contract error threshold by this value in every iteration
+            unsigned min_spots=6;                   // minimum number of spots to fit against
+            unsigned max_iter=15;                   // max number of iterations
         };
 
         // Iterative fit to selected spots refinement indexer
@@ -443,7 +444,7 @@ namespace fast_feedback {
                 for (unsigned j=startcell; j<endcell; j++) {
                     cell = cells.block(3u * j, 0u, 3u, 3u).transpose();  // cell: col vectors
                     float_type threshold = indexer<float_type>::score_parts(scores[j]).second;
-                    do {
+                    for (unsigned niter=0; niter<cifss.max_iter; niter++) {
                         resid = spots * cell;   // coordinates in system <cell>
                         miller = round(resid.array());
                         resid -= miller;
@@ -454,7 +455,7 @@ namespace fast_feedback {
                         sel.colwise() = below;
                         HouseholderQR<Mx3> qr{sel.select(spots, .0f)};
                         cell = qr.solve(sel.select(miller, .0f));
-                    } while (true);
+                    }
                     {
                         ArrayX<float_type> dist = resid.rowwise().norm();
                         const auto front = std::begin(dist);
