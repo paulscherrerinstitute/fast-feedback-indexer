@@ -40,6 +40,7 @@ Author: hans-christian.stadler@psi.ch
 #include "cuda_runtime.h"
 #include <cub/block/block_radix_sort.cuh>
 
+namespace logger = fast_feedback::logger;
 using logger::stanza;
 
 namespace {

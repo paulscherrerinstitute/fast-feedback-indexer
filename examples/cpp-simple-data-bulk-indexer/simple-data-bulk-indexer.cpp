@@ -42,6 +42,8 @@ Author: hans-christian.stadler@psi.ch
 #include "ffbidx/simple_data.h"
 #include "ffbidx/refine.h"
 
+using namespace fast_feedback;
+
 namespace {
     using clock = std::chrono::high_resolution_clock;
     using time_point = std::chrono::time_point<clock>;
@@ -261,8 +263,8 @@ namespace {
     }
 
     // initialize global program argument variables to defaults
-    void initargs(const fast_feedback::config_persistent<float>& cpers,
-                  const fast_feedback::config_runtime<float>& crt) noexcept
+    void initargs(const config_persistent<float>& cpers,
+                  const config_runtime<float>& crt) noexcept
     {
         maxspot = cpers.max_spots;
         ncells = cpers.max_output_cells;
@@ -287,10 +289,10 @@ namespace {
     }
 
     // sync fast feedback indexer configuration structs with global prog arg vars
-    void setconf(fast_feedback::config_persistent<float>& cpers,
-                 fast_feedback::config_runtime<float>& crt,
-                 fast_feedback::refine::config_ifss<float>& cifss,
-                 fast_feedback::refine::config_ifse<float>& cifse)
+    void setconf(config_persistent<float>& cpers,
+                 config_runtime<float>& crt,
+                 refine::config_ifss<float>& cifss,
+                 refine::config_ifse<float>& cifse)
     {
         cpers.max_spots = maxspot;
         cpers.max_output_cells = ncells;
@@ -386,16 +388,16 @@ namespace {
         }
    }; // CNIQ
 
-    using indexer_t = fast_feedback::indexer<float>;
-    using input_t = fast_feedback::input<float>;
-    using output_t = fast_feedback::output<float>;
-    using cfgrt_t = fast_feedback::config_runtime<float>;
-    using cfgps_t = fast_feedback::config_persistent<float>;
-    using indexer_ifss = fast_feedback::refine::indexer_ifss<float>;
-    using indexer_ifse = fast_feedback::refine::indexer_ifse<float>;
-    using cifss_t = fast_feedback::refine::config_ifss<float>;
-    using cifse_t = fast_feedback::refine::config_ifse<float>;
-    using mempin_t = fast_feedback::memory_pin;
+    using indexer_t = indexer<float>;
+    using input_t = input<float>;
+    using output_t = output<float>;
+    using cfgrt_t = config_runtime<float>;
+    using cfgps_t = config_persistent<float>;
+    using indexer_ifss = refine::indexer_ifss<float>;
+    using indexer_ifse = refine::indexer_ifse<float>;
+    using cifss_t = refine::config_ifss<float>;
+    using cifse_t = refine::config_ifse<float>;
+    using mempin_t = memory_pin;
     using SimpleData = simple_data::SimpleData<float, simple_data::raise>;
     using Mx3 = Eigen::Matrix<float, Eigen::Dynamic, 3u>;
     using Vx = Eigen::Vector<float, Eigen::Dynamic>;
@@ -495,7 +497,7 @@ namespace {
     }
 
     // initialize indexer array and indexer_idle queue
-    void init_indexers (const fast_feedback::config_persistent<float>& cpers)
+    void init_indexers (const config_persistent<float>& cpers)
     {
         if (gpus.empty())
             gpus.push_back(0);

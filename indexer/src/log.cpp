@@ -36,7 +36,7 @@ Author: hans-christian.stadler@psi.ch
 
 namespace {
 
-    using namespace logger;
+    using namespace fast_feedback::logger;
 
     const std::map<std::string, unsigned> string_to_level = {
         {"fatal", l_fatal},
@@ -53,53 +53,55 @@ namespace {
 
 } // namespace
 
-namespace logger {
+namespace fast_feedback {
+    namespace logger {
 
-    unsigned get_init_log_level()
-    {
-        char* l_string = std::getenv(INDEXER_LOG_LEVEL);
-        if (l_string != nullptr) {
-            auto entry = string_to_level.find(l_string);
-            if (entry == string_to_level.end()) {
-                std::ostringstream oss;
-                for (const auto& e : string_to_level)
-                    oss << e.first << ", ";
-                std::string levels_list = oss.str();
-                levels_list.erase(levels_list.size() - 2);
-                throw FF_EXCEPTION_OBJ << "illegal value for " << INDEXER_LOG_LEVEL << ": " << l_string << " (should be in [" << levels_list << "])\n";
+        unsigned get_init_log_level()
+        {
+            char* l_string = std::getenv(INDEXER_LOG_LEVEL);
+            if (l_string != nullptr) {
+                auto entry = string_to_level.find(l_string);
+                if (entry == string_to_level.end()) {
+                    std::ostringstream oss;
+                    for (const auto& e : string_to_level)
+                        oss << e.first << ", ";
+                    std::string levels_list = oss.str();
+                    levels_list.erase(levels_list.size() - 2);
+                    throw FF_EXCEPTION_OBJ << "illegal value for " << INDEXER_LOG_LEVEL << ": " << l_string << " (should be in [" << levels_list << "])\n";
+                }
+                return entry->second;
             }
-            return entry->second;
+            return l_undef;
         }
-        return l_undef;
-    }
 
-    const char* level_to_string(unsigned log_level)
-    {
-        switch (log_level) {
-            case l_fatal:
-                return "fatal";
-            case l_error:
-                return "error";
-            case l_warn:
-                return "warn";
-            case l_info:
-                return "info";
-            case l_debug:
-                return "debug";
+        const char* level_to_string(unsigned log_level)
+        {
+            switch (log_level) {
+                case l_fatal:
+                    return "fatal";
+                case l_error:
+                    return "error";
+                case l_warn:
+                    return "warn";
+                case l_info:
+                    return "info";
+                case l_debug:
+                    return "debug";
+            }
+
+            return "undef";
         }
         
-        return "undef";
-    }
-    
-    std::mutex& lock() noexcept
-    {
-        return logging_output_lock;
-    }
+        std::mutex& lock() noexcept
+        {
+            return logging_output_lock;
+        }
 
-    logger<l_fatal> fatal;
-    logger<l_error> error;
-    logger<l_warn> warn;
-    logger<l_info> info;
-    logger<l_debug> debug;
+        logger<l_fatal> fatal;
+        logger<l_error> error;
+        logger<l_warn> warn;
+        logger<l_info> info;
+        logger<l_debug> debug;
 
-} // namespace logger
+    } // namespace logger
+} // namespace fast_feedback
