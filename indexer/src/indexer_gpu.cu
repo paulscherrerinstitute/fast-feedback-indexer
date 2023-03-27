@@ -566,7 +566,7 @@ namespace {
             pinned_tmp.max_input_cells = n_input_cells;
             pinned_tmp.max_spots = n_spots;
             CU_CHECK(cudaMemcpyAsync(&device_data->output.n_cells, &pinned_tmp.max_output_cells, sizeof(output.n_cells), cudaMemcpyHostToDevice, stream));
-            // NOTE: the following code assumes consecutive storage of two data members in tmp and in device_data->input
+            // NOTE: the following code assumes consecutive storage of two data members in pinned_tmp and in device_data->input
             CU_CHECK(cudaMemcpyAsync(&device_data->input.n_cells, &pinned_tmp.max_input_cells, sizeof(n_input_cells) + sizeof(n_spots), cudaMemcpyHostToDevice, stream));
 
             if (n_input_cells + n_spots > 0u) {

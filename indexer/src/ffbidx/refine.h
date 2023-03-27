@@ -64,16 +64,18 @@ namespace fast_feedback {
         class indexer {
           protected:
             fast_feedback::indexer<float_type> idx;                 // raw indexer
-            Eigen::Matrix<float_type, Eigen::Dynamic, 3u> coords;   // coordinates for max_input_cells + max_spots in 3D space
-            Eigen::Matrix<float_type, Eigen::Dynamic, 3u> cells;    // max_output_cells coordinate container
-            Eigen::Vector<float_type, Eigen::Dynamic> scores;       // output cell scores container
+            Eigen::MatrixX3<float_type> icells;                     // space for max_input_cells in real space
+            Eigen::MatrixX3<float_type> spots;                      // space for max_spots in reciprocal space
+            Eigen::MatrixX3<float_type> ocells;                     // max_output_cells coordinate container
+            Eigen::VectorX<float_type> scores;                      // output cell scores container
             fast_feedback::input<float_type> input;                 // raw indexer input
             fast_feedback::output<float_type> output;               // raw indexer output
-            fast_feedback::config_runtime<float_type> crt;          // raw indexer runtime config
-            fast_feedback::memory_pin pin_coords;                   // pin input coordinate container
-            fast_feedback::memory_pin pin_cells;                    // pin output cells coordinate container
+            fast_feedback::memory_pin pin_icells;                   // pin input cells container
+            fast_feedback::memory_pin pin_spots;                    // pin spots container
+            fast_feedback::memory_pin pin_ocells;                   // pin output cells container
             fast_feedback::memory_pin pin_scores;                   // pin output cell scores container
             fast_feedback::memory_pin pin_crt;                      // pin runtime config memory
+            fast_feedback::config_runtime<float_type> crt;          // raw indexer runtime config
           public:
             inline static void check_config (const fast_feedback::config_persistent<float_type>& cp,
                                              const fast_feedback::config_runtime<float_type>& cr)
@@ -104,12 +106,14 @@ namespace fast_feedback {
             inline indexer (const fast_feedback::config_persistent<float_type>& cp,
                             const fast_feedback::config_runtime<float_type>& cr)
                 : idx{cp},
-                  coords{cp.max_spots + 3u * cp.max_input_cells, 3u},
-                  cells{3u * cp.max_output_cells, 3u}, scores{cp.max_output_cells},
-                  input{}, output{&cells(0,0), &cells(0,1), &cells(0,2), scores.data(), idx.cpers.max_output_cells},
-                  crt{cr},
-                  pin_coords{coords}, pin_cells{cells}, pin_scores{scores},
-                  pin_crt{fast_feedback::memory_pin::on(crt)}
+                  icells{cp.max_input_cells * 3u, 3u}, spots{cp.max_spots, 3u},
+                  ocells{3u * cp.max_output_cells, 3u}, scores{cp.max_output_cells},
+                  input{{&icells(0,0), &icells(0,1), &icells(0,2)}, {&spots(0,0), &spots(0,1), &spots(0,2)}, 0u, 0u, true, true},
+                  output{&ocells(0,0), &ocells(0,1), &ocells(0,2), scores.data(), idx.cpers.max_output_cells},
+                  pin_icells{icells}, pin_spots{spots},
+                  pin_ocells{ocells}, pin_scores{scores},
+                  pin_crt{fast_feedback::memory_pin::on(crt)},
+                  crt{cr}
             {
                 check_config(cp, cr);
             }
@@ -128,16 +132,8 @@ namespace fast_feedback {
             // - if callback is given, it will be called with data as the argument as soon as  index_end can be called
             inline void index_start (unsigned n_input_cells, unsigned n_spots, void(*callback)(void*)=nullptr, void* data=nullptr)
             {
-                input.cell.x = &coords(idx.cpers.max_input_cells - n_input_cells,0);
-                input.cell.y = &coords(idx.cpers.max_input_cells - n_input_cells,1);
-                input.cell.z = &coords(idx.cpers.max_input_cells - n_input_cells,2);
-                input.spot.x = &coords(idx.cpers.max_input_cells,0);
-                input.spot.y = &coords(idx.cpers.max_input_cells,1);
-                input.spot.z = &coords(idx.cpers.max_input_cells,2);
                 input.n_cells = n_input_cells;
                 input.n_spots = n_spots;
-                input.new_cells = true;
-                input.new_spots = true;
                 idx.index_start(input, output, crt, callback, data);
             }
 
@@ -159,60 +155,62 @@ namespace fast_feedback {
 
             // Reciprocal space spot access: spot i
             inline float_type& spotX (unsigned i=0u) noexcept
-            { return coords(3u * idx.cpers.max_input_cells + i, 0u); }
+            { return spots(i, 0u); }
 
             inline const float_type& spotX (unsigned i=0u) const noexcept
-            { return &coords(3u * idx.cpers.max_input_cells + i, 0u); }
+            { return &spots(i, 0u); }
 
             inline float_type& spotY (unsigned i=0u) noexcept
-            { return coords(3u * idx.cpers.max_input_cells + i, 1u); }
+            { return spots(i, 1u); }
 
             inline const float_type& spotY (unsigned i=0u) const noexcept
-            { return coords(3u * idx.cpers.max_input_cells + i, 1u); }
+            { return spots(i, 1u); }
 
             inline float_type& spotZ (unsigned i=0u) noexcept
-            { return coords(3u * idx.cpers.max_input_cells + i, 2u); }
+            { return spots(i, 2u); }
 
             inline const float_type& spotZ (unsigned i=0u) const noexcept
-            { return coords(3u * idx.cpers.max_input_cells + i, 2u); }
+            { return spots(i, 2u); }
 
             // Coords area designated for reciprocal space spots, fill top down
-            inline auto spotM ()
-            { return coords.bottomRows(coords.rows() - 3u * idx.cpers.max_input_cells); }
+            inline auto& spotM ()
+            { return spots; }
+
+            // Used coords area designated for reciprocal space spots
+            inline const auto Spots ()
+            {
+                return spots.topRows(input.n_spots);
+            }
 
             // Real space input cell access: cell i, vector j
             inline float_type& iCellX (unsigned i=0u, unsigned j=0u) noexcept
-            { return coords(3u * (idx.cpers.max_input_cells - i - 1u) + j, 0u); }
+            { return icells(3u * i + j, 0u); }
 
             inline const float_type& iCellX (unsigned i=0u, unsigned j=0u) const noexcept
-            { return coords(3u * (idx.cpers.max_input_cells - i - 1u) + j, 0u); }
+            { return icells(3u * i + j, 0u); }
 
             inline float_type& iCellY (unsigned i=0u, unsigned j=0u) noexcept
-            { return coords(3u * (idx.cpers.max_input_cells - i - 1u) + j, 1u); }
+            { return icells(3u * i + j, 1u); }
 
             inline const float_type& iCellY (unsigned i=0u, unsigned j=0u) const noexcept
-            { return coords(3u * (idx.cpers.max_input_cells - i - 1u) + j, 1u); }
+            { return icells(3u * i + j, 1u); }
 
             inline float_type& iCellZ (unsigned i=0u, unsigned j=0u) noexcept
-            { return coords(3u * (idx.cpers.max_input_cells - i - 1u) + j, 2u); }
+            { return icells(3u * i + j, 2u); }
 
             inline const float_type& iCellZ (unsigned i=0u, unsigned j=0u) const noexcept
-            { return coords(3u * (idx.cpers.max_input_cells - i - 1u) + j, 2u); }
+            { return icells(3u * i + j, 2u); }
 
             // Coords area for real space input cell i
             inline auto iCell (unsigned i=0u) noexcept
-            { return coords.block(3u * (idx.cpers.max_input_cells - i - 1u), 0u, 3u, 3u); }
+            { return icells.block(3u * i, 0u, 3u, 3u); }
 
             inline const auto iCell (unsigned i=0u) const noexcept
-            { return coords.block(3u * (idx.cpers.max_input_cells - i - 1u), 0u, 3u, 3u); }
+            { return icells.block(3u * i, 0u, 3u, 3u); }
 
             // Coords area designated for real space input cells, fill cellwise bottom up
             inline auto iCellM () noexcept
-            { return coords.topRows(3u * idx.cpers.max_input_cells); }
-
-            // All input coordinates
-            inline auto iCoordM () noexcept
-            { return coords; }
+            { return icells.topRows(3u * idx.cpers.max_input_cells); }
 
             // Input size access
             inline unsigned n_input_cells () noexcept
@@ -223,33 +221,33 @@ namespace fast_feedback {
 
             // Real space output cell access: cell i, vector j
             inline float_type& oCellX (unsigned i=0u, unsigned j=0u) noexcept
-            { return cells(3u * i + j, 0u); }
+            { return ocells(3u * i + j, 0u); }
 
             inline const float_type& oCellX (unsigned i=0u, unsigned j=0u) const noexcept
-            { return cells(3u * i + j, 0u); }
+            { return ocells(3u * i + j, 0u); }
 
             inline float_type& oCellY (unsigned i=0u, unsigned j=0u) noexcept
-            { return cells(3u * i + j, 1u); }
+            { return ocells(3u * i + j, 1u); }
 
             inline const float_type& oCellY (unsigned i=0u, unsigned j=0u) const noexcept
-            { return cells(3u * i + j, 1u); }
+            { return ocells(3u * i + j, 1u); }
 
             inline float_type& oCellZ (unsigned i=0u, unsigned j=0u) noexcept
-            { return cells(3u * i + j, 2u); }
+            { return ocells(3u * i + j, 2u); }
 
             inline const float_type& oCellZ (unsigned i=0u, unsigned j=0u) const noexcept
-            { return cells(3u * i + j, 2u); }
+            { return ocells(3u * i + j, 2u); }
 
             // Real space output cell i
             inline auto oCell (unsigned i) noexcept
-            { return cells.block(3u * i, 0u, 3u, 3u); }
+            { return ocells.block(3u * i, 0u, 3u, 3u); }
 
             inline const auto oCell (unsigned i) const noexcept
-            { return cells.block(3u * i, 0u, 3u, 3u); }
+            { return ocells.block(3u * i, 0u, 3u, 3u); }
 
             // All output cells
             inline auto& oCellM () noexcept
-            { return cells; }
+            { return ocells; }
 
             // Output cell score access: cell i
             inline float_type& oScore (unsigned i=0u) noexcept
@@ -360,9 +358,6 @@ namespace fast_feedback {
 
             const config_persistent<float_type>& conf_persistent () const noexcept
             { return idx.cpers; }
-
-
-
         }; // indexer
 
         // Iterative fit to selected spots refinement indexer extra config
@@ -421,15 +416,15 @@ namespace fast_feedback {
             // - cells      the refined cells
             // - scores     refined cell scores: largest distance of the min_spots closest to their approximated lattice points
             template<typename MatX3, typename VecX>
-            inline static void refine (const Eigen::Matrix<float_type, Eigen::Dynamic, 3u>& spots,
+            inline static void refine (const Eigen::MatrixX3<float_type>& spots,
                                        Eigen::DenseBase<MatX3>& cells,
                                        Eigen::DenseBase<VecX>& scores,
                                        const config_ifss<float_type>& cifss,
                                        unsigned block=0, unsigned nblocks=1)
             {
                 using namespace Eigen;
-                using Mx3 = Matrix<float_type, Dynamic, 3>;
-                using M3 = Matrix<float_type, 3, 3>;
+                using Mx3 = MatrixX3<float_type>;
+                using M3 = Matrix3<float_type>;
                 const unsigned nspots = spots.rows();
                 const unsigned ncells = scores.rows();
                 VectorX<bool> below{nspots};
@@ -473,7 +468,7 @@ namespace fast_feedback {
             inline void index_end () override
             {
                 indexer<float_type>::index_end();
-                refine(this->coords.block(3u * this->idx.cpers.max_input_cells, 0u, this->input.n_spots, 3u), this->cells, this->scores, cifss);
+                refine(this->Spots(), this->ocells, this->scores, cifss);
             }
 
             // ifss configuration access
@@ -562,15 +557,15 @@ namespace fast_feedback {
             // - cells      the refined cells
             // - scores     refined cell scores: largest distance of the min_spots closest to their approximated lattice points
             template<typename MatX3, typename VecX>
-            inline static void refine (const Eigen::Matrix<float_type, Eigen::Dynamic, 3u>& spots,
+            inline static void refine (const Eigen::MatrixX3<float_type>& spots,
                                        Eigen::DenseBase<MatX3>& cells,
                                        Eigen::DenseBase<VecX>& scores,
                                        const config_ifse<float_type>& cifse,
                                        unsigned block=0, unsigned nblocks=1)
             {
                 using namespace Eigen;
-                using Mx3 = Matrix<float_type, Dynamic, 3>;
-                using M3 = Matrix<float_type, 3, 3>;
+                using Mx3 = MatrixX3<float_type>;
+                using M3 = Matrix3<float_type>;
                 const unsigned nspots = spots.rows();
                 const unsigned ncells = scores.rows();
                 VectorX<bool> below{nspots};
@@ -614,7 +609,7 @@ namespace fast_feedback {
             inline void index_end () override
             {
                 indexer<float_type>::index_end();
-                refine(this->coords.block(3u * this->idx.cpers.max_input_cells, 0u, this->input.n_spots, 3u), this->cells, this->scores, cifse);
+                refine(this->Spots(), this->ocells, this->scores, cifse);
             }
 
             // ifse configuration access
@@ -650,6 +645,31 @@ namespace fast_feedback {
             { return cifse; }
 
         }; // indexer_ifse
+
+        // Return index for the best cell
+        template <typename VecX>
+        unsigned best_cell (const Eigen::DenseBase<VecX>& scores)
+        {
+            auto it = std::min_element(std::cbegin(scores), std::cend(scores));
+            return (unsigned)(it - std::cbegin(scores));
+        }
+
+        // Check if a cell looks like a viable unit cell for the spots
+        // - cell       cell in real space
+        // - spots      spots in reciprocal space
+        // - threshold  if the checked spots are approximated within this threshold, the cell is viable
+        // - n_spots    number of best approximated spots checked
+        template <typename float_type, typename Mat3, typename MatX3>
+        bool is_viable_cell (const Eigen::MatrixBase<Mat3>& cell,
+                             const Eigen::DenseBase<MatX3>& spots,
+                             float_type threshold=.2f, unsigned n_spots=9u)
+        {
+            using M3x = Eigen::Matrix3X<float_type>;
+            M3x resid = cell * spots.transpose();
+            const M3x miller = round(resid.array());
+            resid -= miller;
+            return (resid.colwise().norm().array() < threshold).count() >= n_spots;
+        }
 
     } // namespace refine
 } // namespace fast_feedback

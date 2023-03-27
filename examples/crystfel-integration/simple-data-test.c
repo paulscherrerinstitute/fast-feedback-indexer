@@ -87,7 +87,8 @@ int main (int argc, char* argv[])
         exit(1);
     }
     printf("calling indexer..\n");
-    if (index_refined(idx, data, x, y, z, i-3) != 0) {
+    int res;
+    if ((res = index_refined(idx, data, x, y, z, i-3)) < 0) {
         printf("indexing error\n");
         exit(1);
     }
@@ -96,4 +97,5 @@ int main (int argc, char* argv[])
     for (i=0; i<9; i+=3) {
         printf("%f %f %f\n", data[i], data[i+1], data[i+2]);
     }
+    printf("is_viable = %d\n", res);
 }

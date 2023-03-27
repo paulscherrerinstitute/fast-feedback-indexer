@@ -27,6 +27,7 @@ namespace {
             idx->index(1u, n);
         } catch (std::exception& ex) {
             std::cerr << "Error: " << ex.what() << '\n';
+            return 1;
         } catch (...) {
             return 1;
         }
@@ -34,25 +35,29 @@ namespace {
         return 0;
     }
 
-    int best_cell(ffbidx_indexer ptr, float cell[9])
+    int is_viable_cell(ffbidx_indexer ptr, float cell[9])
     {
         using namespace Eigen;
         using indexer = fast_feedback::refine::indexer<float>;
 
+        int indexable;
         try {
             indexer* idx = (indexer*)ptr.ptr;
-            const auto& scores = idx->oScoreV();
-            auto it = std::min_element(std::cbegin(scores), std::cend(scores));
+            unsigned best =  fast_feedback::refine::best_cell(idx->oScoreV());
 
+            const Matrix<float, 3, 3>& ocell = idx->oCell(best);
             Map<Matrix<float, 3, 3>> mcell{cell};
-            mcell = idx->oCell(it - std::cbegin(scores));
+            mcell = ocell;
+
+            indexable = fast_feedback::refine::is_viable_cell(ocell, idx->Spots(), 0.002f, 9u);
         } catch (std::exception& ex) {
             std::cerr << "Error: " << ex.what() << '\n';
+            return -1;
         } catch (...) {
-            return 1;
+            return -1;
         }
 
-        return 0;
+        return indexable;
     }
 
 }
@@ -95,10 +100,10 @@ extern "C" {
     {
         using indexer = fast_feedback::refine::indexer<float>;
 
-        int res;
-        if ((res = index_step(ptr, cell, x, y, z, nspots)) == 0)
-            res = best_cell(ptr, cell);
-        return res;
+        if (index_step(ptr, cell, x, y, z, nspots) != 0)
+            return -1;
+        
+        return is_viable_cell(ptr, cell);
     }
 
     int index_refined(ffbidx_indexer ptr, float cell[9], float *x, float *y, float *z, unsigned nspots)
@@ -107,22 +112,22 @@ extern "C" {
         using ifss = fast_feedback::refine::indexer_ifss<float>;
         using cifss = fast_feedback::refine::config_ifss<float>;
 
-        int res;
-        if ((res = index_step(ptr, cell, x, y, z, nspots)) != 0)
-            return res;
+        if (index_step(ptr, cell, x, y, z, nspots) != 0)
+            return -1;
 
         try {
             indexer* idx = (indexer*)ptr.ptr;
             cifss conf_ifss{};
 
-            ifss::refine(idx->iCoordM(), idx->oCellM(), idx->oScoreV(), idx->conf_persistent(), conf_ifss, idx->n_spots());
+            ifss::refine(idx->Spots(), idx->oCellM(), idx->oScoreV(), conf_ifss);
         } catch (std::exception& ex) {
             std::cerr << "Error: " << ex.what() << '\n';
+            return -1;
         } catch (...) {
-            return 1;
+            return -1;
         }
 
-        return best_cell(ptr, cell);
+        return is_viable_cell(ptr, cell);
     }
 
 } // extern "C"

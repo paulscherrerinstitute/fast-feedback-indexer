@@ -176,8 +176,11 @@ int main (int argc, char *argv[])
         std::cout.precision(12);
         std::cout << "output:\n";
         for (unsigned j=0u; j<cpers.max_output_cells; j++)
-            std::cout << indexer.oCellM().block(3u * j, 0u, 3u, 3u) << "\n\n";
+            std::cout << indexer.oCell(j) << "\n\n";
         std::cout << "scores:\n" << indexer.oScoreV() << '\n';
+        unsigned best_cell = fast_feedback::refine::best_cell(indexer.oScoreV());
+        bool indexable = fast_feedback::refine::is_viable_cell(indexer.oCell(best_cell), indexer.Spots(), 0.0002f, 9);
+        std::cout << "best cell: " << best_cell << ", is viable: " << (indexable ? "true " : "false") << '\n';
         std::cout << "timings:\n"
                   << "prep    " << duration{t1 - t0}.count() << "s\n"
                   << "index   " << duration{t2 - t1}.count() << "s\n";

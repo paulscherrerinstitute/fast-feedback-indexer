@@ -54,8 +54,8 @@ namespace fast_feedback {
             float_type* y;  // y coordinates, pinned memory
             float_type* z;  // z coordinates, pinned memory
         } spot;
-        unsigned n_cells;   // number of given unit cells
-        unsigned n_spots;   // number of spots
+        unsigned n_cells;   // number of given unit cells (must be before n_spots in memory, see copy_in())
+        unsigned n_spots;   // number of spots (must be after n_cells in memory, see copy_in())
         bool new_cells;     // set to true if cells are new or have changed
         bool new_spots;     // set to true if spots are new or have changed
     };
