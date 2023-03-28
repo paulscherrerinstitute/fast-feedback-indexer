@@ -179,7 +179,7 @@ int main (int argc, char *argv[])
             std::cout << indexer.oCell(j) << "\n\n";
         std::cout << "scores:\n" << indexer.oScoreV() << '\n';
         unsigned best_cell = fast_feedback::refine::best_cell(indexer.oScoreV());
-        bool indexable = fast_feedback::refine::is_viable_cell(indexer.oCell(best_cell), indexer.Spots(), 0.0002f, 9);
+        bool indexable = fast_feedback::refine::is_viable_cell(indexer.oCell(best_cell), indexer.Spots());
         std::cout << "best cell: " << best_cell << ", is viable: " << (indexable ? "true " : "false") << '\n';
         std::cout << "timings:\n"
                   << "prep    " << duration{t1 - t0}.count() << "s\n"

@@ -416,7 +416,7 @@ namespace fast_feedback {
             // - cells      the refined cells
             // - scores     refined cell scores: largest distance of the min_spots closest to their approximated lattice points
             template<typename MatX3, typename VecX>
-            inline static void refine (const Eigen::MatrixX3<float_type>& spots,
+            inline static void refine (const Eigen::Ref<Eigen::MatrixX3<float_type>>& spots,
                                        Eigen::DenseBase<MatX3>& cells,
                                        Eigen::DenseBase<VecX>& scores,
                                        const config_ifss<float_type>& cifss,
@@ -557,7 +557,7 @@ namespace fast_feedback {
             // - cells      the refined cells
             // - scores     refined cell scores: largest distance of the min_spots closest to their approximated lattice points
             template<typename MatX3, typename VecX>
-            inline static void refine (const Eigen::MatrixX3<float_type>& spots,
+            inline static void refine (const Eigen::Ref<Eigen::MatrixX3<float_type>>& spots,
                                        Eigen::DenseBase<MatX3>& cells,
                                        Eigen::DenseBase<VecX>& scores,
                                        const config_ifse<float_type>& cifse,
@@ -659,16 +659,16 @@ namespace fast_feedback {
         // - spots      spots in reciprocal space
         // - threshold  if the checked spots are approximated within this threshold, the cell is viable
         // - n_spots    number of best approximated spots checked
-        template <typename float_type, typename Mat3, typename MatX3>
+        template <typename Mat3, typename MatX3, typename float_type=typename Mat3::Scalar>
         bool is_viable_cell (const Eigen::MatrixBase<Mat3>& cell,
-                             const Eigen::DenseBase<MatX3>& spots,
-                             float_type threshold=.2f, unsigned n_spots=9u)
+                             const Eigen::MatrixBase<MatX3>& spots,
+                             float_type threshold=.02f, unsigned n_spots=9u)
         {
-            using M3x = Eigen::Matrix3X<float_type>;
-            M3x resid = cell * spots.transpose();
+            using M3x = Eigen::MatrixX3<float_type>;
+            M3x resid = spots * cell.transpose();
             const M3x miller = round(resid.array());
             resid -= miller;
-            return (resid.colwise().norm().array() < threshold).count() >= n_spots;
+            return (resid.rowwise().norm().array() < threshold).count() >= n_spots;
         }
 
     } // namespace refine

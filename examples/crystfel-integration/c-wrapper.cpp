@@ -49,7 +49,7 @@ namespace {
             Map<Matrix<float, 3, 3>> mcell{cell};
             mcell = ocell;
 
-            indexable = fast_feedback::refine::is_viable_cell(ocell, idx->Spots(), 0.002f, 9u);
+            indexable = fast_feedback::refine::is_viable_cell(ocell, idx->Spots());
         } catch (std::exception& ex) {
             std::cerr << "Error: " << ex.what() << '\n';
             return -1;
