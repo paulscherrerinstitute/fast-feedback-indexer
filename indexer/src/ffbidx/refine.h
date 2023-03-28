@@ -26,6 +26,7 @@ Author: hans-christian.stadler@psi.ch
 #ifndef INDEXER_REFINE_H
 #define INDEXER_REFINE_H
 
+//#include <Eigen/Core>
 #include <Eigen/Dense>
 #include <Eigen/LU>
 #include <numeric>
@@ -657,18 +658,66 @@ namespace fast_feedback {
         // Check if a cell looks like a viable unit cell for the spots
         // - cell       cell in real space
         // - spots      spots in reciprocal space
-        // - threshold  if the checked spots are approximated within this threshold, the cell is viable
-        // - n_spots    number of best approximated spots checked
+        // - threshold  radius around approximated miller indices
+        // - min_spots  minimum number of spots within threshold
         template <typename Mat3, typename MatX3, typename float_type=typename Mat3::Scalar>
         bool is_viable_cell (const Eigen::MatrixBase<Mat3>& cell,
                              const Eigen::MatrixBase<MatX3>& spots,
-                             float_type threshold=.02f, unsigned n_spots=9u)
+                             float_type threshold=.02f, unsigned min_spots=9u)
         {
             using M3x = Eigen::MatrixX3<float_type>;
             M3x resid = spots * cell.transpose();
             const M3x miller = round(resid.array());
             resid -= miller;
-            return (resid.rowwise().norm().array() < threshold).count() >= n_spots;
+            return (resid.rowwise().norm().array() < threshold).count() >= min_spots;
+        }
+
+        // Return indices of cells representing crystalls
+        // Cell is considered a new crystall, if it differs by more than good n_spots
+        // to other crystalls
+        template <typename CellMat, typename SpotMat, typename ScoreVec, typename float_type=typename CellMat::Scalar>
+        std::vector<unsigned> compute_crystalls (const Eigen::MatrixBase<CellMat>& cells,
+                                                 const Eigen::MatrixBase<SpotMat>& spots,
+                                                 const Eigen::DenseBase<ScoreVec>& scores,
+                                                 float_type threshold=.02f, unsigned min_spots=9u)
+        {
+            using namespace Eigen;
+            using Mx3 = MatrixX3<float_type>;
+            using Vx = VectorX<bool>;
+
+            auto spots_covered = [&cells, &spots, threshold](unsigned i) -> Vx {
+                Mx3 resid = spots * cells.block(3u * i, 0u, 3u, 3u).transpose();
+                const Mx3 miller = round(resid.array());
+                resid -= miller;
+                return (resid.rowwise().norm().array() < threshold);
+            };
+
+            unsigned n_spots = spots.rows();
+            std::vector<unsigned> crystalls;
+            std::vector<Vx> covered;
+            unsigned n_cells = cells.rows() / 3;
+            for (unsigned int i=0u; i<n_cells; i++) {
+                Vx cover = spots_covered(i);
+                unsigned cnt = cover.count();
+                if (cnt < min_spots)
+                    continue;
+                for (unsigned k=0u; k<crystalls.size(); k++) {
+                    const unsigned j = crystalls[k];
+                    Vx common = cover.array() * covered[k].array();
+                    unsigned cocnt = common.count();
+                    if (cnt - cocnt < n_spots) {
+                        if (scores[i] < scores[j]) {
+                            crystalls[k] = i;
+                            covered[k] = std::move(cover);
+                        }
+                        goto skip;
+                    }
+                }
+                crystalls.push_back(i);
+                covered.emplace_back(std::move(cover));
+              skip: ;
+            }
+            return crystalls;
         }
 
     } // namespace refine
