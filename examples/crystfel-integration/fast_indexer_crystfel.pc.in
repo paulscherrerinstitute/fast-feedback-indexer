@@ -1,0 +1,10 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+libdir=${prefix}/@CMAKE_INSTALL_LIBDIR@
+
+Name: @PROJECT_NAME@
+Description: @PROJECT_DESCRIPTION@
+URL: https://github.com/paulscherrerinstitute/fast-feedback-indexer
+Version: @PROJECT_VERSION@
+Cflags: -I"${includedir}"
+Libs: -L"${libdir}" -lfast_indexer_crystfel -lfast_indexer

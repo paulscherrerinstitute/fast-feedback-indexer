@@ -37,6 +37,7 @@ add_subdirectory(indexer)
 add_subdirectory(data)
 add_subdirectory(tests)
 add_subdirectory(python)
+add_subdirectory(examples/crystfel-integration)
 
 MESSAGE("ENV ${fast_feedback_indexer_ENV_SETUP}")
 configure_file(setup-env.sh.in
