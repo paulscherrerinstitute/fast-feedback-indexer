@@ -251,8 +251,7 @@ extern "C" {
 
         if (allocate_fast_indexer(&idx, settings) != 0)
             return -1;
-        if ((res = index_refined(idx, cell, x, y, z, nspots)) < 0)
-            return -1;
+        res = index_refined(idx, cell, x, y, z, nspots);
         free_fast_indexer(idx);
         return res;
     }
