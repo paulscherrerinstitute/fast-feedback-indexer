@@ -65,11 +65,13 @@ namespace {
         }
     }
 
-    void set_conf()
+    void set_conf(const ffbidx_settings* settings)
     {
         std::lock_guard config_lock(config_mutex);
         if (config_ok)
             return;
+
+        cpers.max_spots = settings->max_spots;
 
         constexpr const char* pvar_name = "FFBIDX_PARAMS";
         const char* env_c = std::getenv(pvar_name);
@@ -84,7 +86,7 @@ namespace {
                     std::exit(-1);
                 };
 
-                std::string key = env.substr(start, end);
+                std::string key = env.substr(start, end-start);
                 auto entry = param.find(key);
                 if (entry == param.end()) {
                     std::cerr << pvar_name << " no such key: " << key << '\n';
@@ -93,7 +95,7 @@ namespace {
 
                 start = end + 1;
                 end = env.find(' ', start);
-                std::string val = env.substr(start, end);
+                std::string val = env.substr(start, end-start);
                 switch (entry->second.t) {
                     case 'f':
                         parse_val(entry->second.f, val); break;
@@ -185,8 +187,7 @@ extern "C" {
         idx->ptr = nullptr;
 
         try {
-            cpers.max_spots = settings->max_spots;
-            set_conf();
+            set_conf(settings);
             idx->ptr = new indexer{cpers, crt};
         } catch (std::exception& ex) {
             std::cerr << "Error: " << ex.what() << '\n';
@@ -244,8 +245,7 @@ int fast_feedback_crystfel(struct ffbidx_settings *settings, float cell[9], floa
     using ifss = fast_feedback::refine::indexer_ifss<float>;
 
     try {
-        cpers.max_spots = settings->max_spots;
-        set_conf();
+        set_conf(settings);
         unsigned n = std::min(cpers.max_spots, nspots);
 
         ifss indexer{cpers, crt, cifss};
