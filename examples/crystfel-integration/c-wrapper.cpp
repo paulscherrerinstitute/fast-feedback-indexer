@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <cassert>
 #include <ffbidx/refine.h>
-#include "c-wrapper.h"
+#include "ffbidx/c-wrapper.h"
 
 namespace {
 
@@ -131,3 +131,58 @@ extern "C" {
     }
 
 } // extern "C"
+
+int fast_feedback_crystfel(struct ffbidx_settings *settings, float cell[9], float *x, float *y, float *z, unsigned nspots) {
+    using ifss = fast_feedback::refine::indexer_ifss<float>;
+    using cifss = fast_feedback::refine::config_ifss<float>;
+    using cpers = fast_feedback::config_persistent<float>;
+    using crt = fast_feedback::config_runtime<float>;
+    using namespace Eigen;
+
+    try {
+        cpers cp{};
+        crt cr{};
+        cifss config_refine{};
+
+        unsigned n = std::min(settings->max_spots, nspots);
+
+        cp.max_input_cells = 1;
+        const char* cells_txt = std::getenv("FFBIDX_OUTPUT_CELLS");
+
+        if (cells_txt != nullptr) {
+            auto cells = std::strtol(cells_txt, nullptr, 10);
+            if ((cells <= 0) || (cells > 64))
+                return -1;
+            cp.max_output_cells = cells;
+        } else
+            cp.max_output_cells = 1;
+        cp.max_spots = n;
+
+        ifss indexer{cp, cr, config_refine};
+
+        std::copy(&cell[0], &cell[3], &indexer.iCellX());
+        std::copy(&cell[3], &cell[6], &indexer.iCellY());
+        std::copy(&cell[6], &cell[9], &indexer.iCellZ());
+
+        std::copy(&x[0], &x[n], &indexer.spotX());
+        std::copy(&y[0], &y[n], &indexer.spotY());
+        std::copy(&z[0], &z[n], &indexer.spotZ());
+
+        indexer.index(1, n);
+
+        auto best_cell_id = fast_feedback::refine::best_cell(indexer.oScoreV());
+        auto ocell = indexer.oCell(best_cell_id);
+
+        Map<Matrix<float, 3, 3>> mcell{cell};
+        mcell = ocell;
+        return fast_feedback::refine::is_viable_cell(ocell, indexer.Spots(), 0.02f, 9u);
+    } catch (std::exception& ex) {
+        std::cerr << "Error: " << ex.what() << '\n';
+        return 0;
+    } catch (...) {
+        std::cerr << "Unknown error: " << '\n';
+        return 0;
+    }
+
+
+}
