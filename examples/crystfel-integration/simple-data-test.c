@@ -47,16 +47,16 @@ static int getvec(float* x, float* y, float* z)
         return EOF;
     if ((c = scanf("%f", z)) <= 0)
         return EOF;
+    return 0;
 }
 
-int main (int argc, char* argv[])
+int main ()
 {
     const unsigned N = 300;
     float data[9 + 3*N];
     float* x = &data[9];
     float* y = &data[9 + N];
     float* z = &data[9 + 2*N];
-    struct ffbidx_indexer idx;
     struct ffbidx_settings settings = {200u, 32u, 32u*1024u, 6u, .02f};
     unsigned i=0;
     int c;

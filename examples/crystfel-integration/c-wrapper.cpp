@@ -51,10 +51,10 @@ namespace {
     }
 
     std::map<std::string, value_t> param = {
-        {"cpers_max_output_cells", make_value(32u)},
         {"cpers_max_spots", make_value(200u)},
+        {"cpers_max_output_cells", make_value(32u)},
         {"crt_num_sample_points", make_value(32u*1024u)},
-        {"ciffs_min_spots", make_value(6u)},
+        {"cifss_min_spots", make_value(6u)},
         {"cvc_threshold", make_value(.02f)},
     };
 
@@ -72,11 +72,11 @@ namespace {
         if (config_ok)
             return;
 
-        cpers.max_spots = settings->cpers_max_spots;
-        cpers.max_output_cells = settings->cpers_max_output_cells;
-        crt.num_sample_points = settings->crt_num_sample_points;
-        cifss.min_spots = settings->cifss_min_spots;
-        cvc.threshold = settings->cvc_threshold;
+        param["cpers_max_spots"].u = settings->cpers_max_spots;
+        param["cpers_max_output_cells"].u = settings->cpers_max_output_cells;
+        param["crt_num_sample_points"].u = settings->crt_num_sample_points;
+        param["cifss_min_spots"].u = settings->cifss_min_spots;
+        param["cvc_threshold"].f = settings->cvc_threshold;
 
         constexpr const char* pvar_name = "FFBIDX_PARAMS";
         const char* env_c = std::getenv(pvar_name);
@@ -109,21 +109,23 @@ namespace {
                     default:
                         break;
                 }
-                std::cout << entry->first << '=' << entry->second << '\n';
 
                 start = end + 1;
             }
         }
 
         for (const auto& entry : param) {
-            if (entry.first == "cvc_threshold") {
-                cvc.threshold = entry.second.f;
+            std::cout << entry.first << '=' << entry.second << '\n';
+            if (entry.first == "cpers_max_spots") {
+                cpers.max_spots = entry.second.u;
             } else if (entry.first == "cpers_max_output_cells") {
                 cpers.max_output_cells = entry.second.u;
             } else if (entry.first == "crt_num_sample_points") {
                 crt.num_sample_points = entry.second.u;
-            } else if (entry.first == "ciffs_min_spots") {
+            } else if (entry.first == "cifss_min_spots") {
                 cifss.min_spots = entry.second.u;
+            } else if (entry.first == "cvc_threshold") {
+                cvc.threshold = entry.second.f;
             }
         }
 
