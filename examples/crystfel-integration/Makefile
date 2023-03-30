@@ -31,10 +31,10 @@ all: $(LIB) clean
 $(LIB): c-wrapper.o
 	$(CXX) -shared $(COMPILER_FLAGS) $< -o $@
 
-c-wrapper.o: c-wrapper.cpp c-wrapper.h
+c-wrapper.o: c-wrapper.cpp ffbidx/c-wrapper.h
 	$(CXX) $(COMPILER_FLAGS) $< -c -o $@
 
-simple-data-test: simple-data-test.c c-wrapper.h $(LIB)
+simple-data-test: simple-data-test.c ffbidx/c-wrapper.h $(LIB)
 	$(CC) $(CFLAGS) $< $(LINKER_FLAGS) -o $@
 
 test: simple-data-test

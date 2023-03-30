@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <stdlib.h>
-#include "c-wrapper.h"
+#include "ffbidx/c-wrapper.h"
 
 static int skipline()
 {

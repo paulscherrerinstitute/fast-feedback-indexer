@@ -1,3 +1,6 @@
+#ifndef FFBIDX_CWRAPPER_H
+#define FFBIDX_CWRAPPER_H
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -22,3 +25,5 @@ int fast_feedback_crystfel(struct ffbidx_settings *settings, float cell[9], floa
 #ifdef __cplusplus
 } // extern "C"
 #endif
+
+#endif // FFBIDX_CWRAPPER_H

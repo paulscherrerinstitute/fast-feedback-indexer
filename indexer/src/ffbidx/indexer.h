@@ -83,9 +83,9 @@ namespace fast_feedback {
     struct config_runtime final {
         float_type length_threshold=1e-9;   // threshold for determining equal vector length (|va| - threshold < |vb| < |va| + threshold)
         float_type triml=0.01;              // lower trim value for distance to nearest integer objective value - 0 < triml < trimh
-        float_type trimh=0.4;               // higher trim value for distance to nearest integer objective value - triml < trimh < 0.5
-        float_type delta=.75;               // log2 curve position: score = log2(trim(dist(x)) + delta)
-        unsigned num_sample_points=100000u; // number of sample points on half sphere for finding vector candidates
+        float_type trimh=0.3;               // higher trim value for distance to nearest integer objective value - triml < trimh < 0.5
+        float_type delta=.8;                // log2 curve position: score = log2(trim(dist(x)) + delta)
+        unsigned num_sample_points=32*1024; // number of sample points on half sphere for finding vector candidates
     };
 
     // Configuration setting for the fast feedback indexer persistent state
@@ -96,7 +96,7 @@ namespace fast_feedback {
         unsigned max_output_cells=1;        // maximum number of output unit cells
         unsigned max_input_cells=1;         // maximum number of input unit cells, (must be before max_spots in memory, see copy_in())
         unsigned max_spots=200;             // maximum number of input spots, (must be after max_input_cells in memory, see copy_in())
-        unsigned num_candidate_vectors=30;  // number of candidate vectors (per input cell vector)
+        unsigned num_candidate_vectors=32;  // number of candidate vectors (per input cell vector)
     };
 
     // Exception type for fast feedback indexer
