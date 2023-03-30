@@ -51,10 +51,11 @@ namespace {
     }
 
     std::map<std::string, value_t> param = {
-        {"cvc_threshold", make_value(.02f)},
         {"cpers_max_output_cells", make_value(32u)},
+        {"cpers_max_spots", make_value(200u)},
         {"crt_num_sample_points", make_value(32u*1024u)},
         {"ciffs_min_spots", make_value(6u)},
+        {"cvc_threshold", make_value(.02f)},
     };
 
     template<typename T>
@@ -71,7 +72,11 @@ namespace {
         if (config_ok)
             return;
 
-        cpers.max_spots = settings->max_spots;
+        cpers.max_spots = settings->cpers_max_spots;
+        cpers.max_output_cells = settings->cpers_max_output_cells;
+        crt.num_sample_points = settings->crt_num_sample_points;
+        cifss.min_spots = settings->cifss_min_spots;
+        cvc.threshold = settings->cvc_threshold;
 
         constexpr const char* pvar_name = "FFBIDX_PARAMS";
         const char* env_c = std::getenv(pvar_name);
@@ -238,40 +243,16 @@ extern "C" {
         return is_viable_cell(ptr, cell);
     }
 
-} // extern "C"
+    int fast_feedback_crystfel(struct ffbidx_settings *settings, float cell[9], float *x, float *y, float *z, unsigned nspots) {
+        ffbidx_indexer idx;
+        int res;
 
-int fast_feedback_crystfel(struct ffbidx_settings *settings, float cell[9], float *x, float *y, float *z, unsigned nspots) {
-    using namespace Eigen;
-    using ifss = fast_feedback::refine::indexer_ifss<float>;
-
-    try {
-        set_conf(settings);
-        unsigned n = std::min(cpers.max_spots, nspots);
-
-        ifss indexer{cpers, crt, cifss};
-        
-        std::copy(&cell[0], &cell[3], &indexer.iCellX());
-        std::copy(&cell[3], &cell[6], &indexer.iCellY());
-        std::copy(&cell[6], &cell[9], &indexer.iCellZ());
-
-        std::copy(&x[0], &x[n], &indexer.spotX());
-        std::copy(&y[0], &y[n], &indexer.spotY());
-        std::copy(&z[0], &z[n], &indexer.spotZ());
-
-        indexer.index(1, n);
-
-        auto best_cell_id = fast_feedback::refine::best_cell(indexer.oScoreV());
-        auto ocell = indexer.oCell(best_cell_id);
-
-        Map<Matrix<float, 3, 3>> mcell{cell};
-        mcell = ocell;
-        return fast_feedback::refine::is_viable_cell(ocell, indexer.Spots(), cvc.threshold, cvc.n_spots);
-    } catch (std::exception& ex) {
-        std::cerr << "Error: " << ex.what() << '\n';
-        return 0;
-    } catch (...) {
-        std::cerr << "Unknown error: " << '\n';
-        return 0;
+        if (allocate_fast_indexer(&idx, settings) != 0)
+            return -1;
+        if ((res = index_refined(idx, cell, x, y, z, nspots)) < 0)
+            return -1;
+        free_fast_indexer(idx);
+        return res;
     }
 
-}
+} // extern "C"

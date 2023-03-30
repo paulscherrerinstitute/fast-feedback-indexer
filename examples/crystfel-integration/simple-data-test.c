@@ -57,7 +57,7 @@ int main (int argc, char* argv[])
     float* y = &data[9 + N];
     float* z = &data[9 + 2*N];
     struct ffbidx_indexer idx;
-    struct ffbidx_settings settings = {200};
+    struct ffbidx_settings settings = {200u, 32u, 32u*1024u, 6u, .02f};
     unsigned i=0;
     int c;
     do {
@@ -81,19 +81,12 @@ int main (int argc, char* argv[])
         printf("format error\n");
         exit(1);
     }
-    printf("allocating indexer..\n");
-    if (allocate_fast_indexer(&idx, &settings) != 0) {
-        printf("indexer allocation failed\n");
+    printf("run indexer..\n");
+    int res = fast_feedback_crystfel(&settings, data, x, y, z, i-3);
+    if (res < 0) {
+        printf("indexer failed\n");
         exit(1);
     }
-    printf("calling indexer..\n");
-    int res;
-    if ((res = index_refined(idx, data, x, y, z, i-3)) < 0) {
-        printf("indexing error\n");
-        exit(1);
-    }
-    printf("free indexer..\n");
-    free_fast_indexer(idx);
     for (i=0; i<9; i+=3) {
         printf("%f %f %f\n", data[i], data[i+1], data[i+2]);
     }

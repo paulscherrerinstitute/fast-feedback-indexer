@@ -12,7 +12,11 @@ struct ffbidx_indexer {
 struct ffbidx_settings {
     // for the time being this would be the only parameter with non-default settings
     // let's have all the other parameters hard coded in the C-wrapper and if necessary, later moved here
-    unsigned max_spots; // maximum number of input spots
+    unsigned cpers_max_spots;               // maximum number of input spots
+    unsigned cpers_max_output_cells;        // max output cells
+    unsigned crt_num_sample_points;         // half sphere sampling points
+    unsigned cifss_min_spots;               // ifss refinement min spots to fit
+    float cvc_threshold;                    // viable cell threshold
 };
 
 int allocate_fast_indexer(struct ffbidx_indexer* idx, struct ffbidx_settings *settings);
