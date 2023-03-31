@@ -84,7 +84,7 @@ namespace fast_feedback {
         float_type length_threshold=1e-9;   // threshold for determining equal vector length (|va| - threshold < |vb| < |va| + threshold)
         float_type triml=0.01;              // lower trim value for distance to nearest integer objective value - 0 < triml < trimh
         float_type trimh=0.3;               // higher trim value for distance to nearest integer objective value - triml < trimh < 0.5
-        float_type delta=.8;                // log2 curve position: score = log2(trim(dist(x)) + delta)
+        float_type delta=.1;                // log2 curve position: score = log2(trim(dist(x)) + delta)
         unsigned num_sample_points=32*1024; // number of sample points on half sphere for finding vector candidates
     };
 
