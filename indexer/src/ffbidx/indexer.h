@@ -146,7 +146,7 @@ namespace fast_feedback {
 
         // Reconfigure according to other.cpers
         inline indexer& operator= (const indexer& other)
-        { drop(*this); init(*this, other.cpers); return *this; }
+        { if (other.state!=state) { drop(*this); init(*this, other.cpers); } return *this; }
 
         // Take over others state
         inline indexer (indexer&& other)
@@ -158,8 +158,10 @@ namespace fast_feedback {
         // Take over others state
         inline indexer& operator= (indexer&& other)
         {
-            std::swap(cpers, other.cpers);
-            std::swap(const_cast<state_id::type&>(state), const_cast<state_id::type&>(other.state));
+            if (other.state != state) {
+                std::swap(cpers, other.cpers);
+                std::swap(const_cast<state_id::type&>(state), const_cast<state_id::type&>(other.state));
+            }
             return *this;
         }
 
@@ -235,11 +237,13 @@ namespace fast_feedback {
         // Take over pin from other
         inline memory_pin& operator=(memory_pin&& other)
         {
-            void* mem_ptr = nullptr;
-            std::swap(ptr, mem_ptr);
-            if (mem_ptr != nullptr)
-                unpin(mem_ptr);
-            std::swap(ptr, other.ptr);
+            if (other.ptr != ptr) {
+                void* mem_ptr = nullptr;
+                std::swap(ptr, mem_ptr);
+                if (mem_ptr != nullptr)
+                    unpin(mem_ptr);
+                std::swap(ptr, other.ptr);
+            }
             return *this;
         }
 
