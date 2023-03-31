@@ -53,6 +53,7 @@ namespace {
     std::map<std::string, value_t> param = {
         {"cpers_max_spots", make_value(200u)},
         {"cpers_max_output_cells", make_value(32u)},
+        {"cpers_num_candidate_vectors", make_value(32u)},
         {"crt_num_sample_points", make_value(32u*1024u)},
         {"cifss_min_spots", make_value(6u)},
         {"cvc_threshold", make_value(.02f)},
@@ -74,6 +75,7 @@ namespace {
 
         param["cpers_max_spots"].u = settings->cpers_max_spots;
         param["cpers_max_output_cells"].u = settings->cpers_max_output_cells;
+        param["cpers_num_candidate_vectors"].u = settings->cpers_num_candidate_vectors;
         param["crt_num_sample_points"].u = settings->crt_num_sample_points;
         param["cifss_min_spots"].u = settings->cifss_min_spots;
         param["cvc_threshold"].f = settings->cvc_threshold;
@@ -120,6 +122,8 @@ namespace {
                 cpers.max_spots = entry.second.u;
             } else if (entry.first == "cpers_max_output_cells") {
                 cpers.max_output_cells = entry.second.u;
+            } else if (entry.first == "cpers_num_candidate_vectors") {
+                cpers.num_candidate_vectors = entry.second.u;
             } else if (entry.first == "crt_num_sample_points") {
                 crt.num_sample_points = entry.second.u;
             } else if (entry.first == "cifss_min_spots") {
