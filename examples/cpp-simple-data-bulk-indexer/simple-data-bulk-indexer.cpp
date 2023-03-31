@@ -461,11 +461,6 @@ namespace {
               out{&cells(0,0), &cells(0,1), &cells(0,2), scores.data(), ncells},
               pin_coords{coords}, pin_cells{cells}, pin_scores(scores), rblock{0u}, id{wid}
         {}
-
-        void reset ()
-        {
-            
-        }
     };
 
     std::vector<std::unique_ptr<work_item>> witem_list; // list of work items
@@ -583,7 +578,7 @@ namespace {
     }
 
     // worker thread
-    void worker (const cfgps_t& cpers, const cfgrt_t& crt, const cifss_t& cifss, const cifse_t& cifse, unsigned id)
+    void worker (const cfgrt_t& crt, const cifss_t& cifss, const cifse_t& cifse, unsigned id)
     {
         try {
             double read_time_priv = .0;     // thread private accumulator for simple data reading time
@@ -655,7 +650,6 @@ namespace {
                                     work->repetition++;
                                     if (work->repetition < repetitions) {
                                         work->state = index_start;
-                                        work->reset();
                                         work_queue.push_back(witem_id);
                                     } else {
                                         work->state = finished;
@@ -690,7 +684,6 @@ namespace {
                                     work->repetition++;
                                     if (work->repetition < repetitions) {
                                         work->state = index_start;
-                                        work->reset();
                                         work_queue.push_back(witem_id);
                                     } else {
                                         work->state = finished;
@@ -718,10 +711,10 @@ namespace {
     }
 
     // initialize thread pool
-    void init_pool (const cfgps_t& cpers, const cfgrt_t& crt, const cifss_t& cifss, const cifse_t& cifse)
+    void init_pool (const cfgrt_t& crt, const cifss_t& cifss, const cifse_t& cifse)
     {
         for (unsigned i=1u; i<worker_threads; i++) // don't put the main thread into the list
-            thread_pool.push_back(std::thread(worker, cpers, crt, cifss, cifse, i));
+            thread_pool.push_back(std::thread(worker, crt, cifss, cifse, i));
     }
 
     // join all threads in the thread pool (except main thread)
@@ -762,12 +755,12 @@ int main (int argc, char *argv[])
 
         init_indexers(cpers);
         init_work();
-        init_pool(cpers, crt, cifss, cifse);
+        init_pool(crt, cifss, cifse);
 
         auto t0 = clock::now();
 
         pool_start.store(true);                 // activate start switch
-        worker(cpers, crt, cifss, cifse, 0);    // become part of the thread pool
+        worker(crt, cifss, cifse, 0);           // become part of the thread pool
         join_workers();
 
         auto t1 = clock::now();
