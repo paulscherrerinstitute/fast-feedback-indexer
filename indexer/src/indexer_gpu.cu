@@ -323,12 +323,14 @@ namespace {
         // Move s into this
         gpu_stream& operator=(gpu_stream&& s)
         {
-            if (ready) {
-                CU_CHECK(cudaStreamDestroy(stream));
-                ready = false;
+            if (this != &s) {
+                if (ready) {
+                    CU_CHECK(cudaStreamDestroy(stream));
+                    ready = false;
+                }
+                std::swap(ready, s.ready);
+                std::swap(stream, s.stream);
             }
-            std::swap(ready, s.ready);
-            std::swap(stream, s.stream);
             return *this;
         }
 
