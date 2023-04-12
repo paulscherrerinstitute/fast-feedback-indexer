@@ -340,7 +340,7 @@ namespace fast_feedback {
             inline unsigned num_sample_points () const noexcept
             { return crt.num_sample_points; }
 
-            const config_runtime<float_type>& conf_runtime () const noexcept
+            inline const config_runtime<float_type>& conf_runtime () const noexcept
             { return crt; }
 
             // Persistent configuration access
@@ -357,7 +357,7 @@ namespace fast_feedback {
             inline unsigned num_candidate_vectors () const noexcept
             { return idx.cpers.num_candidate_vectors; }
 
-            const config_persistent<float_type>& conf_persistent () const noexcept
+            inline const config_persistent<float_type>& conf_persistent () const noexcept
             { return idx.cpers; }
         }; // indexer
 
@@ -649,7 +649,7 @@ namespace fast_feedback {
 
         // Return index for the best cell
         template <typename VecX>
-        unsigned best_cell (const Eigen::DenseBase<VecX>& scores)
+        inline unsigned best_cell (const Eigen::DenseBase<VecX>& scores)
         {
             auto it = std::min_element(std::cbegin(scores), std::cend(scores));
             return (unsigned)(it - std::cbegin(scores));
@@ -661,9 +661,9 @@ namespace fast_feedback {
         // - threshold  radius around approximated miller indices
         // - min_spots  minimum number of spots within threshold
         template <typename Mat3, typename MatX3, typename float_type=typename Mat3::Scalar>
-        bool is_viable_cell (const Eigen::MatrixBase<Mat3>& cell,
-                             const Eigen::MatrixBase<MatX3>& spots,
-                             float_type threshold=.02f, unsigned min_spots=9u)
+        inline bool is_viable_cell (const Eigen::MatrixBase<Mat3>& cell,
+                                    const Eigen::MatrixBase<MatX3>& spots,
+                                    float_type threshold=.02f, unsigned min_spots=9u)
         {
             using M3x = Eigen::MatrixX3<float_type>;
             M3x resid = spots * cell.transpose();
@@ -676,10 +676,10 @@ namespace fast_feedback {
         // Cell is considered a new crystall, if it differs by more than good n_spots
         // to other crystalls
         template <typename CellMat, typename SpotMat, typename ScoreVec, typename float_type=typename CellMat::Scalar>
-        std::vector<unsigned> compute_crystalls (const Eigen::MatrixBase<CellMat>& cells,
-                                                 const Eigen::MatrixBase<SpotMat>& spots,
-                                                 const Eigen::DenseBase<ScoreVec>& scores,
-                                                 float_type threshold=.02f, unsigned min_spots=9u)
+        inline std::vector<unsigned> compute_crystalls (const Eigen::MatrixBase<CellMat>& cells,
+                                                        const Eigen::MatrixBase<SpotMat>& spots,
+                                                        const Eigen::DenseBase<ScoreVec>& scores,
+                                                        float_type threshold=.02f, unsigned min_spots=9u)
         {
             using namespace Eigen;
             using Mx3 = MatrixX3<float_type>;
@@ -722,7 +722,7 @@ namespace fast_feedback {
 
         // Make a lattice basis right handed
         template <typename CellMat>
-        void make_right_handed (Eigen::MatrixBase<CellMat>& cell)
+        inline void make_right_handed (Eigen::MatrixBase<CellMat>& cell)
         {
             if (cell.determinant() < .0f)
                 cell.col(0) = -cell.col(0);
