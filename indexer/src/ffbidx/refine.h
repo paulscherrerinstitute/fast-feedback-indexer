@@ -720,6 +720,14 @@ namespace fast_feedback {
             return crystalls;
         }
 
+        // Make a lattice basis right handed
+        template <typename CellMat>
+        void make_right_handed (Eigen::MatrixBase<CellMat>& cell)
+        {
+            if (cell.determinant() < .0f)
+                cell.col(0) = -cell.col(0);
+        }
+
     } // namespace refine
 } // namespace fast_feedback
 

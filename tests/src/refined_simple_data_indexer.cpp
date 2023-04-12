@@ -175,8 +175,11 @@ int main (int argc, char *argv[])
 
         std::cout.precision(12);
         std::cout << "output:\n";
-        for (unsigned j=0u; j<cpers.max_output_cells; j++)
-            std::cout << indexer.oCell(j) << "\n\n";
+        for (unsigned j=0u; j<cpers.max_output_cells; j++) {
+            Eigen::Matrix3<float> cell = indexer.oCell(j);
+            fast_feedback::refine::make_right_handed(cell);
+            std::cout << cell << "\n\n";
+        }
         std::cout << "scores:\n" << indexer.oScoreV() << "\n\n";
         unsigned best_cell = fast_feedback::refine::best_cell(indexer.oScoreV());
         bool indexable = fast_feedback::refine::is_viable_cell(indexer.oCell(best_cell), indexer.Spots());
