@@ -725,7 +725,7 @@ namespace fast_feedback {
         inline void make_right_handed (Eigen::MatrixBase<CellMat>& cell)
         {
             if (cell.determinant() < .0f)
-                cell.col(0) = -cell.col(0);
+                cell = -cell;
         }
 
     } // namespace refine
