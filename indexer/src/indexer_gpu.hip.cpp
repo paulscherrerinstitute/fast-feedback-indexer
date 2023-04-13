@@ -1,3 +1,4 @@
+#include "hip/hip_runtime.h"
 /*
 Copyright 2022 Paul Scherrer Institute
 
@@ -37,8 +38,9 @@ Author: hans-christian.stadler@psi.ch
 #include "ffbidx/exception.h"
 #include "ffbidx/log.h"
 #include "ffbidx/indexer_gpu.h"
-#include "cuda_runtime.h"
-#include <cub/block/block_radix_sort.cuh>
+#include "hip/hip_runtime.h"
+#include <hip/hip_cooperative_groups.h>
+#include <hipcub/block/block_radix_sort.hpp>
 
 namespace logger = fast_feedback::logger;
 using logger::stanza;
@@ -47,15 +49,13 @@ namespace {
 
     constexpr char INDEXER_GPU_DEVICE[] = "INDEXER_GPU_DEVICE";
     constexpr char INDEXER_GPU_DEBUG[] = "INDEXER_GPU_DEBUG";
-    constexpr unsigned n_threads = 1024;    // num cuda threads per block for find_candidates kernel
-    constexpr unsigned warp_size = 32;      // number of threads in a warp
+    constexpr unsigned n_threads = 1024;        // num cuda threads per block for find_candidates kernel
+    constexpr unsigned warp_size = warpSize;    // number of threads in a warp
 
     template<typename float_type>
     struct constant final {
         // static constexpr float_type pi = 3.1415926535897932384628;
-        #pragma nv_diag_suppress 177 // suppress unused warning
         [[maybe_unused]] static constexpr float_type pi2 = 6.2831853071795864769257;
-        #pragma nv_diag_suppress 177 // suppress unused warning
         [[maybe_unused]] static constexpr float_type dl = 0.76393202250021030359082633; // 3 - sqrt(5), for spiral sample points on a half sphere
     };
 
@@ -102,11 +102,11 @@ namespace {
     // Exception for cuda related errors
     struct cuda_exception final : public fast_feedback::exception {
 
-        inline cuda_exception(cudaError_t error, const char* file, unsigned line)
+        inline cuda_exception(hipError_t error, const char* file, unsigned line)
             : exception(std::string{}, file, line)
         {
-            const char* error_name = cudaGetErrorName(error);
-            const char* error_string = cudaGetErrorString(error);
+            const char* error_name = hipGetErrorName(error);
+            const char* error_string = hipGetErrorString(error);
             *this << '(' << error_name << ") " << error_string;
         }
 
@@ -115,15 +115,15 @@ namespace {
     #define CU_EXCEPTION(err) cuda_exception(err, __FILE__, __LINE__)
 
     #define CU_CHECK(err) {        \
-        cudaError_t error = (err); \
-        if (error != cudaSuccess)  \
+        hipError_t error = (err); \
+        if (error != hipSuccess)  \
             CU_EXCEPTION(error);   \
     }
 
     // Cuda device infos
     struct gpu_device final {
         int id;
-        cudaDeviceProp prop;
+        hipDeviceProp_t prop;
 
         static inline std::vector<gpu_device> list;             // Cuda device list
         static inline std::atomic_bool cuda_initialized{false}; // Is the cuda runtime initialized?
@@ -149,13 +149,13 @@ namespace {
                     return;
             
                 int num_devices;
-                CU_CHECK(cudaGetDeviceCount(&num_devices));
+                CU_CHECK(hipGetDeviceCount(&num_devices));
 
                 list.resize(num_devices);
                 for (int dev=0; dev<num_devices; dev++) {
                     gpu_device& device = list[dev];
                     device.id = dev;
-                    CU_CHECK(cudaGetDeviceProperties(&device.prop, dev));
+                    CU_CHECK(hipGetDeviceProperties(&device.prop, dev));
                 }
 
                 gpu_device::cuda_initialized.store(true);
@@ -168,7 +168,7 @@ namespace {
         static int get()
         {
             int dev{-1};
-            CU_CHECK(cudaGetDevice(&dev));
+            CU_CHECK(hipGetDevice(&dev));
 
             char* dev_string = std::getenv(INDEXER_GPU_DEVICE);
             if (dev_string != nullptr) {
@@ -193,7 +193,7 @@ namespace {
             if ((dev < 0) || (dev >= (int)list.size()))
                 throw FF_EXCEPTION_OBJ << "illegal value for GPU device";
 
-            CU_CHECK(cudaSetDevice(dev));
+            CU_CHECK(hipSetDevice(dev));
         }
     };
 
@@ -227,7 +227,7 @@ namespace {
     struct gpu_deleter final {
         void operator()(T* ptr) const
         {
-            CU_CHECK(cudaFree(ptr));
+            CU_CHECK(hipFree(ptr));
         }
     };
 
@@ -236,9 +236,9 @@ namespace {
     using gpu_pointer = std::unique_ptr<T, gpu_deleter<T>>;
 
     // Cuda event wrapper
-    template<unsigned flags=cudaEventDisableTiming>
+    template<unsigned flags=hipEventDisableTiming>
     struct gpu_event final {
-        cudaEvent_t event;
+        hipEvent_t event;
 
         inline gpu_event()
             : event{}
@@ -255,66 +255,66 @@ namespace {
         
         gpu_event& operator=(gpu_event&& other)
         {
-            event = cudaEvent_t{};
+            event = hipEvent_t{};
             std::swap(other.event, event);
             return *this;
         }
 
         inline ~gpu_event()
         {
-            if (event != cudaEvent_t{})
-                CU_CHECK(cudaEventDestroy(event));
+            if (event != hipEvent_t{})
+                CU_CHECK(hipEventDestroy(event));
         }
 
         inline void init()
         {
-            if (event == cudaEvent_t{})
-                CU_CHECK(cudaEventCreateWithFlags(&event, flags));
+            if (event == hipEvent_t{})
+                CU_CHECK(hipEventCreateWithFlags(&event, flags));
         }
 
-        inline void record(cudaStream_t stream=0)
+        inline void record(hipStream_t stream=0)
         {
-            CU_CHECK(cudaEventRecord(event, stream));
+            CU_CHECK(hipEventRecord(event, stream));
         }
 
         inline void sync()
         {
-            CU_CHECK(cudaEventSynchronize(event));
+            CU_CHECK(hipEventSynchronize(event));
         }
     };
 
     template<unsigned flags>
     static float gpu_timing(const gpu_event<flags>& start, const gpu_event<flags>& end)
     {
-        static_assert(!(flags & cudaEventDisableTiming), "GPU timing measurement are only valid on events that don't have the cudaEventDisableTiming flag set");
+        static_assert(!(flags & hipEventDisableTiming), "GPU timing measurement are only valid on events that don't have the hipEventDisableTiming flag set");
         float time;
-        CU_CHECK(cudaEventElapsedTime(&time, start.event, end.event));
+        CU_CHECK(hipEventElapsedTime(&time, start.event, end.event));
         return time;
     }
 
     // Cuda stream wrapper
     struct gpu_stream final {
         bool ready;                             // Is stream ready = initialized
-        cudaStream_t stream;                    // Cuda stream
+        hipStream_t stream;                    // Cuda stream
 
         // Return uninitialized stream
         gpu_stream() noexcept
-            : ready{false}, stream{cudaStream_t{}}
+            : ready{false}, stream{hipStream_t{}}
         {}
 
         // Initialize stream with existing cuda stream
         // The cuda stream given as argument will be managed by this object after the call,
         // which basically means it should not be used afterwards.
-        gpu_stream(cudaStream_t s)
+        gpu_stream(hipStream_t s)
             : ready{true}, stream{s}
         {
             unsigned int flags;
-            CU_CHECK(cudaStreamGetFlags(s, &flags));    // check that the s is initialized
+            CU_CHECK(hipStreamGetFlags(s, &flags));    // check that the s is initialized
         }
 
         // Move s into this
         gpu_stream(gpu_stream&& s)
-            : ready{false}, stream{cudaStream_t{}}
+            : ready{false}, stream{hipStream_t{}}
         {
             std::swap(ready, s.ready);
             std::swap(stream, s.stream);
@@ -325,7 +325,7 @@ namespace {
         {
             if (this != &s) {
                 if (ready) {
-                    CU_CHECK(cudaStreamDestroy(stream));
+                    CU_CHECK(hipStreamDestroy(stream));
                     ready = false;
                 }
                 std::swap(ready, s.ready);
@@ -348,16 +348,16 @@ namespace {
         void release()
         {
             if (ready) {
-                CU_CHECK(cudaStreamDestroy(stream));
+                CU_CHECK(hipStreamDestroy(stream));
                 ready = false;
             }
         }
 
         // (Re)initialize the cuda stream
-        void init(unsigned int flags=cudaStreamDefault)
+        void init(unsigned int flags=hipStreamDefault)
         {
             release();
-            CU_CHECK(cudaStreamCreateWithFlags(&stream, flags));
+            CU_CHECK(hipStreamCreateWithFlags(&stream, flags));
             ready = true;
         }
 
@@ -365,18 +365,18 @@ namespace {
         void sync()
         {
             if (ready)
-                CU_CHECK(cudaStreamSynchronize(stream));
+                CU_CHECK(hipStreamSynchronize(stream));
         }
 
         // Check for completion status
         bool completed()
         {
             if (ready) {
-                auto error = cudaStreamQuery(stream);
+                auto error = hipStreamQuery(stream);
                 switch (error) {
-                    case cudaSuccess:
+                    case hipSuccess:
                         return true;
-                    case cudaErrorNotReady:
+                    case hipErrorNotReady:
                         return false;
                     default:
                         throw CU_EXCEPTION(error);
@@ -385,7 +385,7 @@ namespace {
             return true;
         }
 
-        operator cudaStream_t&() noexcept { return stream; }    // Cast to cuda stream
+        operator hipStream_t&() noexcept { return stream; }    // Cast to cuda stream
     };
 
     // On GPU compact vector representation
@@ -436,7 +436,7 @@ namespace {
         gpu_pointer<unsigned> cell_to_cellvec;              // Input cell to cell representing vector mapping
         gpu_pointer<unsigned> vec_cgrps;                    // Candidate vector groups of cell representing vectors
         gpu_pointer<unsigned> seq_block;                    // Thread block sequentializers
-        gpu_stream cuda_stream;                             // CUDA stream
+        gpu_stream hip_stream;                             // CUDA stream
 
         // Temporary pinned space to transfer n_input_cells, n_output_cells, n_spots
         fast_feedback::pinned_ptr<config_persistent> tmp;   // Pointer to make move construction simple
@@ -453,8 +453,8 @@ namespace {
         float_type* cell_score;
 
         // Timings
-        gpu_event<cudaEventDefault> start;
-        gpu_event<cudaEventDefault> end;
+        gpu_event<hipEventDefault> start;
+        gpu_event<hipEventDefault> end;
         time_point start_time{};
 
         // GPU device
@@ -494,7 +494,7 @@ namespace {
               candidate_length{std::move(cl)}, candidate_value{std::move(cv)},
               candidate_sample{std::move(cs)}, cellvec_to_cand{std::move(v2c)},
               cell_to_cellvec{std::move(c2v)}, vec_cgrps{std::move(vcgr)},
-              seq_block{std::move(sb)}, cuda_stream{std::move(stream)},
+              seq_block{std::move(sb)}, hip_stream{std::move(stream)},
               ix{xi}, iy{yi}, iz{zi},
               ox{xo}, oy{yo}, oz{zo},
               cell_score{scores}, device{dev}
@@ -524,7 +524,7 @@ namespace {
         // Shortcut to cuda stream
         static inline gpu_stream& stream(const key_type& id)
         {
-            return ref(id).cuda_stream;
+            return ref(id).hip_stream;
         }
 
         // State exists
@@ -542,20 +542,20 @@ namespace {
         }
 
         // Copy runtime configuration to GPU
-        static inline void copy_crt(const key_type& state_id, const fast_feedback::config_runtime<float_type>& crt, cudaStream_t stream=0)
+        static inline void copy_crt(const key_type& state_id, const fast_feedback::config_runtime<float_type>& crt, hipStream_t stream=0)
         {
             const auto crt_dp = &ptr(state_id)->crt;
             LOG_START(logger::l_debug) {
                 logger::debug << stanza << "copy runtime config data: " << &crt << "-->" << crt_dp << '\n';
             } LOG_END;
-            CU_CHECK(cudaMemcpyAsync(crt_dp, &crt, sizeof(crt), cudaMemcpyHostToDevice, stream));
+            CU_CHECK(hipMemcpyAsync(crt_dp, &crt, sizeof(crt), hipMemcpyHostToDevice, stream));
         }
 
         // Copy input data to GPU
         static inline void copy_in(const key_type& state_id, const config_persistent& cpers,
                                    const fast_feedback::input<float_type>& input,
                                    fast_feedback::output<float_type>& output,
-                                   cudaStream_t stream=0)
+                                   hipStream_t stream=0)
         {
             const auto& gpu_state = ref(state_id);
             auto& pinned_tmp = const_cast<config_persistent&>(*gpu_state.tmp);
@@ -567,23 +567,23 @@ namespace {
             pinned_tmp.max_output_cells = output.n_cells;
             pinned_tmp.max_input_cells = n_input_cells;
             pinned_tmp.max_spots = n_spots;
-            CU_CHECK(cudaMemcpyAsync(&device_data->output.n_cells, &pinned_tmp.max_output_cells, sizeof(output.n_cells), cudaMemcpyHostToDevice, stream));
+            CU_CHECK(hipMemcpyAsync(&device_data->output.n_cells, &pinned_tmp.max_output_cells, sizeof(output.n_cells), hipMemcpyHostToDevice, stream));
             // NOTE: the following code assumes consecutive storage of two data members in pinned_tmp and in device_data->input
-            CU_CHECK(cudaMemcpyAsync(&device_data->input.n_cells, &pinned_tmp.max_input_cells, sizeof(n_input_cells) + sizeof(n_spots), cudaMemcpyHostToDevice, stream));
+            CU_CHECK(hipMemcpyAsync(&device_data->input.n_cells, &pinned_tmp.max_input_cells, sizeof(n_input_cells) + sizeof(n_spots), hipMemcpyHostToDevice, stream));
 
             if (n_input_cells + n_spots > 0u) {
                 if (input.new_cells && n_input_cells > 0u) {
                     const auto cell_sz = 3u * n_input_cells * sizeof(float_type);
-                    CU_CHECK(cudaMemcpyAsync(gpu_state.ix, input.cell.x, cell_sz, cudaMemcpyHostToDevice, stream));
-                    CU_CHECK(cudaMemcpyAsync(gpu_state.iy, input.cell.y, cell_sz, cudaMemcpyHostToDevice, stream));
-                    CU_CHECK(cudaMemcpyAsync(gpu_state.iz, input.cell.z, cell_sz, cudaMemcpyHostToDevice, stream));
+                    CU_CHECK(hipMemcpyAsync(gpu_state.ix, input.cell.x, cell_sz, hipMemcpyHostToDevice, stream));
+                    CU_CHECK(hipMemcpyAsync(gpu_state.iy, input.cell.y, cell_sz, hipMemcpyHostToDevice, stream));
+                    CU_CHECK(hipMemcpyAsync(gpu_state.iz, input.cell.z, cell_sz, hipMemcpyHostToDevice, stream));
                 }
                 if (input.new_spots && n_spots > 0) {
                     const auto dst_offset = 3u * cpers.max_input_cells;
                     const auto spot_sz = n_spots * sizeof(float_type);
-                    CU_CHECK(cudaMemcpyAsync(&gpu_state.ix[dst_offset], input.spot.x, spot_sz, cudaMemcpyHostToDevice, stream));
-                    CU_CHECK(cudaMemcpyAsync(&gpu_state.iy[dst_offset], input.spot.y, spot_sz, cudaMemcpyHostToDevice, stream));
-                    CU_CHECK(cudaMemcpyAsync(&gpu_state.iz[dst_offset], input.spot.z, spot_sz, cudaMemcpyHostToDevice, stream));
+                    CU_CHECK(hipMemcpyAsync(&gpu_state.ix[dst_offset], input.spot.x, spot_sz, hipMemcpyHostToDevice, stream));
+                    CU_CHECK(hipMemcpyAsync(&gpu_state.iy[dst_offset], input.spot.y, spot_sz, hipMemcpyHostToDevice, stream));
+                    CU_CHECK(hipMemcpyAsync(&gpu_state.iz[dst_offset], input.spot.z, spot_sz, hipMemcpyHostToDevice, stream));
                 }
             }
 
@@ -603,45 +603,45 @@ namespace {
                                      const config_persistent& cpers,
                                      const std::vector<float_type>& cand_len, const std::vector<unsigned>& cand_idx,
                                      const std::vector<unsigned>& cell_cand, const std::vector<unsigned>& vec_cgrps,
-                                     cudaStream_t stream=0)
+                                     hipStream_t stream=0)
         {
             const auto n_cand_vecs = n_cand_groups * cpers.num_candidate_vectors;
             const auto& gpu_state = ref(state_id);
 
-            CU_CHECK(cudaMemcpyAsync(gpu_state.candidate_length.get(), cand_len.data(), n_cand_groups * sizeof(float_type), cudaMemcpyHostToDevice, stream));
-            CU_CHECK(cudaMemsetAsync(gpu_state.candidate_value.get(), 0, n_cand_vecs * sizeof(float_type), stream));
-            CU_CHECK(cudaMemcpyAsync(gpu_state.cellvec_to_cand.get(), cand_idx.data(), cand_idx.size() * sizeof(unsigned), cudaMemcpyHostToDevice, stream));
-            CU_CHECK(cudaMemcpyAsync(gpu_state.cell_to_cellvec.get(), cell_cand.data(), cell_cand.size() * sizeof(unsigned), cudaMemcpyHostToDevice, stream));
-            CU_CHECK(cudaMemcpyAsync(gpu_state.vec_cgrps.get(), vec_cgrps.data(), n_vec_cgrps * sizeof(unsigned), cudaMemcpyHostToDevice, stream));
+            CU_CHECK(hipMemcpyAsync(gpu_state.candidate_length.get(), cand_len.data(), n_cand_groups * sizeof(float_type), hipMemcpyHostToDevice, stream));
+            CU_CHECK(hipMemsetAsync(gpu_state.candidate_value.get(), 0, n_cand_vecs * sizeof(float_type), stream));
+            CU_CHECK(hipMemcpyAsync(gpu_state.cellvec_to_cand.get(), cand_idx.data(), cand_idx.size() * sizeof(unsigned), hipMemcpyHostToDevice, stream));
+            CU_CHECK(hipMemcpyAsync(gpu_state.cell_to_cellvec.get(), cell_cand.data(), cell_cand.size() * sizeof(unsigned), hipMemcpyHostToDevice, stream));
+            CU_CHECK(hipMemcpyAsync(gpu_state.vec_cgrps.get(), vec_cgrps.data(), n_vec_cgrps * sizeof(unsigned), hipMemcpyHostToDevice, stream));
         }
 
-        static inline void init_score(const key_type& state_id, const config_persistent& cpers, cudaStream_t stream=0)
+        static inline void init_score(const key_type& state_id, const config_persistent& cpers, hipStream_t stream=0)
         {
             const auto n_cells = cpers.max_output_cells;
             const auto& gpu_state = ref(state_id);
 
-            CU_CHECK(cudaMemsetAsync(gpu_state.cell_score, 0, n_cells * sizeof(float_type), stream));
+            CU_CHECK(hipMemsetAsync(gpu_state.cell_score, 0, n_cells * sizeof(float_type), stream));
         }
 
         // Copy output data from GPU
         // This is a blocking call that synchronizes on stream
-        static inline void copy_out(const key_type& state_id, fast_feedback::output<float_type>& output, cudaStream_t stream=0)
+        static inline void copy_out(const key_type& state_id, fast_feedback::output<float_type>& output, hipStream_t stream=0)
         {
             const auto& gpu_state = ref(state_id);
             auto& pinned_tmp = const_cast<config_persistent&>(*gpu_state.tmp);
             const auto& device_data = gpu_state.data;
 
-            CU_CHECK(cudaMemcpyAsync(&pinned_tmp.max_output_cells, &device_data->output.n_cells, sizeof(output.n_cells), cudaMemcpyDeviceToHost, stream));
-            CU_CHECK(cudaStreamSynchronize(stream));
+            CU_CHECK(hipMemcpyAsync(&pinned_tmp.max_output_cells, &device_data->output.n_cells, sizeof(output.n_cells), hipMemcpyDeviceToHost, stream));
+            CU_CHECK(hipStreamSynchronize(stream));
             output.n_cells = pinned_tmp.max_output_cells;
 
             if (output.n_cells > 0u) {
                 const auto cell_sz = 3u * output.n_cells * sizeof(float_type);
-                CU_CHECK(cudaMemcpyAsync(output.x, gpu_state.ox, cell_sz, cudaMemcpyDeviceToHost, stream));
-                CU_CHECK(cudaMemcpyAsync(output.y, gpu_state.oy, cell_sz, cudaMemcpyDeviceToHost, stream));
-                CU_CHECK(cudaMemcpyAsync(output.z, gpu_state.oz, cell_sz, cudaMemcpyDeviceToHost, stream));
-                CU_CHECK(cudaMemcpyAsync(output.score, gpu_state.cell_score, output.n_cells * sizeof(float_type), cudaMemcpyDeviceToHost, stream));
-                CU_CHECK(cudaStreamSynchronize(stream));
+                CU_CHECK(hipMemcpyAsync(output.x, gpu_state.ox, cell_sz, hipMemcpyDeviceToHost, stream));
+                CU_CHECK(hipMemcpyAsync(output.y, gpu_state.oy, cell_sz, hipMemcpyDeviceToHost, stream));
+                CU_CHECK(hipMemcpyAsync(output.z, gpu_state.oz, cell_sz, hipMemcpyDeviceToHost, stream));
+                CU_CHECK(hipMemcpyAsync(output.score, gpu_state.cell_score, output.n_cells * sizeof(float_type), hipMemcpyDeviceToHost, stream));
+                CU_CHECK(hipStreamSynchronize(stream));
             }
 
             LOG_START(logger::l_debug) {
@@ -783,7 +783,7 @@ namespace {
     };
 
     template<typename float_type>
-    using BlockRadixSort = cub::BlockRadixSort<float_type, n_threads, 1, unsigned>;
+    using BlockRadixSort = hipcub::BlockRadixSort<float_type, n_threads, 1, unsigned>;
 
     // -----------------------------------
     //            GPU Auxiliary
@@ -876,6 +876,13 @@ namespace {
         }
     };
 
+    __device__ __forceinline__ void __syncwarp() noexcept
+    {
+        auto block = cooperative_groups::this_thread_block();                                                                                 
+        auto warp = cooperative_groups::tiled_partition<warpSize>(block);
+        warp.sync();
+    }
+
     // acquire block sequentializer in busy wait loop
     __device__ __forceinline__ void seq_acquire(unsigned& seq) noexcept
     {
@@ -886,7 +893,7 @@ namespace {
     __device__ __forceinline__ void seq_release(unsigned& seq) noexcept
     {
         __threadfence();
-        __stwt(&seq, 0u);
+        seq = 0u;
     }
     
     // kahan sum
@@ -1458,8 +1465,6 @@ namespace {
             sample_cell(z, a, b, in.cell.x, in.cell.y, in.cell.z, vlength, vsample, n_vsamples, rsample, n_rsamples, cell_vec);
 
             const unsigned n_spots = in.n_spots;
-            const float_type triml = data->crt.triml;
-            const float_type trimh = data->crt.trimh;
             vabc = sample3(data->crt, z, a, b, in.spot.x, in.spot.y, in.spot.z, vlength, n_spots);
         }
 
@@ -1573,59 +1578,59 @@ namespace gpu {
             gpu_stream stream;
             stream.init();      // new cuda stream
 
-            CU_CHECK(cudaMalloc(&data, sizeof(device_data)));
+            CU_CHECK(hipMalloc(&data, sizeof(device_data)));
             gpu_pointer<device_data> data_ptr{data};
         
             {
                 std::size_t vector_dimension = std::max(3 * cpers.max_input_cells, cpers.max_output_cells);
-                CU_CHECK(cudaMalloc(&sequentializers, vector_dimension * sizeof(unsigned)));
+                CU_CHECK(hipMalloc(&sequentializers, vector_dimension * sizeof(unsigned)));
             }
 
             gpu_pointer<unsigned> sequentializers_ptr{sequentializers};
             {   // initialize sequentializers
                 std::size_t vector_dimension = 3 * cpers.max_input_cells;
-                CU_CHECK(cudaMemsetAsync(sequentializers, 0, vector_dimension * sizeof(unsigned), stream));
+                CU_CHECK(hipMemsetAsync(sequentializers, 0, vector_dimension * sizeof(unsigned), stream));
             }
 
             {
                 std::size_t vector_dimension = 10 * cpers.max_output_cells + 9 * cpers.max_input_cells + 3 * cpers.max_spots;
-                CU_CHECK(cudaMalloc(&elements, vector_dimension * sizeof(float_type)));
+                CU_CHECK(hipMalloc(&elements, vector_dimension * sizeof(float_type)));
             }
             gpu_pointer<float_type> element_ptr{elements};
 
             {
                 std::size_t vector_dimension = 3 * cpers.max_input_cells;
-                CU_CHECK(cudaMalloc(&candidate_length, vector_dimension * sizeof(float_type)));
+                CU_CHECK(hipMalloc(&candidate_length, vector_dimension * sizeof(float_type)));
             }
             gpu_pointer<float_type> candidate_length_ptr{candidate_length};
 
             {
                 std::size_t vector_dimension = 3 * cpers.num_candidate_vectors * cpers.max_input_cells;
-                CU_CHECK(cudaMalloc(&candidate_value, vector_dimension * sizeof(float_type)));
+                CU_CHECK(hipMalloc(&candidate_value, vector_dimension * sizeof(float_type)));
             }
             gpu_pointer<float_type> candidate_value_ptr{candidate_value};
 
             {
                 std::size_t vector_dimension = 3 * cpers.num_candidate_vectors * cpers.max_input_cells;
-                CU_CHECK(cudaMalloc(&candidate_sample, vector_dimension * sizeof(unsigned)));
+                CU_CHECK(hipMalloc(&candidate_sample, vector_dimension * sizeof(unsigned)));
             }
             gpu_pointer<unsigned> candidate_sample_ptr{candidate_sample};
 
             {
                 std::size_t vector_dimension = 3 * cpers.max_input_cells;
-                CU_CHECK(cudaMalloc(&cellvec_to_cand, vector_dimension * sizeof(unsigned)));
+                CU_CHECK(hipMalloc(&cellvec_to_cand, vector_dimension * sizeof(unsigned)));
             }
             gpu_pointer<unsigned> v2c_ptr{cellvec_to_cand};
 
             {
                 std::size_t vector_dimension = cpers.max_input_cells;
-                CU_CHECK(cudaMalloc(&cell_to_cellvec, vector_dimension * sizeof(unsigned)));
+                CU_CHECK(hipMalloc(&cell_to_cellvec, vector_dimension * sizeof(unsigned)));
             }
             gpu_pointer<unsigned> c2v_ptr{cell_to_cellvec};
 
             {
                 std::size_t vector_dimension = cpers.max_input_cells;
-                CU_CHECK(cudaMalloc(&vec_cgrps, vector_dimension * sizeof(unsigned)));
+                CU_CHECK(hipMalloc(&vec_cgrps, vector_dimension * sizeof(unsigned)));
             }
             gpu_pointer<unsigned> vcgrp_ptr{vec_cgrps};
 
@@ -1673,7 +1678,7 @@ namespace gpu {
                               candidate_sample, cellvec_to_cand,
                               cell_to_cellvec, vec_cgrps,
                               sequentializers};
-            CU_CHECK(cudaMemcpyAsync(data, &_data, sizeof(_data), cudaMemcpyHostToDevice, gpu_state::stream(state_id)));
+            CU_CHECK(hipMemcpyAsync(data, &_data, sizeof(_data), hipMemcpyHostToDevice, gpu_state::stream(state_id)));
         }
     }
 
@@ -1785,7 +1790,7 @@ namespace gpu {
         }
         if (host_callback != nullptr) {
             state.callback_mode = true;
-            CU_CHECK(cudaLaunchHostFunc(stream, host_callback, callback_data));
+            CU_CHECK(hipLaunchHostFunc(stream, host_callback, callback_data));
         } else
             state.callback_mode = false;
     }
@@ -1801,7 +1806,7 @@ namespace gpu {
         auto state_id = instance.state;
         auto& state = gpu_state::ref(state_id);
 
-        gpu_stream& stream = state.cuda_stream;
+        gpu_stream& stream = state.hip_stream;
 
         if (! state.callback_mode)
             stream.sync();
@@ -1821,25 +1826,25 @@ namespace gpu {
     // Raw memory pin
     void pin_memory(void* ptr, std::size_t size)
     {
-        CU_CHECK(cudaHostRegister(ptr, size, cudaHostRegisterDefault));
+        CU_CHECK(hipHostRegister(ptr, size, hipHostRegisterDefault));
     }
 
     // Raw memory unpin
     void unpin_memory(void* ptr)
     {
-        CU_CHECK(cudaHostUnregister(ptr));
+        CU_CHECK(hipHostUnregister(ptr));
     }
 
     void* alloc_pinned(std::size_t num_bytes)
     {
         void* ptr;
-        CU_CHECK(cudaHostAlloc(&ptr, num_bytes, cudaHostAllocDefault));
+        CU_CHECK(hipHostMalloc(&ptr, num_bytes, hipHostMallocDefault));
         return ptr;
     }
 
     void dealloc_pinned(void* ptr)
     {
-        CU_CHECK(cudaFreeHost(ptr));
+        CU_CHECK(hipHostFree(ptr));
     }
 
     template void init<float> (const indexer<float>&);

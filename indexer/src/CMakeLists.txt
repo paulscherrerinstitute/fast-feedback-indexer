@@ -1,14 +1,14 @@
 cmake_policy(SET CMP0048 NEW)
+list (APPEND CMAKE_PREFIX_PATH /opt/rocm/hip /opt/rocm)
 
 project(fast_indexer
         DESCRIPTION "Library for fast feedback indexing using brute force sampling"
         VERSION 0.1.0
-        LANGUAGES CXX CUDA)
+        LANGUAGES CXX)
 
 option(BUILD_FAST_INDEXER "Build fast indexer library" ON)
-option(BUILD_FAST_INDEXER_STATIC "Build fast indexer static library" ON)
 
-if (BUILD_FAST_INDEXER OR BUILD_FAST_INDEXER_STATIC)
+if (BUILD_FAST_INDEXER)
         set(THREADS_PREFER_PTHREAD_FLAG ON)
         find_package(Threads REQUIRED)
         find_package(Eigen3 3.4 NO_MODULE)
@@ -19,7 +19,8 @@ if (BUILD_FAST_INDEXER OR BUILD_FAST_INDEXER_STATIC)
         if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
                 set(CMAKE_CUDA_ARCHITECTURES "75;80")
         endif()
-        find_package(CUDAToolkit REQUIRED)
+        find_package(hip REQUIRED)
+        find_package(hipcub REQUIRED)
         message("CMAKE_CUDA_ARCHITECTURES=${CMAKE_CUDA_ARCHITECTURES}")
         set(fast_indexer_PUB_HEADER_LIST
                 ffbidx/indexer.h
@@ -37,20 +38,20 @@ endif()
 
 if(BUILD_FAST_INDEXER)
         add_library(fast_indexer SHARED
-                indexer_gpu.cu ffbidx/indexer_gpu.h
+                indexer_gpu.hip.cpp ffbidx/indexer_gpu.h
                 indexer.cpp
                 log.cpp
                 ${fast_indexer_PUB_HEADER_LIST})
         set_target_properties(fast_indexer PROPERTIES
-                CUDA_RUNTIME_LIBRARY Shared
                 SOVERSION 0
                 VERSION 0.1.0
                 POSITION_INDEPENDENT_CODE ON)
         target_compile_features(fast_indexer PUBLIC cxx_std_17)
         target_include_directories(fast_indexer PUBLIC .)
         target_link_libraries(fast_indexer
-                PRIVATE CUDA::cudart
+                PRIVATE hip::device
                 PRIVATE Threads::Threads
+                INTERFACE hip::hipcub
                 INTERFACE Eigen3::Eigen)
         install(TARGETS fast_indexer
                 LIBRARY
@@ -70,37 +71,7 @@ if(BUILD_FAST_INDEXER)
                 COMPONENT ffbidx_development)
 endif(BUILD_FAST_INDEXER)
 
-if(BUILD_FAST_INDEXER_STATIC)
-        add_library(fast_indexer_static STATIC
-                indexer_gpu.cu ffbidx/indexer_gpu.h
-                indexer.cpp
-                log.cpp
-                ${fast_indexer_PUB_HEADER_LIST})
-        set_target_properties(fast_indexer_static PROPERTIES
-                CUDA_RUNTIME_LIBRARY Static
-                VERSION 0.1.0)
-        target_compile_features(fast_indexer_static PUBLIC cxx_std_17)
-        target_include_directories(fast_indexer_static PUBLIC .)
-        target_link_libraries(fast_indexer_static
-                PRIVATE CUDA::cudart_static
-                PRIVATE Threads::Threads
-                INTERFACE Eigen3::Eigen)
-        install(TARGETS fast_indexer_static
-                LIBRARY
-                DESTINATION ${CMAKE_INSTALL_LIBDIR}
-                COMPONENT ffbidx_static_libraries)
-        configure_file(fast_indexer_static.pc.in
-                fast_indexer_static.pc
-                @ONLY)
-        install(FILES ${CMAKE_CURRENT_BINARY_DIR}/fast_indexer_static.pc
-                DESTINATION ${ffbidx_PKG_PATH_IN_LIB}
-                COMPONENT ffbidx_development_extra)
-        install(FILES ${CMAKE_CURRENT_BINARY_DIR}/fast_indexer_static.pc
-                DESTINATION ${ffbidx_PKG_PATH}
-                COMPONENT ffbidx_development)
-endif(BUILD_FAST_INDEXER_STATIC)
-
-if (BUILD_FAST_INDEXER OR BUILD_FAST_INDEXER_STATIC)
+if (BUILD_FAST_INDEXER)
         install(FILES ${fast_indexer_PUB_HEADER_LIST}
                 DESTINATION ${ffbidx_INCLUDE_PATH}/ffbidx
                 COMPONENT ffbidx_development)
