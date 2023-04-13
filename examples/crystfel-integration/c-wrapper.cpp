@@ -136,6 +136,16 @@ namespace {
         config_ok = true;
     }
 
+    // input:
+    // ptr    - convenience indexer object pointer
+    // cell   - input cell [x1, x2, x3, y1, y2, y3, z1, z2, z3] in memory
+    // x,y,z  - spot coords, size=nspots
+    // nspots
+    // output:
+    // ptr    - convenience indexer object will have the result
+    // return:
+    // 0 - ok
+    // 1 - error
     int index_step(ffbidx_indexer ptr, float cell[9], float *x, float *y, float *z, unsigned nspots)
     {
         using indexer = fast_feedback::refine::indexer<float>;
@@ -162,7 +172,14 @@ namespace {
         return 0;
     }
 
-    int is_viable_cell(ffbidx_indexer ptr, float cell[9])
+    // input:
+    // ptr  - convenience indexer object pointer
+    // output:
+    // cell - best cell [x1, x2, x3, y1, y2, y3, z1, z2, z3] in memory
+    // return:
+    // 0 - cell not viable (frame not indexable)
+    // 1 - cell viable (frame indexable)
+    int viable_cell(ffbidx_indexer ptr, float cell[9])
     {
         using namespace Eigen;
         using indexer = fast_feedback::refine::indexer<float>;
@@ -224,7 +241,7 @@ extern "C" {
         if (index_step(ptr, cell, x, y, z, nspots) != 0)
             return -1;
         
-        return is_viable_cell(ptr, cell);
+        return viable_cell(ptr, cell);
     }
 
     int index_refined(ffbidx_indexer ptr, float cell[9], float *x, float *y, float *z, unsigned nspots)
@@ -246,10 +263,12 @@ extern "C" {
             return -1;
         }
 
-        return is_viable_cell(ptr, cell);
+        return viable_cell(ptr, cell);
     }
 
     int fast_feedback_crystfel(struct ffbidx_settings *settings, float cell[9], float *x, float *y, float *z, unsigned nspots) {
+        using namespace Eigen;
+
         ffbidx_indexer idx;
         int res;
 
@@ -257,6 +276,10 @@ extern "C" {
             return -1;
         res = index_refined(idx, cell, x, y, z, nspots);
         free_fast_indexer(idx);
+
+        Map<Matrix<float, 3, 3>> mcell{cell};
+        fast_feedback::refine::make_right_handed(mcell);
+
         return res;
     }
 
