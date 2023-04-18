@@ -385,7 +385,7 @@ extern "C" {
     };
 
     PyModuleDef ffbidx_module = {
-        PyModuleDef_HEAD_INIT,
+        .m_base = PyModuleDef_HEAD_INIT,
         .m_name = "ffbidx",
         .m_doc = PyDoc_STR("Fast feedback indexer"),
         .m_size = -1,

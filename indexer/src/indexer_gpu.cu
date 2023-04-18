@@ -1458,8 +1458,6 @@ namespace {
             sample_cell(z, a, b, in.cell.x, in.cell.y, in.cell.z, vlength, vsample, n_vsamples, rsample, n_rsamples, cell_vec);
 
             const unsigned n_spots = in.n_spots;
-            const float_type triml = data->crt.triml;
-            const float_type trimh = data->crt.trimh;
             vabc = sample3(data->crt, z, a, b, in.spot.x, in.spot.y, in.spot.z, vlength, n_spots);
         }
 
