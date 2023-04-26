@@ -54,7 +54,7 @@ namespace {
     void parse_conf(config_type& conf, char* argv[])
     {
         {
-            std::istringstream iss(argv[7]);
+            std::istringstream iss(argv[8]);
             iss >> conf.threshold_contraction;
             if (! iss)
                 throw std::runtime_error("unable to parse sixth argument: threshold contraction");
@@ -63,7 +63,7 @@ namespace {
                 throw std::runtime_error("threshold_contraction must be in range (0..1)");
         }
         {
-            std::istringstream iss(argv[8]);
+            std::istringstream iss(argv[9]);
             iss >> conf.min_spots;
             if (! iss)
                 throw std::runtime_error("unable to parse seventh argument: minimum number of spots for fitting");
@@ -72,7 +72,7 @@ namespace {
                 throw std::runtime_error("min_spots must be > 3");
         }
         {
-            std::istringstream iss(argv[9]);
+            std::istringstream iss(argv[10]);
             iss >> conf.max_iter;
             if (! iss)
                 throw std::runtime_error("unable to parse eight argument: max iterations");
@@ -91,8 +91,8 @@ int main (int argc, char *argv[])
     using duration = std::chrono::duration<double>;
 
     try {
-        if ((argc <= 8) || ((std::string{argv[6]} == "ifse") && (argc <= 9)))
-            throw std::runtime_error("missing arguments, use\n<file name> <max number of spots> <max number of output cells> <number of kept candidate vectors> <number of half sphere sample points> ((ifss <threshold contraction> <min spots>) | (ifse <contraction speed> <min spots> <max iterations>))");
+        if (argc <= 10)
+            throw std::runtime_error("missing arguments, use\n<file name> <max number of spots> <max number of output cells> <number of kept candidate vectors> <number of half sphere sample points> <redundant computations?> (ifss|ifse) <threshold contraction> <min spots> <max iterations>");
 
         fast_feedback::config_runtime<float> crt{};         // default runtime config
         {
@@ -126,10 +126,17 @@ int main (int argc, char *argv[])
                     throw std::runtime_error("unable to parse fourth argument: number of kept candidate vectors");
                 std::cout << "n_candidates=" << cpers.num_candidate_vectors << '\n';
             }
+            {
+                std::istringstream iss(argv[6]);
+                iss >> std::boolalpha >> cpers.redundant_computations;
+                if (! iss)
+                    throw std::runtime_error("unable to parse fifth argument: redundant computations? (true|false)");
+                std::cout << "redu_comp=" << cpers.redundant_computations << '\n';
+            }
         }
 
         fast_feedback::refine::indexer<float>* indexer_p = nullptr;
-        std::string method{argv[6]};
+        std::string method{argv[7]};
         std::cout << "method=" << method << '\n';
 
         SimpleData<float, raise> data{argv[1]};         // read simple data file

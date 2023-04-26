@@ -16,7 +16,7 @@ The module has a primitive non pythonic interface, sorry for that.
 
 Imports the module.
 
-#### ffbidx.indexer(max_output_cells, max_input_cells, max_spots, num_candidate_vectors)
+#### ffbidx.indexer(max_output_cells, max_input_cells, max_spots, num_candidate_vectors, redundant_calculations)
 
 **Return**:
 
@@ -27,7 +27,8 @@ Handle to the indexer object
 - **max_output_cells** is the maximum number of output cells generated
 - **max_input_cells** is the maximum number of input cells considered
 - **max_spots** is the maximum number of spots considered
-- **num_candidate_vectors** is number of candidates (best sample vectors of a specific length) computed per length
+- **num_candidate_vectors** is the number of candidates (best sample vectors of a specific length) computed per length
+- **redundant_calculations** makes the code compute candidates for all vectors per input cell instead of just one
 
 This allocates space on the GPU for all the data structures used in the computation. The GPU device is parsed from the *INDEXER_GPU_DEVICE* environment variable. If it is not set, the current GPU device is used.
 

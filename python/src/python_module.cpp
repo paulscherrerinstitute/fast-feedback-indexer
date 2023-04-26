@@ -31,9 +31,10 @@ namespace {
     {
         using std::numeric_limits;
 
-        constexpr const char* kw[] = {"max_output_cells", "max_input_cells", "max_spots", "num_candidate_vectors", nullptr};
+        constexpr const char* kw[] = {"max_output_cells", "max_input_cells", "max_spots", "num_candidate_vectors", "redundant_computations", nullptr};
         long max_output_cells, max_input_cells, max_spots, num_candidate_vectors;
-        if (PyArg_ParseTupleAndKeywords(args, kwds, "llll", (char**)kw, &max_output_cells, &max_input_cells, &max_spots, &num_candidate_vectors) == 0)
+        int redundant_computations=false;
+        if (PyArg_ParseTupleAndKeywords(args, kwds, "llllp", (char**)kw, &max_output_cells, &max_input_cells, &max_spots, &num_candidate_vectors, &redundant_computations) == 0)
             return nullptr;
 
         if (max_output_cells < 0 || max_output_cells > numeric_limits<unsigned>::max()) {
@@ -52,7 +53,7 @@ namespace {
             PyErr_SetString(PyExc_ValueError, "num_candidate_vectors out of bounds for an unsigned integer");
             return nullptr;
         }
-        const fast_feedback::config_persistent<float> cpers{(unsigned)max_output_cells, (unsigned)max_input_cells, (unsigned)max_spots, (unsigned)num_candidate_vectors};
+        const fast_feedback::config_persistent<float> cpers{(unsigned)max_output_cells, (unsigned)max_input_cells, (unsigned)max_spots, (unsigned)num_candidate_vectors, (bool)redundant_computations};
 
         uint32_t handle = (uint32_t)-1;
         try {
@@ -74,8 +75,11 @@ namespace {
 
         constexpr const char* kw[] = {"handle",
                                       "spots", "input_cells",
-                                      "method", "length_threshold", "triml", "trimh", "delta", "num_sample_points", "n_output_cells",
-                                      "contraction", "min_spots", "n_iter",
+                                      "method",
+                                      "length_threshold", "triml", "trimh", "delta",
+                                      "num_sample_points", "n_output_cells",
+                                      "contraction",
+                                      "min_spots", "n_iter",
                                       nullptr};
         long handle;
         PyArrayObject* spots_ndarray = nullptr;

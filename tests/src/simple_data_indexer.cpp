@@ -59,8 +59,8 @@ int main (int argc, char *argv[])
     using namespace simple_data;
 
     try {
-        if (argc <= 5)
-            throw std::runtime_error("missing arguments <file name> <max number of spots> <max number of output cells> <number of kept candidate vectors> <number of half sphere sample points>");
+        if (argc <= 6)
+            throw std::runtime_error("missing arguments <file name> <max number of spots> <max number of output cells> <number of kept candidate vectors> <number of half sphere sample points> <redundant computations?>");
 
         fast_feedback::config_runtime<float> crt{};         // default runtime config
         {
@@ -93,6 +93,13 @@ int main (int argc, char *argv[])
                 if (! iss)
                     throw std::runtime_error("unable to parse fourth argument: number of kept candidate vectors");
                 std::cout << "n_candidates=" << cpers.num_candidate_vectors << '\n';
+            }
+            {
+                std::istringstream iss(argv[6]);
+                iss >> std::boolalpha >> cpers.redundant_computations;
+                if (! iss)
+                    throw std::runtime_error("unable to parse fifth argument: redundant computations? (true|false)");
+                std::cout << "redu_comp=" << cpers.redundant_computations << '\n';
             }
         }
 

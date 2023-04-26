@@ -1338,7 +1338,7 @@ namespace {
                 printf("\n");
             }
 
-            printf("rcgrps:");
+            printf("redundant_comp=%u, rcgrps:", unsigned(data->cpers.redundant_computations));
             for (unsigned i=0u; i<n_cells_in; ++i)
                 printf(" %u", data->vec_cgrps[i]);
             printf("\n");
@@ -1373,7 +1373,10 @@ namespace {
     }
 
     // sample = blockDim.x * blockIdx.x + threadIdx.x
-    // representing vector candidate group = blockIdx.y
+    // for non-redundant (cpers.redundant_computations=false) calculations:
+    //      representing vector candidate group = blockIdx.y
+    // for redundant computations:
+    //      candidate group index = blockIdx.y
     template<typename float_type>
     __global__ void gpu_find_candidates(indexer_device_data<float_type>* data)
     {
@@ -1381,7 +1384,7 @@ namespace {
 
         unsigned sample = blockDim.x * blockIdx.x + threadIdx.x;
         const unsigned n_samples = data->crt.num_sample_points;
-        const unsigned c_group = data->vec_cgrps[blockIdx.y];
+        const unsigned c_group = data->cpers.redundant_computations ? blockIdx.y : data->vec_cgrps[blockIdx.y];
         float_type v = 0.;  // objective function value for sample vector
 
         if (sample < n_samples) {                                   // calculate v
@@ -1433,8 +1436,11 @@ namespace {
     }
 
     // sample rotation angle index = blockDim.x * blockIdx.x + threadIdx.x
-    // input cell index = blockIdx.y
-    // sample vector index = blockIdx.z
+    // for non-redundant (cpers.redundant_computations=false) calculations:
+    //      input cell index = blockIdx.y
+    // for redundant computations:
+    //      cell vector index = blockIdx.y
+    // vector candidate index = blockIdx.z
     template<typename float_type>
     __global__ void gpu_find_cells(indexer_device_data<float_type>* data)
     {
@@ -1442,7 +1448,7 @@ namespace {
 
         const unsigned n_vsamples = data->crt.num_sample_points;
         unsigned rsample = blockIdx.x * blockDim.x + threadIdx.x;
-        const unsigned cell_vec = data->cell_to_cellvec[blockIdx.y];
+        const unsigned cell_vec = data->cpers.redundant_computations ? blockIdx.y : data->cell_to_cellvec[blockIdx.y];
         const unsigned cand = blockIdx.z;
         const unsigned cand_grp = data->cellvec_to_cand[cell_vec];
         const unsigned n_cand = data->cpers.num_candidate_vectors;
@@ -1756,7 +1762,8 @@ namespace gpu {
         gpu_stream& stream = gpu_state::stream(state_id);
         {   // find vector candidates
             const unsigned n_samples = conf_rt.num_sample_points;
-            const dim3 n_blocks((n_samples + n_threads - 1) / n_threads, n_vec_cgrps);
+            const dim3 n_blocks((n_samples + n_threads - 1) / n_threads,                                // samples
+                                instance.cpers.redundant_computations ? n_cand_groups : n_vec_cgrps);   // number of (cell representing vector) candidate groups
             const unsigned shared_sz = std::max(instance.cpers.num_candidate_vectors * sizeof(vec_cand_t<float_type>),
                                                 sizeof(typename BlockRadixSort<float_type>::TempStorage));
             gpu_state::copy_crt(state_id, conf_rt, stream);
@@ -1767,7 +1774,9 @@ namespace gpu {
         }
         {   // find cells
             const unsigned n_xblocks = (1.5 * std::sqrt(conf_rt.num_sample_points) + n_threads - 1.) / n_threads;
-            const dim3 n_blocks(n_xblocks, n_cells_in, instance.cpers.num_candidate_vectors);
+            const dim3 n_blocks(n_xblocks,                                                              // rotation samples
+                                instance.cpers.redundant_computations ? 3u * n_cells_in : n_cells_in,   // num cell vectors / num cells
+                                instance.cpers.num_candidate_vectors);                                  // num cand vecs
             const unsigned shared_sz = std::max(n_cells_out * sizeof(cell_cand_t<float_type>),
                                                 sizeof(typename BlockRadixSort<float_type>::TempStorage));
             bool dbg_flag = gpu_debug_output.load();

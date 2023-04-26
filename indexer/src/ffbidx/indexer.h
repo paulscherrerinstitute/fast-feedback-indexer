@@ -97,6 +97,7 @@ namespace fast_feedback {
         unsigned max_input_cells=1;         // maximum number of input unit cells, (must be before max_spots in memory, see copy_in())
         unsigned max_spots=200;             // maximum number of input spots, (must be after max_input_cells in memory, see copy_in())
         unsigned num_candidate_vectors=32;  // number of candidate vectors (per input cell vector)
+        bool redundant_computations=false;  // compute candidates for all three cell vectors instead of just one
     };
 
     // Exception type for fast feedback indexer

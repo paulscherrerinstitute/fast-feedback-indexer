@@ -93,7 +93,8 @@ namespace {
                      "  --ipg          indexer objects per gpu\n"
                      "  --rep          repetitions, every file will be indexer that many times\n"
                      "  --quiet        no indexing result output\n"
-                     "  --method       output cell refinement method, one of raw, ifss(default), ifse\n\n";
+                     "  --method       output cell refinement method, one of raw, ifss(default), ifse\n"
+                     "  --reducalc     calculate candidate vectors for all cell vectors instead of one\n\n";
         if (! msg.empty())
             error(msg);
         std::cout << success;
@@ -117,6 +118,7 @@ namespace {
     unsigned indexers_per_gpu = 1u;     // number of indexer objects per cuda device
     unsigned repetitions = 1u;          // number of times each file is indexed
     bool quiet = false;                 // don't produce indexing result output
+    bool reducalc = false;              // calculate candidates for all 3 cell vectors instead of one
     std::string method{};               // refinement method
 
     void check_method()
@@ -189,7 +191,8 @@ namespace {
             { "rep",      1, nullptr, 14},
             { "quiet",    0, nullptr, 15},
             { "method",   1, nullptr, 16},
-            { "help",     0, nullptr, 17},
+            { "reducalc", 0, nullptr, 17},
+            { "help",     0, nullptr, 18},
             { nullptr,    0, nullptr, -1}
         };
 
@@ -251,6 +254,9 @@ namespace {
                     parse_val(method, optarg);
                     break;
                 case 17:
+                    reducalc = true;
+                    break;
+                case 18:
                     usage();
                 default:
                     error("internal: unknown option id");
@@ -297,6 +303,7 @@ namespace {
         cpers.max_spots = maxspot;
         cpers.max_output_cells = ncells;
         cpers.num_candidate_vectors = cands;
+        cpers.redundant_computations = reducalc;
         crt.num_sample_points = samples;
         crt.triml = triml;
         crt.trimh = trimh;
@@ -745,7 +752,7 @@ int main (int argc, char *argv[])
         checkargs();
         setconf(cpers, crt, cifss, cifse);
 
-        debug << stanza << "cpers: cells=" << cpers.max_output_cells << ", maxspots=" << cpers.max_spots << ", cands=" << cpers.num_candidate_vectors << '\n'
+        debug << stanza << "cpers: cells=" << cpers.max_output_cells << ", maxspots=" << cpers.max_spots << ", cands=" << cpers.num_candidate_vectors << ", reducalc=" << cpers.redundant_computations << '\n'
               << stanza << "crt: samples=" << crt.num_sample_points << ", triml=" << crt.triml << ", trimh=" << crt.trimh << ", delta=" << crt.delta << '\n';
         if (method == "ifss") {
             debug << stanza << "cifss: contr=" << cifss.threshold_contraction << ", minpts=" << cifss.min_spots << '\n';
