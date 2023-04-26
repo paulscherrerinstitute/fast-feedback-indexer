@@ -24,6 +24,7 @@ namespace {
     fast_feedback::config_runtime<float> crt{};
     fast_feedback::refine::config_ifss<float> cifss{};
     viable_cell_config cvc{};
+    unsigned refine = true;
 
     struct value_t {
         union {
@@ -57,6 +58,7 @@ namespace {
         {"crt_num_sample_points", make_value(32u*1024u)},
         {"cifss_min_spots", make_value(6u)},
         {"cvc_threshold", make_value(.02f)},
+        {"idx_refine", make_value(unsigned(true))},
     };
 
     template<typename T>
@@ -79,6 +81,7 @@ namespace {
         param["crt_num_sample_points"].u = settings->crt_num_sample_points;
         param["cifss_min_spots"].u = settings->cifss_min_spots;
         param["cvc_threshold"].f = settings->cvc_threshold;
+        param["idx_refine"].u = unsigned(refine);
 
         constexpr const char* pvar_name = "FFBIDX_PARAMS";
         const char* env_c = std::getenv(pvar_name);
@@ -130,6 +133,8 @@ namespace {
                 cifss.min_spots = entry.second.u;
             } else if (entry.first == "cvc_threshold") {
                 cvc.threshold = entry.second.f;
+            } else if (entry.first == "idx_refine") {
+                refine = bool(entry.second.u);
             }
         }
 
@@ -274,7 +279,9 @@ extern "C" {
 
         if (allocate_fast_indexer(&idx, settings) != 0)
             return -1;
-        res = index_refined(idx, cell, x, y, z, nspots);
+        res = refine ?
+                index_refined(idx, cell, x, y, z, nspots) :
+                index_raw(idx, cell, x, y, z, nspots);
         free_fast_indexer(idx);
 
         Map<Matrix<float, 3, 3>> mcell{cell};
