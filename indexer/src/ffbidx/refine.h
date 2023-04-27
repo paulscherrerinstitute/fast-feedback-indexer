@@ -734,8 +734,10 @@ namespace fast_feedback {
         template <typename CellMatA, typename CellMatB, typename float_type=typename CellMatA::Scalar>
         inline float_type cell_similarity (const Eigen::MatrixBase<CellMatA>& cellA, const Eigen::MatrixBase<CellMatB>& cellB, float_type threshold)
         {
-            auto vlen_a = cellA.rowwise().norm();
-            auto vlen_b = cellB.rowwise().norm();
+            Eigen::Vector3<typename CellMatA::Scalar> vlen_a = cellA.rowwise().norm();
+            Eigen::Vector3<typename CellMatB::Scalar> vlen_b = cellB.rowwise().norm();
+            std::sort(std::begin(vlen_a), std::end(vlen_a));
+            std::sort(std::begin(vlen_b), std::end(vlen_b));
             float_type score = .0f;
             for (unsigned i=0; i<3u; i++)
                 score = std::max(score, std::abs(vlen_a[i] - vlen_b[i]));
