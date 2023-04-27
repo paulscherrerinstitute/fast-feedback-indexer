@@ -728,6 +728,21 @@ namespace fast_feedback {
                 cell = -cell;
         }
 
+        // Compute a cell similarity score based on cell vector length
+        // It can be used for penalisation of cell scores for output cells dissimilar to an input cell
+        // max(0, m-t)**2, with m the maximum of the cell vector length differences
+        template <typename CellMatA, typename CellMatB, typename float_type=typename CellMatA::Scalar>
+        inline float_type cell_similarity (const Eigen::MatrixBase<CellMatA>& cellA, const Eigen::MatrixBase<CellMatB>& cellB, float_type threshold)
+        {
+            auto vlen_a = cellA.rowwise().norm();
+            auto vlen_b = cellB.rowwise().norm();
+            float_type score = .0f;
+            for (unsigned i=0; i<3u; i++)
+                score = std::max(score, std::abs(vlen_a[i] - vlen_b[i]));
+            score = std::max(float_type{.0f}, score - threshold);
+            return score * score;
+        }
+
     } // namespace refine
 } // namespace fast_feedback
 
