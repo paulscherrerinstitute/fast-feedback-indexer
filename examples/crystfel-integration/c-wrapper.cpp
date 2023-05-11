@@ -268,6 +268,7 @@ extern "C" {
         return viable_cell(ptr, cell);
     }
 
+    // cell: 0-3: x-coords, 3-6: y-coords, 6-9: z-coords
     int index_refined(ffbidx_indexer ptr, float cell[9], float *x, float *y, float *z, unsigned nspots)
     {
         using indexer = fast_feedback::refine::indexer<float>;
@@ -290,6 +291,7 @@ extern "C" {
         return viable_cell(ptr, cell);
     }
 
+    // cell: 0-3: x-coords, 3-6: y-coords, 6-9: z-coords
     int fast_feedback_crystfel(struct ffbidx_settings *settings, float cell[9], float *x, float *y, float *z, unsigned nspots) {
         using namespace Eigen;
 

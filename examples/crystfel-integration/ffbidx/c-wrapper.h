@@ -20,11 +20,20 @@ struct ffbidx_settings {
     float cvc_threshold;                    // viable cell threshold
 };
 
+// Allocate and free indexer object. These are expensive.
 int allocate_fast_indexer(struct ffbidx_indexer* idx, struct ffbidx_settings *settings);
 void free_fast_indexer(struct ffbidx_indexer idx);
+
+// For the following:
+// cell: 0-3: x-coords, 3-6: y-coords, 6-9: z-coords
+// x,y,z: spot coordinates
 int index_raw(struct ffbidx_indexer idx, float cell[9], float *x, float *y, float *z, unsigned nspots);
 int index_refined(struct ffbidx_indexer idx, float cell[9], float *x, float *y, float *z, unsigned nspots);
 
+// Convenience function for:
+// - allocate an indexer
+// - index
+// - free indexer
 int fast_feedback_crystfel(struct ffbidx_settings *settings, float cell[9], float *x, float *y, float *z, unsigned nspots);
 
 #ifdef __cplusplus
