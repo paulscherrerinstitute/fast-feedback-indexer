@@ -34,7 +34,7 @@ namespace {
         constexpr const char* kw[] = {"max_output_cells", "max_input_cells", "max_spots", "num_candidate_vectors", "redundant_computations", nullptr};
         long max_output_cells, max_input_cells, max_spots, num_candidate_vectors;
         int redundant_computations=false;
-        if (PyArg_ParseTupleAndKeywords(args, kwds, "llllp", (char**)kw, &max_output_cells, &max_input_cells, &max_spots, &num_candidate_vectors, &redundant_computations) == 0)
+        if (PyArg_ParseTupleAndKeywords(args, kwds, "llll|p", (char**)kw, &max_output_cells, &max_input_cells, &max_spots, &num_candidate_vectors, &redundant_computations) == 0)
             return nullptr;
 
         if (max_output_cells < 0 || max_output_cells > numeric_limits<unsigned>::max()) {
