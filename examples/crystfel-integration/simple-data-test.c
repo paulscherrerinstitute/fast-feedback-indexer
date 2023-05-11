@@ -57,7 +57,7 @@ int main ()
     float* x = &data[9];
     float* y = &data[9 + N];
     float* z = &data[9 + 2*N];
-    struct ffbidx_settings settings = {200u, 32u, 32u*1024u, 6u, .02f};
+    struct ffbidx_settings settings = {200u, 32u, 32u, 32u*1024u, 6u, .02f};
     unsigned i=0;
     int c;
     do {
