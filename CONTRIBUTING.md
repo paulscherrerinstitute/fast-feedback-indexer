@@ -10,6 +10,7 @@ Very welcome in any case:
 - speed improvements
 - better and new language bindings
 - better and new integrations into software pipelines
+- better and new packaging methods
 
 If you're unsure, just get in contact,
 HC
