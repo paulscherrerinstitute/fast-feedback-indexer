@@ -732,7 +732,7 @@ namespace fast_feedback {
         // It can be used for penalisation of cell scores for output cells dissimilar to an input cell
         // max(0, m-t)**2, with m the maximum of the cell vector length differences
         template <typename CellMatA, typename CellMatB, typename float_type=typename CellMatA::Scalar>
-        inline float_type cell_similarity (const Eigen::MatrixBase<CellMatA>& cellA, const Eigen::MatrixBase<CellMatB>& cellB, float_type threshold)
+        inline float_type cell_similarity (const Eigen::MatrixBase<CellMatA>& cellA, const Eigen::MatrixBase<CellMatB>& cellB, float_type threshold=.02f)
         {
             Eigen::Vector3<typename CellMatA::Scalar> vlen_a = cellA.rowwise().norm();
             Eigen::Vector3<typename CellMatB::Scalar> vlen_b = cellB.rowwise().norm();
