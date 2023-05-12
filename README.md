@@ -14,7 +14,7 @@ This is the result of the REDML Project, and other more or less informal collabo
 * REDML: Swiss Data Science Center (https://datascience.ch)
 * REDML: PSI AWI (https://www.psi.ch/en/awi)
 * REDML: CSCS (https://www.cscs.ch)
-* Graeme, Nick, Richard (https://dials.github.io/about.html)
+* Graeme, Nick, Richard - DIALS group at Diamond Light Source (https://dials.github.io/about.html)
 
 ### External Build Dependencies
 
