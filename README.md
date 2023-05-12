@@ -2,9 +2,19 @@
 
 Develop an indexer for fast feedback
 
-*Status*: Current results based on simple brute force sampling seem to make sense.
+*Status*: We're slightly optimistic that it does what it's supposed to.
 
 *Issues*: Implemented in CUDA, so only Nvidia GPUs are supported currently.
+
+### Attributions
+
+This is the result of the REDML Project, and other more or less informal collaborations between
+
+* REDML: PSI MX Group (https://www.psi.ch/en/macromolecular-crystallography)
+* REDML: Swiss Data Science Center (https://datascience.ch)
+* REDML: PSI AWI (https://www.psi.ch/en/awi)
+* REDML: CSCS (https://www.cscs.ch)
+* Graeme, Nick, Richard (https://dials.github.io/about.html)
 
 ### External Build Dependencies
 
