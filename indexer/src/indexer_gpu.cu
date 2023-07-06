@@ -1773,7 +1773,7 @@ namespace gpu {
             gpu_find_candidates<float_type><<<n_blocks, n_threads, shared_sz, stream>>>(gpu_state::ptr(state_id).get());
         }
         {   // find cells
-            const unsigned n_xblocks = (1.5 * std::sqrt(conf_rt.num_sample_points) + n_threads - 1.) / n_threads;
+            const unsigned n_xblocks = (2.5 * std::sqrt(conf_rt.num_sample_points) + n_threads - 1.) / n_threads; // 2*pi*r^2 (half sphere) --> 2*pi*r (circumference)
             const dim3 n_blocks(n_xblocks,                                                              // rotation samples
                                 instance.cpers.redundant_computations ? 3u * n_cells_in : n_cells_in,   // num cell vectors / num cells
                                 instance.cpers.num_candidate_vectors);                                  // num cand vecs
