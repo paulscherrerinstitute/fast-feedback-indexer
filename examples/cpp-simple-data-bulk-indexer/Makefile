@@ -20,8 +20,8 @@ ifneq ($(EIGEN_OK), yes)
   $(error $(EIGEN_PKG) package not found with pkg-config)
 endif
 
-COMPILER_FLAGS := $(CXX_FLAGS) $(shell pkg-config --cflags $(CUDART_PKG)) $(shell pkg-config --cflags $(FFBIDX_PKG)) $(shell pkg-config --cflags $(EIGEN_PKG))
-LIBRARY_FLAGS := $(LD_FLAGS) $(shell pkg-config --libs $(CUDART_PKG)) $(shell pkg-config --libs $(FFBIDX_PKG))
+COMPILER_FLAGS := $(CXXFLAGS) $(shell pkg-config --cflags $(CUDART_PKG)) $(shell pkg-config --cflags $(FFBIDX_PKG)) $(shell pkg-config --cflags $(EIGEN_PKG))
+LIBRARY_FLAGS := $(LDFLAGS) $(shell pkg-config --libs $(CUDART_PKG)) $(shell pkg-config --libs $(FFBIDX_PKG))
 
 TARGET := simple-data-bulk-indexer
 
@@ -42,8 +42,9 @@ help:
 	@echo "  - $(TARGET): produces the executable (default)"
 	@echo "  - clean: remove the executable"
 	@echo "env vars:"
-	@echo "  - CXX_FLAGS"
-	@echo "  - LD_FLAGS"
+	@echo "  - CXX"
+	@echo "  - CXXFLAGS"
+	@echo "  - LDFLAGS"
 	@echo "  - CUDART_PKG    pkg-config package name for cuda runtime (mandatory)"
 
 .PHONY: clean help
