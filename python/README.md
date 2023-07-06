@@ -16,7 +16,7 @@ The module has a primitive non pythonic interface, sorry for that.
 
 Imports the module.
 
-#### ffbidx.indexer(max_output_cells, max_input_cells, max_spots, num_candidate_vectors, redundant_calculations)
+#### ffbidx.indexer(max_output_cells, max_input_cells, max_spots, num_candidate_vectors, redundant_calculations=false)
 
 **Return**:
 
