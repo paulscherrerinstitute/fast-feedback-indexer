@@ -37,7 +37,7 @@ namespace {
     {
         fast_feedback::exception ex1{FF_EXCEPTION_OBJ};
         fast_feedback::exception ex2 = FF_EXCEPTION_OBJ;
-        ex1 = std::move(create_copy());
+        ex1 = create_copy();
         ex2 = ex1;
         if (ex2.line_number == 33)
             throw ex2;

@@ -178,7 +178,7 @@ namespace fast_feedback {
             { return spots; }
 
             // Used coords area designated for reciprocal space spots
-            inline const auto Spots ()
+            inline auto Spots ()
             {
                 return spots.topRows(input.n_spots);
             }
@@ -206,7 +206,7 @@ namespace fast_feedback {
             inline auto iCell (unsigned i=0u) noexcept
             { return icells.block(3u * i, 0u, 3u, 3u); }
 
-            inline const auto iCell (unsigned i=0u) const noexcept
+            inline auto iCell (unsigned i=0u) const noexcept
             { return icells.block(3u * i, 0u, 3u, 3u); }
 
             // Coords area designated for real space input cells, fill cellwise bottom up
@@ -243,7 +243,7 @@ namespace fast_feedback {
             inline auto oCell (unsigned i) noexcept
             { return ocells.block(3u * i, 0u, 3u, 3u); }
 
-            inline const auto oCell (unsigned i) const noexcept
+            inline auto oCell (unsigned i) const noexcept
             { return ocells.block(3u * i, 0u, 3u, 3u); }
 
             // All output cells

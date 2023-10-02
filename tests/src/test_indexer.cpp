@@ -139,7 +139,10 @@ int main (int argc, char *argv[])
 
         std::cout << "=> " << spots_matched << " matches.\n";
 
-        std::cout << "Test " << ( (spots_matched >= n_matches) ? "OK" : "failed" ) << ".\n";
+        if (spots_matched >= n_matches)
+            std::cout << "Test OK.\n" << success;
+
+        std::cout << "Test failed.\n" << failure;
 
     } catch (std::exception& ex) {
         std::cerr << "Test failed: " << ex.what() << '\n' << failure;
