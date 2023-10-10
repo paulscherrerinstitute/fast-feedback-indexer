@@ -62,7 +62,8 @@ namespace {
         {"cpers_max_output_cells", make_value(32u)},
         {"cpers_num_candidate_vectors", make_value(32u)},
         {"cpers_redundant_computations", make_value(redundant_computations)},
-        {"crt_num_sample_points", make_value(32u*1024u)},
+        {"crt_num_halfsphere_points", make_value(32u*1024u)},
+        {"crt_num_angle_points", make_value(0u)},
         {"cifss_min_spots", make_value(6u)},
         {"cvc_threshold", make_value(.02f)},
         {"ccs_threshold", make_value(.02f)},
@@ -87,7 +88,8 @@ namespace {
         param["cpers_max_output_cells"].u = settings->cpers_max_output_cells;
         param["cpers_num_candidate_vectors"].u = settings->cpers_num_candidate_vectors;
         param["cpers_redundant_computations"].u = redundant_computations;
-        param["crt_num_sample_points"].u = settings->crt_num_sample_points;
+        param["crt_num_halfsphere_points"].u = settings->crt_num_sample_points;
+        param["crt_num_angle_points"].u = 0u;
         param["cifss_min_spots"].u = settings->cifss_min_spots;
         param["cvc_threshold"].f = settings->cvc_threshold;
         param["ccs_threshold"].f = ccs.threshold;
@@ -139,8 +141,10 @@ namespace {
                 cpers.num_candidate_vectors = entry.second.u;
             } else if (entry.first == "cpers_redundant_computations") {
                 cpers.redundant_computations = bool(entry.second.u);
-            } else if (entry.first == "crt_num_sample_points") {
-                crt.num_sample_points = entry.second.u;
+            } else if (entry.first == "crt_num_halfsphere_points") {
+                crt.num_halfsphere_points = entry.second.u;
+            } else if (entry.first == "crt_num_angle_points") {
+                crt.num_angle_points = entry.second.u;
             } else if (entry.first == "cifss_min_spots") {
                 cifss.min_spots = entry.second.u;
             } else if (entry.first == "cvc_threshold") {

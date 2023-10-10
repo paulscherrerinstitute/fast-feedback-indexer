@@ -285,7 +285,7 @@ namespace {
             float* score_data = (float*)PyArray_DATA(score);
             npy_intp score_bytes = PyArray_NBYTES(score);
 
-            fast_feedback::config_runtime<float> crt{(float)length_threshold, (float)triml, (float)trimh, (float)delta, (unsigned)num_sample_points};
+            fast_feedback::config_runtime<float> crt{(float)length_threshold, (float)triml, (float)trimh, (float)delta, (unsigned)num_sample_points, 0u};
 
             fast_feedback::memory_pin pin_crt{fast_feedback::memory_pin::on(crt)};
             fast_feedback::memory_pin pin_score{score_data, (std::size_t)score_bytes};

@@ -89,8 +89,10 @@ namespace fast_feedback {
                     throw FF_EXCEPTION("no spots");
                 if (cp.num_candidate_vectors < 1u)
                     throw FF_EXCEPTION("nonpositive number of candidate vectors");
-                if (cr.num_sample_points < cp.num_candidate_vectors)
-                    throw FF_EXCEPTION("fewer sample points than required candidate vectors");
+                if (cr.num_halfsphere_points < cp.num_candidate_vectors)
+                    throw FF_EXCEPTION("fewer half sphere sample points than required candidate vectors");
+                if ((cr.num_angle_points > 0u) && (cr.num_angle_points < cp.max_output_cells))
+                    throw FF_EXCEPTION("fewer angle sample points than required candidate cells");
                 if (cr.triml < float_type{0.f})
                     throw FF_EXCEPTION("lower trim value < 0");
                 if (cr.triml > cr.trimh)
@@ -325,20 +327,20 @@ namespace fast_feedback {
                 return crt.delta;
             }
 
-            inline void num_sample_points (unsigned nsp)
+            inline void num_halfsphere_points (unsigned nhsp)
             {
-                unsigned tmp = crt.num_sample_points;
-                crt.num_sample_points = nsp;
+                unsigned tmp = crt.num_halfsphere_points;
+                crt.num_halfsphere_points = nhsp;
                 try {
                     check_config();
                 } catch (...) {
-                    crt.num_sample_points = tmp;
+                    crt.num_halfsphere_points = tmp;
                     throw;
                 }
             }
 
-            inline unsigned num_sample_points () const noexcept
-            { return crt.num_sample_points; }
+            inline unsigned num_halfsphere_points () const noexcept
+            { return crt.num_halfsphere_points; }
 
             inline const config_runtime<float_type>& conf_runtime () const noexcept
             { return crt; }

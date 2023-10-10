@@ -65,10 +65,10 @@ int main (int argc, char *argv[])
         fast_feedback::config_runtime<float> crt{};         // default runtime config
         {
             std::istringstream iss(argv[5]);
-            iss >> crt.num_sample_points;
+            iss >> crt.num_halfsphere_points;
             if (! iss)
                 throw std::runtime_error("unable to parse fifth argument: number of half sphere sample points");
-            std::cout << "n_samples=" << crt.num_sample_points << '\n';
+            std::cout << "n_samples=" << crt.num_halfsphere_points << '\n';
         }
 
         fast_feedback::config_persistent<float> cpers{};    // default persistent config

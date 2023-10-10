@@ -81,7 +81,8 @@ namespace {
                      "  --maxspot      maximum number of spots\n"
                      "  --cells        number of output cells with scores\n"
                      "  --cands        number of candidate vectors\n"
-                     "  --samples      number of brute force sample points\n"
+                     "  --hsp          number of brute force halfsphere sample points\n"
+                     "  --ap           number of brute force angle sample points\n"
                      "  --triml        trim lows\n"
                      "  --trimh        trim heights\n"
                      "  --delta        log2 curve position\n"
@@ -106,7 +107,8 @@ namespace {
     unsigned maxspot;
     unsigned ncells;
     unsigned cands;
-    unsigned samples;
+    unsigned halfsphere_points;
+    unsigned angle_points;
     float triml;
     float trimh;
     float delta;
@@ -178,21 +180,22 @@ namespace {
             { "maxspots", 1, nullptr, 1 },
             { "cells",    1, nullptr, 2 },
             { "cands",    1, nullptr, 3 },
-            { "samples",  1, nullptr, 4 },
-            { "triml",    1, nullptr, 5 },
-            { "trimh",    1, nullptr, 6 },
-            { "delta",    1, nullptr, 7 },
-            { "contr",    1, nullptr, 8 },
-            { "minpts",   1, nullptr, 9 },
-            { "iter",     1, nullptr, 10},
-            { "ths",      1, nullptr, 11},
-            { "rblks",    1, nullptr, 12},
-            { "ipg",      1, nullptr, 13},
-            { "rep",      1, nullptr, 14},
-            { "quiet",    0, nullptr, 15},
-            { "method",   1, nullptr, 16},
-            { "reducalc", 0, nullptr, 17},
-            { "help",     0, nullptr, 18},
+            { "hsp",      1, nullptr, 4 },
+            { "ap",       1, nullptr, 5 },
+            { "triml",    1, nullptr, 6 },
+            { "trimh",    1, nullptr, 7 },
+            { "delta",    1, nullptr, 8 },
+            { "contr",    1, nullptr, 9 },
+            { "minpts",   1, nullptr, 10},
+            { "iter",     1, nullptr, 11},
+            { "ths",      1, nullptr, 12},
+            { "rblks",    1, nullptr, 13},
+            { "ipg",      1, nullptr, 14},
+            { "rep",      1, nullptr, 15},
+            { "quiet",    0, nullptr, 16},
+            { "method",   1, nullptr, 17},
+            { "reducalc", 0, nullptr, 18},
+            { "help",     0, nullptr, 19},
             { nullptr,    0, nullptr, -1}
         };
 
@@ -212,51 +215,53 @@ namespace {
                 case 3:
                     parse_val(cands, optarg); break;
                 case 4:
-                    parse_val(samples, optarg); break;
+                    parse_val(halfsphere_points, optarg); break;
                 case 5:
-                    parse_val(triml, optarg); break;
+                    parse_val(angle_points, optarg); break;
                 case 6:
-                    parse_val(trimh, optarg); break;
+                    parse_val(triml, optarg); break;
                 case 7:
-                    parse_val(delta, optarg); break;
+                    parse_val(trimh, optarg); break;
                 case 8:
-                    parse_val(contr, optarg, true); break;
+                    parse_val(delta, optarg); break;
                 case 9:
-                    parse_val(minpts, optarg, true); break;
+                    parse_val(contr, optarg, true); break;
                 case 10:
-                    parse_val(iter, optarg, true); break;
+                    parse_val(minpts, optarg, true); break;
                 case 11:
+                    parse_val(iter, optarg, true); break;
+                case 12:
                     parse_val(worker_threads, optarg);
                     if (worker_threads < 1u)
                         error("no worker threads");
                     break;
-                case 12:
+                case 13:
                     parse_val(refinement_blocks, optarg);
                     if (refinement_blocks < 1u)
                         error("no refinement blocks");
                     break;
-                case 13:
+                case 14:
                     parse_val(indexers_per_gpu, optarg);
                     if (indexers_per_gpu < 1u)
                         error("no indexers");
                     break;
-                case 14:
+                case 15:
                     parse_val(repetitions, optarg);
                     if (repetitions < 1u)
                         error("no repetitions");
                     break;
-                case 15:
+                case 16:
                     quiet = true;
                     break;
-                case 16:
+                case 17:
                     if (! method.empty())
                         error("method already set");
                     parse_val(method, optarg);
                     break;
-                case 17:
+                case 18:
                     reducalc = true;
                     break;
-                case 18:
+                case 19:
                     usage();
                 default:
                     error("internal: unknown option id");
@@ -275,7 +280,8 @@ namespace {
         maxspot = cpers.max_spots;
         ncells = cpers.max_output_cells;
         cands = cpers.num_candidate_vectors;
-        samples = crt.num_sample_points;
+        halfsphere_points = crt.num_halfsphere_points;
+        angle_points = crt.num_angle_points;
         triml = crt.triml;
         trimh = crt.trimh;
         delta = crt.delta;
@@ -304,7 +310,8 @@ namespace {
         cpers.max_output_cells = ncells;
         cpers.num_candidate_vectors = cands;
         cpers.redundant_computations = reducalc;
-        crt.num_sample_points = samples;
+        crt.num_halfsphere_points = halfsphere_points;
+        crt.num_angle_points = angle_points;
         crt.triml = triml;
         crt.trimh = trimh;
         crt.delta = delta;
@@ -753,7 +760,7 @@ int main (int argc, char *argv[])
         setconf(cpers, crt, cifss, cifse);
 
         debug << stanza << "cpers: cells=" << cpers.max_output_cells << ", maxspots=" << cpers.max_spots << ", cands=" << cpers.num_candidate_vectors << ", reducalc=" << cpers.redundant_computations << '\n'
-              << stanza << "crt: samples=" << crt.num_sample_points << ", triml=" << crt.triml << ", trimh=" << crt.trimh << ", delta=" << crt.delta << '\n';
+              << stanza << "crt: hs-points=" << crt.num_halfsphere_points << ", a-points=" << crt.num_angle_points << ", triml=" << crt.triml << ", trimh=" << crt.trimh << ", delta=" << crt.delta << '\n';
         if (method == "ifss") {
             debug << stanza << "cifss: contr=" << cifss.threshold_contraction << ", minpts=" << cifss.min_spots << '\n';
         } else {

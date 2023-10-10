@@ -1383,7 +1383,7 @@ namespace {
         extern __shared__ double* shared_ptr[];
 
         unsigned sample = blockDim.x * blockIdx.x + threadIdx.x;
-        const unsigned n_samples = data->crt.num_sample_points;
+        const unsigned n_samples = data->crt.num_halfsphere_points;
         const unsigned c_group = data->cpers.redundant_computations ? blockIdx.y : data->vec_cgrps[blockIdx.y];
         float_type v = 0.;  // objective function value for sample vector
 
@@ -1446,7 +1446,7 @@ namespace {
     {
         extern __shared__ double* shared_ptr[];
 
-        const unsigned n_vsamples = data->crt.num_sample_points;
+        const unsigned n_vsamples = data->crt.num_halfsphere_points;
         unsigned rsample = blockIdx.x * blockDim.x + threadIdx.x;
         const unsigned cell_vec = data->cpers.redundant_computations ? blockIdx.y : data->cell_to_cellvec[blockIdx.y];
         const unsigned cand = blockIdx.z;
@@ -1504,7 +1504,7 @@ namespace {
     template<typename float_type>
     __global__ void gpu_expand_cells(indexer_device_data<float_type>* data, const unsigned n_rsamples)
     {
-        const unsigned n_vsamples = data->crt.num_sample_points;
+        const unsigned n_vsamples = data->crt.num_halfsphere_points;
         const fast_feedback::input<float_type>& in = data->input;
         fast_feedback::output<float_type>& out = data->output;
         float_type* ox = out.x;
@@ -1723,8 +1723,10 @@ namespace gpu {
             throw FF_EXCEPTION("no spots");
         if (instance.cpers.num_candidate_vectors < 1u)
             throw FF_EXCEPTION("nonpositive number of candidate vectors");
-        if (conf_rt.num_sample_points < instance.cpers.num_candidate_vectors)
-            throw FF_EXCEPTION("fewer sample points than required candidate vectors");
+        if (conf_rt.num_halfsphere_points < instance.cpers.num_candidate_vectors)
+            throw FF_EXCEPTION("fewer halfsphere sample points than required candidate vectors");
+        if ((conf_rt.num_angle_points > 0u) && (conf_rt.num_angle_points < instance.cpers.max_output_cells))
+            throw FF_EXCEPTION("fewer angle sample points than required candidate cells");
         if (conf_rt.delta <= .0f)
             throw FF_EXCEPTION("nonpositive delta value in runtime configuration");
         if (conf_rt.triml >= conf_rt.trimh)
@@ -1761,7 +1763,7 @@ namespace gpu {
 
         gpu_stream& stream = gpu_state::stream(state_id);
         {   // find vector candidates
-            const unsigned n_samples = conf_rt.num_sample_points;
+            const unsigned n_samples = conf_rt.num_halfsphere_points;
             const dim3 n_blocks((n_samples + n_threads - 1) / n_threads,                                // samples
                                 instance.cpers.redundant_computations ? n_cand_groups : n_vec_cgrps);   // number of (cell representing vector) candidate groups
             const unsigned shared_sz = std::max(instance.cpers.num_candidate_vectors * sizeof(vec_cand_t<float_type>),
@@ -1773,7 +1775,9 @@ namespace gpu {
             gpu_find_candidates<float_type><<<n_blocks, n_threads, shared_sz, stream>>>(gpu_state::ptr(state_id).get());
         }
         {   // find cells
-            const unsigned n_xblocks = (2.5 * std::sqrt(conf_rt.num_sample_points) + n_threads - 1.) / n_threads; // 2*pi*r^2 (half sphere) --> 2*pi*r (circumference)
+            const unsigned n_xblocks = (conf_rt.num_angle_points == 0u ?
+                                            (2.5 * std::sqrt(conf_rt.num_halfsphere_points) + n_threads - 1.) / n_threads // 2*pi*r^2 (half sphere) --> 2*pi*r (circumference)
+                                           :(conf_rt.num_angle_points + n_threads - 1u) / n_threads);
             const dim3 n_blocks(n_xblocks,                                                              // rotation samples
                                 instance.cpers.redundant_computations ? 3u * n_cells_in : n_cells_in,   // num cell vectors / num cells
                                 instance.cpers.num_candidate_vectors);                                  // num cand vecs
