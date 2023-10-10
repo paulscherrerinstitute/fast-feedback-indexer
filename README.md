@@ -2,9 +2,19 @@
 
 Develop an indexer for fast feedback
 
-*Status*: We're slightly optimistic that it does what it's supposed to.
+*Status*: We're optimistic that it does what it's supposed to. *Luis Barbas* PyTorch implementation has been benchmarked extensively here at PSI and shows indexing quality on par with other known indexers and superior speed. This CUDA version is behind the PyTorch implementation, but I'm trying to catch up.
 
-*Issues*: Implemented in CUDA, so only Nvidia GPUs are supported currently.
+*Issues*: Implemented in CUDA, so only Nvidia GPUs are supported currently. Good guess of initial cell required.
+
+### Alternative Implementations
+
+*Luis Barba* from the Swiss Data Science Center has done an implementation with PyTorch: https://renkulab.io/projects/lfbarba/toro-indexer-for-serial-crystallography
+
+### Referencing
+
+When referring to the algorithm implemented here, please use:
+
+*TODO*: DOI
 
 ### Attributions
 
