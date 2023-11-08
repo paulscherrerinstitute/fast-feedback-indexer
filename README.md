@@ -14,9 +14,9 @@ Develop an indexer for fast feedback
 
 When referring to the algorithm implemented here, please use:
  
-D O I: 10.26434/chemrxiv-2023-wnm9n [opens in a new tab]
+DOI: https://doi.org/10.26434/chemrxiv-2023-wnm9n
 
-*TODOD*: Add non-preprint version in the future
+*TODO*: Add non-preprint version in the future
 
 ### Attributions
 
