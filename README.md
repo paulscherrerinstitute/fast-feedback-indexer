@@ -13,8 +13,10 @@ Develop an indexer for fast feedback
 ### Referencing
 
 When referring to the algorithm implemented here, please use:
+ 
+D O I: 10.26434/chemrxiv-2023-wnm9n [opens in a new tab]
 
-*TODO*: DOI
+*TODOD*: Add non-preprint version in the future
 
 ### Attributions
 
