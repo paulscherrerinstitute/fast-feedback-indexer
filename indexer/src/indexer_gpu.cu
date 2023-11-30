@@ -40,6 +40,19 @@ Author: hans-christian.stadler@psi.ch
 #include "cuda_runtime.h"
 #include <cub/block/block_radix_sort.cuh>
 
+#define VCR_NONE 0  // No vector candidate refinement
+#define VCR_ROPT 1  // Vector candidate refinement with robust optimization
+
+#ifndef VECTOR_CANDIDATE_REFINEMENT // Macro for switching on vector candidate refinement
+    #define VCANDREF VCR_NONE   // Use no candidate vector refinement
+#elif VECTOR_CANDIDATE_REFINEMENT == VCR_NONE
+    #define VCANDREF VCR_NONE   // Use no candidate vector refinement
+#elif VECTOR_CANDIDATE_REFINEMENT == VCR_ROPT
+    #define VCANDREF VCR_ROPT   // Use robust optimization for candidate vector refinement
+#else
+    #error "VECTOR_CANDIDATE_REFINEMENT has an unsupported value! Use either 0 (none), or 1 (robust optimization)."
+#endif
+
 namespace logger = fast_feedback::logger;
 using logger::stanza;
 
@@ -49,6 +62,7 @@ namespace {
     constexpr char INDEXER_GPU_DEBUG[] = "INDEXER_GPU_DEBUG";
     constexpr unsigned n_threads = 1024;    // num cuda threads per block for find_candidates kernel
     constexpr unsigned warp_size = 32;      // number of threads in a warp
+    constexpr unsigned mem_txn_unit = 32;   // minimum memory transaction unit (cache line sector)
 
     template<typename float_type>
     struct constant final {
@@ -57,6 +71,8 @@ namespace {
         [[maybe_unused]] static constexpr float_type pi2 = 6.2831853071795864769257;
         #pragma nv_diag_suppress 177 // suppress unused warning
         [[maybe_unused]] static constexpr float_type dl = 0.76393202250021030359082633; // 3 - sqrt(5), for spiral sample points on a half sphere
+        #pragma nv_diag_suppress 177 // suppress unused warning
+        [[maybe_unused]] static constexpr unsigned mem_txn_unit = ::mem_txn_unit / sizeof(float_type); // minimum memory transaction unit
     };
 
     // NOTE: not allowed as member of constant
@@ -405,6 +421,9 @@ namespace {
         fast_feedback::output<float_type> output;
         float_type* candidate_length;           // Candidate vector groups length, [3 * max_input_cells]
         float_type* candidate_value;            // Candidate vector objective function values, [3 * max_input_cells * num_candidate_vectors]
+        #if VCANDREF == VCR_ROPT
+            float_type* refined_candidates;     // Refined candidate coordinates in consecutive aligned tripples (x,y,z,gap; alignment = mem_txn_unit)
+        #endif
         unsigned* candidate_sample;             // Sample number of candidate vectors, [3 * max_input_cells * num_candidate_vectors]
         unsigned* cellvec_to_cand;              // Input cell vector to candidate group mapping, [3 * max_input_cells]
         unsigned* cell_to_cellvec;              // Input cell to representing cell vector mapping, [max_input_cells]
@@ -431,6 +450,9 @@ namespace {
         gpu_pointer<float_type> elements;                   // Input/output vector elements of data on GPU
         gpu_pointer<float_type> candidate_length;           // Candidate vector groups length
         gpu_pointer<float_type> candidate_value;            // Candidate vectors objective function values on GPU
+        #if VCANDREF == VCR_ROPT
+            gpu_pointer<float_type> refined_candidates;     // Refined candidate coordinates in consecutive aligned tripples
+        #endif
         gpu_pointer<unsigned> candidate_sample;             // Sample number of candidate vectors
         gpu_pointer<unsigned> cellvec_to_cand;              // Input cell vector to candidate group mapping
         gpu_pointer<unsigned> cell_to_cellvec;              // Input cell to cell representing vector mapping
@@ -484,6 +506,9 @@ namespace {
         // cbm      host callback function is called when results are ready
         indexer_gpu_state(gpu_pointer<content_type>&& d, gpu_pointer<float_type>&& e,
                           gpu_pointer<float_type>&& cl, gpu_pointer<float_type>&& cv,
+                          #if VCANDREF == VCR_ROPT
+                            gpu_pointer<float_type>&& rc,
+                          #endif
                           gpu_pointer<unsigned>&& cs, gpu_pointer<unsigned>&& v2c,
                           gpu_pointer<unsigned>&& c2v, gpu_pointer<unsigned>&& vcgr,
                           gpu_pointer<unsigned>&& sb, gpu_stream&& stream,
@@ -492,6 +517,9 @@ namespace {
                           float_type* scores, int dev)
             : data{std::move(d)}, elements{std::move(e)},
               candidate_length{std::move(cl)}, candidate_value{std::move(cv)},
+              #if VCANDREF == VCR_ROPT
+                refined_candidates{std::move(rc)},
+              #endif
               candidate_sample{std::move(cs)}, cellvec_to_cand{std::move(v2c)},
               cell_to_cellvec{std::move(c2v)}, vec_cgrps{std::move(vcgr)},
               seq_block{std::move(sb)}, cuda_stream{std::move(stream)},
@@ -1435,6 +1463,21 @@ namespace {
         }
     }
 
+    #if VCANDREF == VCR_ROPT
+        // vector candidate index = blockIdx.x
+        // for non-redundant (cpers.redundant_computations=false) calculations:
+        //      input cell index = blockIdx.y
+        // for redundant computations:
+        //      cell vector index = blockIdx.y
+        template<typename float_type>
+        __global__ void gpu_refine_cand(indexer_device_data<float_type>* data)
+        {
+            // if ((blockIdx.x == 0) && (blockIdx.y == 0) && (threadIdx.x == 0)) {
+            //     printf("gpu_refine_cand() threads=%u, cands=%u, ncg=%u\n", (unsigned)blockDim.x, (unsigned)gridDim.x, (unsigned)gridDim.y);
+            // }
+        }
+    #endif
+
     // sample rotation angle index = blockDim.x * blockIdx.x + threadIdx.x
     // for non-redundant (cpers.redundant_computations=false) calculations:
     //      input cell index = blockIdx.y
@@ -1556,6 +1599,7 @@ namespace gpu {
         device_data* data = nullptr;
         float_type* candidate_length = nullptr;
         float_type* candidate_value = nullptr;
+        float_type* refined_candidates = nullptr;
         unsigned* candidate_sample = nullptr;
         unsigned* cellvec_to_cand = nullptr;
         unsigned* cell_to_cellvec = nullptr;
@@ -1610,6 +1654,13 @@ namespace gpu {
             gpu_pointer<float_type> candidate_value_ptr{candidate_value};
 
             {
+                static_assert(mem_txn_unit >= 3 * sizeof(float_type));
+                std::size_t vector_dimension = constant<float_type>::mem_txn_unit * cpers.num_candidate_vectors * cpers.max_input_cells;
+                CU_CHECK(cudaMalloc(&refined_candidates, vector_dimension * sizeof(float_type)));
+            }
+            gpu_pointer<float_type> refined_candidates_ptr{refined_candidates};
+
+            {
                 std::size_t vector_dimension = 3 * cpers.num_candidate_vectors * cpers.max_input_cells;
                 CU_CHECK(cudaMalloc(&candidate_sample, vector_dimension * sizeof(unsigned)));
             }
@@ -1650,6 +1701,9 @@ namespace gpu {
                 std::lock_guard<std::mutex> state_lock{gpu_state::state_update};
                 gpu_state::ref(state_id) = gpu_state{std::move(data_ptr), std::move(element_ptr),
                                                      std::move(candidate_length_ptr), std::move(candidate_value_ptr),
+                                                     #if VCANDREF == VCR_ROPT
+                                                        std::move(refined_candidates_ptr),
+                                                     #endif
                                                      std::move(candidate_sample_ptr), std::move(v2c_ptr),
                                                      std::move(c2v_ptr), std::move(vcgrp_ptr),
                                                      std::move(sequentializers_ptr), std::move(stream),
@@ -1674,6 +1728,9 @@ namespace gpu {
                               fast_feedback::input<float_type>{{ix, iy, iz}, {&ix[so], &iy[so], &iz[so]}, 0, 0, true, true},
                               fast_feedback::output<float_type>{ox, oy, oz, scores, 0},
                               candidate_length, candidate_value,
+                              #if VCANDREF == VCR_ROPT
+                                refined_candidates,
+                              #endif
                               candidate_sample, cellvec_to_cand,
                               cell_to_cellvec, vec_cgrps,
                               sequentializers};
@@ -1774,6 +1831,15 @@ namespace gpu {
             state.start.record(stream);
             gpu_find_candidates<float_type><<<n_blocks, n_threads, shared_sz, stream>>>(gpu_state::ptr(state_id).get());
         }
+        #if VCANDREF == VCR_ROPT
+        {
+            const dim3 n_blocks{
+                instance.cpers.num_candidate_vectors,                                   // num cand vecs
+                instance.cpers.redundant_computations ? 3u * n_cells_in : n_cells_in,   // num cell vectors / num cells
+            };
+            gpu_refine_cand<float_type><<<n_blocks, warp_size, 0, stream>>>(gpu_state::ptr(state_id).get());
+        }
+        #endif
         {   // find cells
             const unsigned n_xblocks = (conf_rt.num_angle_points == 0u ?
                                             (2.5 * std::sqrt(conf_rt.num_halfsphere_points) + n_threads - 1.) / n_threads // 2*pi*r^2 (half sphere) --> 2*pi*r (circumference)
