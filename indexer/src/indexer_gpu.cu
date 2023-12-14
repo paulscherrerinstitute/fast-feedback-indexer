@@ -34,11 +34,13 @@ Author: hans-christian.stadler@psi.ch
 #include <chrono>
 #include <algorithm>
 #include <limits>
+#include <cub/block/block_radix_sort.cuh>
+#include <cooperative_groups.h>
+#include <cooperative_groups/reduce.h>
 #include "ffbidx/exception.h"
 #include "ffbidx/log.h"
 #include "ffbidx/indexer_gpu.h"
 #include "cuda_runtime.h"
-#include <cub/block/block_radix_sort.cuh>
 
 #define VCR_NONE 0  // No vector candidate refinement
 #define VCR_ROPT 1  // Vector candidate refinement with robust optimization
@@ -53,6 +55,7 @@ Author: hans-christian.stadler@psi.ch
     #error "VECTOR_CANDIDATE_REFINEMENT has an unsupported value! Use either 0 (none), or 1 (robust optimization)."
 #endif
 
+namespace cg = cooperative_groups;
 namespace logger = fast_feedback::logger;
 using logger::stanza;
 
@@ -422,7 +425,8 @@ namespace {
         float_type* candidate_length;           // Candidate vector groups length, [3 * max_input_cells]
         float_type* candidate_value;            // Candidate vector objective function values, [3 * max_input_cells * num_candidate_vectors]
         #if VCANDREF == VCR_ROPT
-            float_type* refined_candidates;     // Refined candidate coordinates in consecutive aligned tripples (x,y,z,gap; alignment = mem_txn_unit)
+            float_type* refined_candidates;     // Refined candidate coordinates in consecutive aligned tripples
+                                                // (x,y,z,gap; alignment = mem_txn_unit) [3 * max_input_cells * num_candidate_vectors * 3]
         #endif
         unsigned* candidate_sample;             // Sample number of candidate vectors, [3 * max_input_cells * num_candidate_vectors]
         unsigned* cellvec_to_cand;              // Input cell vector to candidate group mapping, [3 * max_input_cells]
@@ -975,6 +979,39 @@ namespace {
         a[2] = util<float_type>::fma(b[0], c[1], -b[1] * c[0]);
     }
 
+    // x = inv(A) * v; A in R^3 symmetric (only upper triangle is present)
+    // out:   x
+    // inout: A
+    // in:    v
+    template<typename float_type>
+    __device__ __forceinline__ void sym_solve(float_type x[3], float_type A[3][3], const float_type v[3]) noexcept
+    {
+        // A = [a b c]
+        //     [- d e]
+        //     [- - f]
+        // det_A = a*(d*f - e*e) - b*(b*f - c*e) + c*(b*e - c*d)
+        // A_inv = [[(d*f - e*e), (c*e - b*f), (b*e - c*d)],
+        //          [(c*e - b*f), (a*f - c*c), (b*c - a*e)],
+        //          [(b*e - c*d), (b*c - a*e), (a*d - b*b)]] / det_A
+        // x = A_inv @ v
+        const auto co00 = A[1][1]*A[2][2] - A[1][2]*A[1][2];
+        const auto co01 = A[0][1]*A[2][2] - A[0][2]*A[1][2];
+        const auto co02 = A[0][1]*A[1][2] - A[0][2]*A[1][1];
+
+        const auto det_A = A[0][0]*co00 - A[0][1]*co01 + A[0][2]*co02;
+
+        A[0][0] = co00 / det_A;
+        A[0][1] = -co01 / det_A;
+        A[0][2] = co02 / det_A;
+        A[1][1] = (A[0][0]*A[2][2] - A[0][2]*A[0][2]) / det_A;
+        A[1][2] = -(A[0][0]*A[1][2] - A[0][1]*A[0][2]) / det_A;
+        A[2][2] = (A[0][0]*A[1][1] - A[0][1]*A[0][1]) / det_A;
+
+        x[0] = A[0][0]*v[0] + A[0][1]*v[1] + A[0][2]*v[2];
+        x[1] = A[0][1]*v[0] + A[1][1]*v[1] + A[1][2]*v[2];
+        x[2] = A[0][2]*v[0] + A[1][2]*v[1] + A[2][2]*v[2];
+    }
+
     // a = (a + l * b); a /= |a|
     template<typename float_type>
     __device__ __forceinline__ void add_unify(float_type a[3], const float_type b[3], const float_type l) noexcept
@@ -1188,7 +1225,7 @@ namespace {
     // Calculate sample point on half unit sphere
     // sample_idx   index of sample point 0..n_samples
     // n_samples    number of sampling points
-    // v            sample point coordinates on half unit sphere multiplied by factor
+    // v            sample point coordinates on half unit sphere
     template<typename float_type>
     __device__ __forceinline__ void sample_point(const unsigned sample_idx, const unsigned n_samples, float_type v[3]) noexcept
     {
@@ -1464,17 +1501,95 @@ namespace {
     }
 
     #if VCANDREF == VCR_ROPT
-        // vector candidate index = blockIdx.x
-        // for non-redundant (cpers.redundant_computations=false) calculations:
-        //      input cell index = blockIdx.y
-        // for redundant computations:
-        //      cell vector index = blockIdx.y
+        // vector candidate index       = blockIdx.x
+        // vector candidate group index = blockIdx.y
+        // cuda thread block size = warp_size (32)
         template<typename float_type>
         __global__ void gpu_refine_cand(indexer_device_data<float_type>* data)
         {
+            // # Python equivalent
+            // class Optimizer:
+            //     def __init__(self, reciprocal_spots, beta=[.3, .1, .03, .01]):
+            //         self.spots = reciprocal_spots   # spots in reciprocal space
+            //         self.beta = beta                # list of diminishing beta values
+            //         self.select = None              # spot selector boolean vector
+            //     def __call__(self, b):              # b: approximation column vector in nonreciprocal space
+            //         coord = self.spots @ b          # spot coordinates in nonreciprocal space
+            //         miller = np.round(coord)        # closest integer coordinates
+            //         for beta in self.beta:
+            //             coord = self.spots @ b
+            //             self.select = np.abs(coord - miller) < beta # index set: spots within distance beta of miller coordinate
+            //             if sum(self.select) < 6:
+            //                 return None
+            //             b = np.linalg.lstsq(self.spots[self.select,:], miller[self.select],rcond=-1)[0] # use least squares fit to selected spots for a better approximation vector
+            //         return b
+            static constexpr unsigned n_rounds = 4;
+            static constexpr float_type beta[n_rounds] = {.3, .1, .03, .01};            // beta values per round
+            const unsigned n_cand = gridDim.x;                                          // number of candidates per candidate group
+            const unsigned cand = blockIdx.x;                                           // candidate vector index (within candidate group)
+            const unsigned cand_grp = blockIdx.y;                                       // candidate group index
+            const unsigned n_vsamples = data->crt.num_halfsphere_points;                // total number of sample vectors
+            const unsigned vsample = data->candidate_sample[cand_grp * n_cand + cand];  // sample vector index
+            const float_type vlength = data->candidate_length[cand_grp];                // sample vector length
+            const fast_feedback::input<float_type>& in = data->input;                   // input data
+            const unsigned n_spots = in.n_spots;                                        // number of reciprocal spots
+            const float_type* sx = in.spot.x;
+            const float_type* sy = in.spot.y;                                           // reciprocal spot coordinates
+            const float_type* sz = in.spot.z;
+            float_type z[3];                                                            // sample vector
+            float_type STS[3][3] = {};                                                  // S.T @ S, i'th block
+            float_type STm[3] = {};                                                     // S.T @ m, i'th block
+
+            auto warp = cg::tiled_partition<warp_size>(cg::this_thread_block());
+
+            sample_point(vsample, n_vsamples, z);   // sample unit vector
+            for (unsigned i=0; i<3; i++)
+                z[i] *= vlength;                    // sample vector
+
+            for (unsigned round=0; round<n_rounds; round++) {
+                {   // calculate miller indices and count good spots
+                    float_type b = beta[round];
+                    unsigned good_spots = 0;
+                    for (unsigned i=threadIdx.x; i<n_spots; i+= warp_size) {
+                        const float_type s[3] = { sx[i], sy[i], sz[i] };                    // spot i
+                        const float_type c = dot(s, z);
+                        const float_type m = util<float_type>::rint(c);                     // Miller index i
+                        if (std::abs(c - m) >= b)
+                            continue;
+                        good_spots++;
+                        for (unsigned j=0; j<3; j++) {
+                            STm[j] += s[j] * m;
+                            for (unsigned k=j; k<3; k++)
+                                STS[j][k] += s[j]*s[k];
+                        }
+                    }
+
+                    if (good_spots < 6)
+                        break;
+                }
+
+                for (unsigned j=0; j<3; j++) {
+                    cg::reduce(warp, STm[j], cg::plus<float>());
+                    for (unsigned k=j; k<3; k++)
+                        cg::reduce(warp, STS[j][k], cg::plus<float>());
+                }
+
+                if (threadIdx.x == 0)
+                    sym_solve(z, STS, STm);
+
+                for (unsigned j=0; j<3; j++)
+                    z[j] = __shfl_sync(0xffffffff, z[j], 0);
+            }
+
             // if ((blockIdx.x == 0) && (blockIdx.y == 0) && (threadIdx.x == 0)) {
             //     printf("gpu_refine_cand() threads=%u, cands=%u, ncg=%u\n", (unsigned)blockDim.x, (unsigned)gridDim.x, (unsigned)gridDim.y);
             // }
+
+            if (threadIdx.x == 0) {
+                float_type* refined_candidate = &data->refined_candidates[(cand_grp * n_cand + cand) * constant<float_type>::mem_txn_unit];
+                for (unsigned i=0; i<3; i++)
+                    refined_candidate[i] = z[i];
+            }
         }
     #endif
 
@@ -1655,7 +1770,7 @@ namespace gpu {
 
             {
                 static_assert(mem_txn_unit >= 3 * sizeof(float_type));
-                std::size_t vector_dimension = constant<float_type>::mem_txn_unit * cpers.num_candidate_vectors * cpers.max_input_cells;
+                std::size_t vector_dimension = constant<float_type>::mem_txn_unit * 3 * cpers.num_candidate_vectors * cpers.max_input_cells;
                 CU_CHECK(cudaMalloc(&refined_candidates, vector_dimension * sizeof(float_type)));
             }
             gpu_pointer<float_type> refined_candidates_ptr{refined_candidates};
@@ -1771,7 +1886,7 @@ namespace gpu {
 
         // Check input/output
         const auto n_cells_in = std::min(in.n_cells, instance.cpers.max_input_cells);
-        const auto n_cells_out = std::min(out.n_cells, instance.cpers.max_output_cells);
+        const auto n_cells_out = out.n_cells;
         if (n_cells_in <= 0u)
             throw FF_EXCEPTION("no given input cells");
         if (n_cells_out <= 0)
@@ -1792,6 +1907,8 @@ namespace gpu {
             throw FF_EXCEPTION("negative lower trim value");
         if (n_cells_out > n_threads)
             throw FF_EXCEPTION("fewer threads in a block than output cells");
+        if (instance.cpers.max_output_cells < out.n_cells)
+            throw FF_EXCEPTION("more output cells requested than the configured maximum");
         if (instance.cpers.num_candidate_vectors > n_threads)
             throw FF_EXCEPTION("fewer threads in a block than candidate vectors");
         
@@ -1834,8 +1951,8 @@ namespace gpu {
         #if VCANDREF == VCR_ROPT
         {
             const dim3 n_blocks{
-                instance.cpers.num_candidate_vectors,                                   // num cand vecs
-                instance.cpers.redundant_computations ? 3u * n_cells_in : n_cells_in,   // num cell vectors / num cells
+                instance.cpers.num_candidate_vectors,                                   // x: number of canditate vectors (per candidate group)
+                instance.cpers.redundant_computations ? n_cand_groups : n_vec_cgrps     // y: number of (cell representing vector) candidate groups
             };
             gpu_refine_cand<float_type><<<n_blocks, warp_size, 0, stream>>>(gpu_state::ptr(state_id).get());
         }
