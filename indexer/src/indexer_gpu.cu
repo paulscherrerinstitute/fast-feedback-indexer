@@ -809,7 +809,7 @@ namespace {
     template<typename float_type>
     struct cell_cand_t final {
         float_type value;   // objective function value
-        unsigned vsample;   // sample point index
+        unsigned vsample;   // sample point index, or plain candidate index
         unsigned rsample;   // sample rotation angle index
         unsigned cell_vec;  // cell vector index
     };
@@ -1012,32 +1012,41 @@ namespace {
         x[2] = A[0][2]*v[0] + A[1][2]*v[1] + A[2][2]*v[2];
     }
 
+    // Calculate in a the unified mirroring vector that brings a to b
+    // lb = |b|
+    // b = b / lb
     // a = (a + l * b); a /= |a|
+    // l = lb
+    // pre: l = |a|
     template<typename float_type>
-    __device__ __forceinline__ void add_unify(float_type a[3], const float_type b[3], const float_type l) noexcept
+    __device__ __forceinline__ void add_unify(float_type a[3], float_type b[3], float_type& l) noexcept
     {
-        for (unsigned i=0u; i<3u; i++)
+        const float_type lb = util<float_type>::norm(b[0], b[1], b[2]);
+        for (unsigned i=0u; i<3u; i++) {
+            b[i] /= lb;
             a[i] = util<float_type>::fma(l, b[i], a[i]);
+        }
+        l = lb;
         const float_type f = util<float_type>::rnorm(a[0], a[1], a[2]);
         for (unsigned i=0u; i<3u; i++)
             a[i] *= f;
     }
 
+    // Mirror a on axis represented by unit vector b
     // a = 2 * (a 🞄 b) * b - a
     // pre: |b| == 1
     template<typename float_type>
     __device__ __forceinline__ void mirror(float_type a[3], const float_type b[3]) noexcept
     {
-        // const float_type p2 = float_type{2.f} * dot(a, b);
         const float_type p2 = float_type{2.f} * dot(a, b);
         for (unsigned i=0u; i<3u; i++)
             a[i] = util<float_type>::fma(p2, b[i], -a[i]);
     }
 
-    // laz = a 🞄 z
-    // x = a - laz * z
-    // x /= |x|
-    // laxy = a 🞄 x
+    // laz = a 🞄 z      length af vector a projected to axis through z
+    // x = a - laz * z  projection of a to plane perpendicular to z
+    // x /= |x|         unit vector of projection
+    // laxy = a 🞄 x     length of projection 
     // pre: |z| == 1
     template<typename float_type>
     __device__ __forceinline__ void project_unify(float_type x[3], const float_type a[3], const float_type z[3],
@@ -1052,7 +1061,9 @@ namespace {
         laxy = dot(a, x);
     }
 
+    // Calculate vector a with z coordinate laz and with xy projection of length laxy and angle alpha
     // a = laz * z + (cos(alpha) * x + sin(alpha) * y) * laxy
+    // pre x, y, z are of unit length and pairwise perpendicular
     template<typename float_type>
     __device__ __forceinline__ void rotate(float_type a[3],
                                            const float_type x[3], const float_type y[3], const float_type z[3],
@@ -1268,31 +1279,27 @@ namespace {
     }
 
     // Get sample cell vectors a, b, and unified c
-    // z            sample cell vector c scaled to unit length
-    // a            sample cell vector a
-    // b            sample cell vector b
+    // z            (in) sample cell vector c
+    // a            (out) sample cell vector a
+    // b            (out) sample cell vector b
     // cx           input cell vectors x coordinates
     // cy           input cell vectors y coordinates
     // cz           input cell vectors z coordinates
-    // vlength      length of sample cell vector c
-    // vsample      sample point index of sample cell vector c [0 .. n_vsamples[
-    // n_vsamples   number of sample points on the half sphere
+    // vlength      (inout) length of original cell vector c
     // rsample      sample rotation angle index of sample cell [0 .. n_rsamples[
     // n_rsamples   number of sample angles around sample cell vector c
     // cell_vec     input cell vector index [0 .. 3*n_input_cells[
     template<typename float_type>
     __device__ __forceinline__ void sample_cell(float_type z[3], float_type a[3], float_type b[3],
                                                 const float_type* cx, const float_type* cy, const float_type* cz,                                                
-                                                const float_type vlength,
-                                                const unsigned vsample, const unsigned n_vsamples,
+                                                float_type& vlength,
                                                 const unsigned rsample, const unsigned n_rsamples,
                                                 const unsigned cell_vec) noexcept
     {
         const unsigned cell_base = cell_vec / 3u;
         float_type t[3] = { cx[cell_vec], cy[cell_vec], cz[cell_vec] };
-        sample_point(vsample, n_vsamples, z);
-        // Align cell to sample vector z by mirroring on z + t
-        add_unify(t, z, vlength);
+        // Align cell to sample vector z by finding and mirroring on t
+        add_unify(t, z, vlength);   // now z has unit length, vlength is it's original length
         unsigned idx = cell_base + (cell_vec + 1u) % 3u;
         a[0] = cx[idx]; a[1] = cy[idx]; a[2] = cz[idx];
         idx = cell_base + (cell_vec + 2u) % 3u;
@@ -1346,7 +1353,6 @@ namespace {
     // crt          runtime configuration with triml/h and delta
     // z, a, b      sample vectors, z is c normalized
     // s{x,y,z}     spot coordinate pointers [n_spots]
-    // lz           length of vector c, c = z * lz
     // n_spots      number of spots
     template<typename float_type>
     __device__ __forceinline__ float_type sample3(const fast_feedback::config_runtime<float_type>& crt,
@@ -1377,45 +1383,70 @@ namespace {
     // -----------------------------------
 
     // single thread kernel
-    // kind 0-candidate vectors + output cells (float)
-    //      1-output cells (unsigned)
-    //      2-output cells (float)
+    // kind 0-candidate vectors sampled + output cells (float)
+    //      1-candidate vectors refined
+    //      2-output cells (unsigned)
+    //      3-output cells (float)
     template<typename float_type>
     __global__ void gpu_debug_out(indexer_device_data<float_type>* data, const unsigned kind)
     {
-        printf("### INDEXER_GPU_DEBUG\n");
-        if (kind == 0u) {
+        printf("### INDEXER_GPU_DEBUG (%u)\n", kind);
+        if (kind <= 1u) {
             // Print out candidate vectors
-            const unsigned ncv = data->cpers.num_candidate_vectors;
-            const float_type* const cvp = data->candidate_value;
-            const unsigned* const csp = data->candidate_sample;
-
             unsigned ncg = 0u;
+            const unsigned ncv = data->cpers.num_candidate_vectors;
             const unsigned n_cells_in  = data->input.n_cells;
-            for (unsigned i=0u; i<n_cells_in; ++i) {
-                printf("input cell%u rep %u, cgi:", i, data->cell_to_cellvec[i]);
-                for (unsigned j=3*i; j<3*i+3; ++j) {
-                    unsigned cg = data->cellvec_to_cand[j];
-                    printf(" %u", cg);
-                    if (cg > ncg)
-                        ncg = cg;
+
+            if (kind == 0u) {
+                // Vector candidates sampled
+                const float_type* const cvp = data->candidate_value;
+                const unsigned* const csp = data->candidate_sample;
+                for (unsigned i=0u; i<n_cells_in; ++i) {
+                    printf("input cell%u rep %u, cgi:", i, data->cell_to_cellvec[i]);
+                    for (unsigned j=3*i; j<3*i+3; ++j) {
+                        unsigned cg = data->cellvec_to_cand[j];
+                        printf(" %u", cg);
+                        if (cg > ncg)
+                            ncg = cg;
+                    }
+                    printf("\n");
                 }
-                printf("\n");
-            }
 
-            printf("redundant_comp=%u, rcgrps:", unsigned(data->cpers.redundant_computations));
-            for (unsigned i=0u; i<n_cells_in; ++i)
-                printf(" %u", data->vec_cgrps[i]);
-            printf("\n");
-
-            for (unsigned i=0u; i<=ncg; ++i) {
-                printf("cg%u:", i);
-                auto cv = &cvp[i * ncv];
-                auto cs = &csp[i * ncv];
-                for (unsigned j=0; j<ncv; ++j)
-                    printf(" %0.2f/%u", (float)cv[j], cs[j]);
+                printf("redundant_comp=%u, rcgrps:", unsigned(data->cpers.redundant_computations));
+                for (unsigned i=0u; i<n_cells_in; ++i)
+                    printf(" %u", data->vec_cgrps[i]);
                 printf("\n");
+
+                for (unsigned i=0u; i<=ncg; ++i) {
+                    printf("cg%u:", i);
+                    auto cv = &cvp[i * ncv];
+                    auto cs = &csp[i * ncv];
+                    for (unsigned j=0; j<ncv; ++j) {
+                        printf(" %0.2f/%u", (float)cv[j], cs[j]);
+                    }
+                    printf("\n");
+                }
             }
+            #if VCANDREF == VCR_ROPT
+                else { // kind == 1
+                    // Vector candidates refined
+                    const float_type* const rca = data->refined_candidates;
+                    for (unsigned i=0u; i<(3u*n_cells_in); ++i) {
+                        unsigned cg = data->cellvec_to_cand[i];
+                        if (cg > ncg)
+                            ncg = cg;
+                    }
+                    for (unsigned i=0u; i<=ncg; ++i) {
+                        printf("cg%u:", i);
+                        for (unsigned j=0; j<ncv; ++j) {
+                            auto rc = &rca[((i * ncv) + j) * constant<float_type>::mem_txn_unit];
+                            printf(" (%0.2f,%0.2f,%0.2f)", (float)rc[0], (float)rc[1], (float)rc[2]);
+                        }
+                        printf("\n");
+                    }
+                    return;
+                }
+            #endif
         }
 
         const fast_feedback::output<float_type>& out = data->output;
@@ -1424,7 +1455,7 @@ namespace {
         for (unsigned i=0u; i<n_cells_out; ++i) {
             printf("output cell%u s=%f:\n", i, out.score[i]);
             for (unsigned j=3u*i; j<3u*i+3u; ++j) {
-                if (kind == 1u) {
+                if (kind == 2u) {
                     printf(" %u  %u  %u\n",
                         *reinterpret_cast<unsigned*>(&out.x[j]),
                         *reinterpret_cast<unsigned*>(&out.y[j]),
@@ -1543,7 +1574,7 @@ namespace {
             auto warp = cg::tiled_partition<warp_size>(cg::this_thread_block());
 
             sample_point(vsample, n_vsamples, z);   // sample unit vector
-            for (unsigned i=0; i<3; i++)
+            for (unsigned i=0u; i<3u; i++)
                 z[i] *= vlength;                    // sample vector
 
             for (unsigned round=0; round<n_rounds; round++) {
@@ -1557,9 +1588,9 @@ namespace {
                         if (std::abs(c - m) >= b)
                             continue;
                         good_spots++;
-                        for (unsigned j=0; j<3; j++) {
+                        for (unsigned j=0u; j<3u; j++) {
                             STm[j] += s[j] * m;
-                            for (unsigned k=j; k<3; k++)
+                            for (unsigned k=j; k<3u; k++)
                                 STS[j][k] += s[j]*s[k];
                         }
                     }
@@ -1568,16 +1599,16 @@ namespace {
                         break;
                 }
 
-                for (unsigned j=0; j<3; j++) {
+                for (unsigned j=0u; j<3u; j++) {
                     cg::reduce(warp, STm[j], cg::plus<float>());
-                    for (unsigned k=j; k<3; k++)
+                    for (unsigned k=j; k<3u; k++)
                         cg::reduce(warp, STS[j][k], cg::plus<float>());
                 }
 
                 if (threadIdx.x == 0)
                     sym_solve(z, STS, STm);
 
-                for (unsigned j=0; j<3; j++)
+                for (unsigned j=0u; j<3u; j++)
                     z[j] = __shfl_sync(0xffffffff, z[j], 0);
             }
 
@@ -1587,7 +1618,7 @@ namespace {
 
             if (threadIdx.x == 0) {
                 float_type* refined_candidate = &data->refined_candidates[(cand_grp * n_cand + cand) * constant<float_type>::mem_txn_unit];
-                for (unsigned i=0; i<3; i++)
+                for (unsigned i=0u; i<3u; i++)
                     refined_candidate[i] = z[i];
             }
         }
@@ -1616,10 +1647,21 @@ namespace {
         { // calculate vabc for vsample/rsample/
             const fast_feedback::input<float_type>& in = data->input;
             const unsigned n_rsamples = gridDim.x * blockDim.x;
-            const float_type vlength = data->candidate_length[cand_grp];
+            float_type vlength = data->candidate_length[cand_grp];
             float_type z[3], a[3], b[3];
 
-            sample_cell(z, a, b, in.cell.x, in.cell.y, in.cell.z, vlength, vsample, n_vsamples, rsample, n_rsamples, cell_vec);
+            #if VCANDREF == VCR_ROPT
+                const float_type* const refined_candidate = &data->refined_candidates[(cand_grp * n_cand + cand) * constant<float_type>::mem_txn_unit];
+                for (unsigned i=0u; i<3u; i++)
+                    z[i] = refined_candidate[i];
+            #else
+                sample_point(vsample, n_vsamples, z);
+                for (unsigned i=0u; i<3u; i++)
+                    z[i] *= vlength;
+            #endif
+            // z = rotated cell vector
+
+            sample_cell(z, a, b, in.cell.x, in.cell.y, in.cell.z, vlength, rsample, n_rsamples, cell_vec);
 
             const unsigned n_spots = in.n_spots;
             vabc = sample3(data->crt, z, a, b, in.spot.x, in.spot.y, in.spot.z, vlength, n_spots);
@@ -1641,7 +1683,11 @@ namespace {
         const unsigned n_output_cells = data->output.n_cells;
         auto cand_ptr = reinterpret_cast<cell_cand_t<float_type>*>(shared_ptr); // [output.n_cells]
         if (threadIdx.x < n_output_cells)   // store top candidate cells into cand_ptr
-            cand_ptr[threadIdx.x] = { vabc, vsample, rsample, cell_vec };
+            #if VCANDREF == VCR_ROPT
+                cand_ptr[threadIdx.x] = { vabc, cand, rsample, cell_vec };
+            #else
+                cand_ptr[threadIdx.x] = { vabc, vsample, rsample, cell_vec };
+            #endif
 
         if (n_output_cells < warp_size) {   // wait for cand_ptr
             if (threadIdx.x < warp_size)
@@ -1662,21 +1708,34 @@ namespace {
     template<typename float_type>
     __global__ void gpu_expand_cells(indexer_device_data<float_type>* data, const unsigned n_rsamples)
     {
-        const unsigned n_vsamples = data->crt.num_halfsphere_points;
         const fast_feedback::input<float_type>& in = data->input;
         fast_feedback::output<float_type>& out = data->output;
         float_type* ox = out.x;
         float_type* oy = out.y;
         float_type* oz = out.z;
         const unsigned cell_base = 3u * threadIdx.x;
-        const unsigned vsample = *reinterpret_cast<unsigned*>(&ox[cell_base]);
         const unsigned rsample = *reinterpret_cast<unsigned*>(&oy[cell_base]);
         const unsigned cell_vec = *reinterpret_cast<unsigned*>(&oz[cell_base]);
         const unsigned cand_grp = data->cellvec_to_cand[cell_vec];
-        const float_type vlength = data->candidate_length[cand_grp];
+        const unsigned n_cand = data->cpers.num_candidate_vectors;
+        float_type vlength = data->candidate_length[cand_grp];
         float_type z[3], a[3], b[3];
 
-        sample_cell(z, a, b, in.cell.x, in.cell.y, in.cell.z, vlength, vsample, n_vsamples, rsample, n_rsamples, cell_vec);
+        #if VCANDREF == VCR_ROPT
+            const unsigned cand = *reinterpret_cast<unsigned*>(&ox[cell_base]);
+            const float_type* const refined_candidate = &data->refined_candidates[(cand_grp * n_cand + cand) * constant<float_type>::mem_txn_unit];
+            for (unsigned i=0u; i<3u; i++)
+                z[i] = refined_candidate[i];
+        #else
+            const unsigned vsample = *reinterpret_cast<unsigned*>(&ox[cell_base]);
+            const unsigned n_vsamples = data->crt.num_halfsphere_points;
+            sample_point(vsample, n_vsamples, z);
+            for (unsigned i=0u; i<3u; i++)
+                z[i] *= vlength;
+        #endif
+        // z = rotated cell vector
+
+        sample_cell(z, a, b, in.cell.x, in.cell.y, in.cell.z, vlength, rsample, n_rsamples, cell_vec);
 
         const unsigned iz = cell_vec % 3u;
         const unsigned ia = (iz + 1u) % 3u;
@@ -1828,10 +1887,13 @@ namespace gpu {
             }
 
             LOG_START(logger::l_debug) {
-                logger::debug << stanza << "init id=" << state_id << " on " << dev << ", data=" << data_ptr.get() << '\n'
+                logger::debug << stanza << "init id=" << state_id << " on " << dev << ", data=" << data << '\n'
                               << stanza << "  cand len=" << candidate_length << ", val=" << candidate_value << ", smpl=" << candidate_sample << '\n'
                               << stanza << "  vec2cand=" << cellvec_to_cand << ", cell2vec=" << cell_to_cellvec << ", vec_cgrp=" << vec_cgrps << '\n'
                               << stanza << "  seq=" << sequentializers << ", elements=" << elements << ", score=" << scores << '\n'
+                              #if VCANDREF == VCR_ROPT
+                                << stanza << "  refcand=" << refined_candidates << '\n'
+                              #endif
                               << stanza << "    ox=" << ox << ", oy=" << oy << ", oz=" << oz << '\n'
                               << stanza << "    ix=" << ix << ", iy=" << iy << ", iz=" << iz << '\n';
             } LOG_END;
@@ -1935,6 +1997,7 @@ namespace gpu {
             logger::debug << ", n_vec_cgrps = " << n_vec_cgrps << '\n';
         } LOG_END;
 
+        bool dbg_flag = gpu_debug_output.load();
         gpu_stream& stream = gpu_state::stream(state_id);
         {   // find vector candidates
             const unsigned n_samples = conf_rt.num_halfsphere_points;
@@ -1947,6 +2010,8 @@ namespace gpu {
             gpu_state::init_cand(state_id, n_cand_groups, n_vec_cgrps, instance.cpers, candidate_length, candidate_idx, cell_candidate, vec_cgrps, stream);
             state.start.record(stream);
             gpu_find_candidates<float_type><<<n_blocks, n_threads, shared_sz, stream>>>(gpu_state::ptr(state_id).get());
+            if (dbg_flag)
+                gpu_debug_out<float_type><<<1, 1, 0, stream>>>(gpu_state::ptr(state_id).get(), 0u);
         }
         #if VCANDREF == VCR_ROPT
         {
@@ -1955,6 +2020,8 @@ namespace gpu {
                 instance.cpers.redundant_computations ? n_cand_groups : n_vec_cgrps     // y: number of (cell representing vector) candidate groups
             };
             gpu_refine_cand<float_type><<<n_blocks, warp_size, 0, stream>>>(gpu_state::ptr(state_id).get());
+            if (dbg_flag)
+                gpu_debug_out<float_type><<<1, 1, 0, stream>>>(gpu_state::ptr(state_id).get(), 1u);
         }
         #endif
         {   // find cells
@@ -1966,15 +2033,12 @@ namespace gpu {
                                 instance.cpers.num_candidate_vectors);                                  // num cand vecs
             const unsigned shared_sz = std::max(n_cells_out * sizeof(cell_cand_t<float_type>),
                                                 sizeof(typename BlockRadixSort<float_type>::TempStorage));
-            bool dbg_flag = gpu_debug_output.load();
-            if (dbg_flag)
-                gpu_debug_out<float_type><<<1, 1, 0, stream>>>(gpu_state::ptr(state_id).get(), 0u);
             gpu_find_cells<float_type><<<n_blocks, n_threads, shared_sz, stream>>>(gpu_state::ptr(state_id).get());
             if (dbg_flag)
-                gpu_debug_out<float_type><<<1, 1, 0, stream>>>(gpu_state::ptr(state_id).get(), 1u);
+                gpu_debug_out<float_type><<<1, 1, 0, stream>>>(gpu_state::ptr(state_id).get(), 2u);
             gpu_expand_cells<float_type><<<1, n_cells_out, 0, stream>>>(gpu_state::ptr(state_id).get(), n_xblocks * n_threads);
             if (dbg_flag)
-                gpu_debug_out<float_type><<<1, 1, 0, stream>>>(gpu_state::ptr(state_id).get(), 2u);
+                gpu_debug_out<float_type><<<1, 1, 0, stream>>>(gpu_state::ptr(state_id).get(), 3u);
             state.end.record(stream);
         }
         if (host_callback != nullptr) {
