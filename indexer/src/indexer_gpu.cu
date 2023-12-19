@@ -35,8 +35,6 @@ Author: hans-christian.stadler@psi.ch
 #include <algorithm>
 #include <limits>
 #include <cub/block/block_radix_sort.cuh>
-#include <cooperative_groups.h>
-#include <cooperative_groups/reduce.h>
 #include "ffbidx/exception.h"
 #include "ffbidx/log.h"
 #include "ffbidx/indexer_gpu.h"
@@ -55,7 +53,6 @@ Author: hans-christian.stadler@psi.ch
     #error "VECTOR_CANDIDATE_REFINEMENT has an unsupported value! Use either 0 (none), or 1 (robust optimization)."
 #endif
 
-namespace cg = cooperative_groups;
 namespace logger = fast_feedback::logger;
 using logger::stanza;
 
@@ -63,9 +60,10 @@ namespace {
 
     constexpr char INDEXER_GPU_DEVICE[] = "INDEXER_GPU_DEVICE";
     constexpr char INDEXER_GPU_DEBUG[] = "INDEXER_GPU_DEBUG";
-    constexpr unsigned n_threads = 1024;    // num cuda threads per block for find_candidates kernel
-    constexpr unsigned warp_size = 32;      // number of threads in a warp
-    constexpr unsigned mem_txn_unit = 32;   // minimum memory transaction unit (cache line sector)
+    constexpr unsigned n_threads = 1024;        // num cuda threads per block for find_candidates kernel
+    constexpr unsigned warp_size = 32;          // number of threads in a warp
+    constexpr unsigned mem_txn_unit = 32;       // minimum memory transaction unit (cache line sector)
+    constexpr unsigned all_lanes = 0xffffffff;  // mask for all lanes of a warp
 
     template<typename float_type>
     struct constant final {
@@ -136,7 +134,7 @@ namespace {
     #define CU_CHECK(err) {        \
         cudaError_t error = (err); \
         if (error != cudaSuccess)  \
-            CU_EXCEPTION(error);   \
+            throw CU_EXCEPTION(error); \
     }
 
     // Cuda device infos
@@ -282,7 +280,7 @@ namespace {
         inline ~gpu_event()
         {
             if (event != cudaEvent_t{})
-                CU_CHECK(cudaEventDestroy(event));
+                cudaEventDestroy(event); // don't throw exception here
         }
 
         inline void init()
@@ -932,6 +930,16 @@ namespace {
         rest = s - (a - t);
     }
 
+    // warpwise aggregate of float a in lane 0
+    __device__ __forceinline__ void reduce_add(float& a) noexcept
+    {
+        float r = .0f;
+        for (unsigned d=1; d<warp_size; d <<= 1u) {
+            const float b = __shfl_down_sync(all_lanes, a, d, d << 1u);
+            ksum(a, r, b);
+        }
+    }
+
     // max of a, b, c
     template<typename float_type>
     __device__ __forceinline__ float_type max3(const float_type a, const float_type b, const float_type c) noexcept
@@ -979,37 +987,59 @@ namespace {
         a[2] = util<float_type>::fma(b[0], c[1], -b[1] * c[0]);
     }
 
-    // x = inv(A) * v; A in R^3 symmetric (only upper triangle is present)
-    // out:   x
-    // inout: A
-    // in:    v
+    // x = inv(A) * v; A in R^3 symmetric positive definite (only upper triangle is present)
+    // out: x
+    // in : A
+    // in : v
     template<typename float_type>
-    __device__ __forceinline__ void sym_solve(float_type x[3], float_type A[3][3], const float_type v[3]) noexcept
+    __device__ __forceinline__ void sym_solve(float_type x[3], const float_type A[6], const float_type v[3]) noexcept
     {
-        // A = [a b c]
-        //     [- d e]
-        //     [- - f]
+        // A = [a b c]       0 1 2
+        //     [- d e]         3 4
+        //     [- - f]           5
         // det_A = a*(d*f - e*e) - b*(b*f - c*e) + c*(b*e - c*d)
-        // A_inv = [[(d*f - e*e), (c*e - b*f), (b*e - c*d)],
-        //          [(c*e - b*f), (a*f - c*c), (b*c - a*e)],
-        //          [(b*e - c*d), (b*c - a*e), (a*d - b*b)]] / det_A
+        // A_inv = [[(d*f - e*e), -(b*f - c*e),  (b*e - c*d)],
+        //          [-          ,  (a*f - c*c), -(a*e - b*c)],
+        //          [-          , -           ,  (a*d - b*b)]] / det_A
         // x = A_inv @ v
-        const auto co00 = A[1][1]*A[2][2] - A[1][2]*A[1][2];
-        const auto co01 = A[0][1]*A[2][2] - A[0][2]*A[1][2];
-        const auto co02 = A[0][1]*A[1][2] - A[0][2]*A[1][1];
 
-        const auto det_A = A[0][0]*co00 - A[0][1]*co01 + A[0][2]*co02;
+        // A cofactors
+        const auto co00 = A[3]*A[5] - A[4]*A[4];
+        const auto co01 = A[1]*A[5] - A[2]*A[4];
+        const auto co02 = A[1]*A[4] - A[2]*A[3];
 
-        A[0][0] = co00 / det_A;
-        A[0][1] = -co01 / det_A;
-        A[0][2] = co02 / det_A;
-        A[1][1] = (A[0][0]*A[2][2] - A[0][2]*A[0][2]) / det_A;
-        A[1][2] = -(A[0][0]*A[1][2] - A[0][1]*A[0][2]) / det_A;
-        A[2][2] = (A[0][0]*A[1][1] - A[0][1]*A[0][1]) / det_A;
+        const auto co11 = A[0]*A[5] - A[2]*A[2];
+        const auto co12 = A[0]*A[4] - A[1]*A[2];
 
-        x[0] = A[0][0]*v[0] + A[0][1]*v[1] + A[0][2]*v[2];
-        x[1] = A[0][1]*v[0] + A[1][1]*v[1] + A[1][2]*v[2];
-        x[2] = A[0][2]*v[0] + A[1][2]*v[1] + A[2][2]*v[2];
+        const auto co22 = A[0]*A[3] - A[1]*A[1];
+
+        // det = A[0]*co00 - A[1]*co01 + A[2]*co02
+        float_type t = A[0]*co00;
+        float_type r = 0.;
+        ksum(t, r, -A[1]*co01);
+        ksum(t, r, A[2]*co02);
+        const auto r_det_A = float_type{1.} / t;
+
+        // x[0] = (co00*v[0] - co01*v[1] + co02*v[2]) / det
+        t = co00*v[0];
+        r = 0.;
+        ksum(t, r, -co01*v[1]);
+        ksum(t, r, co02*v[2]);
+        x[0] = t * r_det_A;
+
+        // x[1] = (-co01*v[0] + co11*v[1] - co12*v[2]) / det
+        t = -co01*v[0];
+        r = 0.;
+        ksum(t, r, co11*v[1]);
+        ksum(t, r, -co12*v[2]);
+        x[1] = t * r_det_A;
+
+        // x[0] = (co02*v[0] - co12*v[1] + co22*v[2]) / det
+        t = co02*v[0];
+        r = 0.;
+        ksum(t, r, -co12*v[1]);
+        ksum(t, r, co22*v[2]);
+        x[2] = t * r_det_A;
     }
 
     // Calculate in a the unified mirroring vector that brings a to b
@@ -1555,7 +1585,7 @@ namespace {
             //             b = np.linalg.lstsq(self.spots[self.select,:], miller[self.select],rcond=-1)[0] # use least squares fit to selected spots for a better approximation vector
             //         return b
             static constexpr unsigned n_rounds = 4;
-            static constexpr float_type beta[n_rounds] = {.3, .1, .03, .01};            // beta values per round
+            static constexpr float_type beta[n_rounds] = {.3, .15, .1, .075};           // beta values per round
             const unsigned n_cand = gridDim.x;                                          // number of candidates per candidate group
             const unsigned cand = blockIdx.x;                                           // candidate vector index (within candidate group)
             const unsigned cand_grp = blockIdx.y;                                       // candidate group index
@@ -1568,10 +1598,10 @@ namespace {
             const float_type* sy = in.spot.y;                                           // reciprocal spot coordinates
             const float_type* sz = in.spot.z;
             float_type z[3];                                                            // sample vector
-            float_type STS[3][3] = {};                                                  // S.T @ S, i'th block
+            float_type STS[6] = {};                                                     // S.T @ S, i'th block (upper trinagle)
+            float_type STS_r[6] = {};                                                   // rest values
             float_type STm[3] = {};                                                     // S.T @ m, i'th block
-
-            auto warp = cg::tiled_partition<warp_size>(cg::this_thread_block());
+            float_type STm_r[3] = {};                                                   // rest values
 
             sample_point(vsample, n_vsamples, z);   // sample unit vector
             for (unsigned i=0u; i<3u; i++)
@@ -1579,42 +1609,46 @@ namespace {
 
             for (unsigned round=0; round<n_rounds; round++) {
                 {   // calculate miller indices and count good spots
-                    float_type b = beta[round];
+                    const float_type b = beta[round];
                     unsigned good_spots = 0;
                     for (unsigned i=threadIdx.x; i<n_spots; i+= warp_size) {
                         const float_type s[3] = { sx[i], sy[i], sz[i] };                    // spot i
                         const float_type c = dot(s, z);
                         const float_type m = util<float_type>::rint(c);                     // Miller index i
-                        if (std::abs(c - m) >= b)
+                        const float_type d = std::abs(c - m);
+                        if (d >= b)
                             continue;
                         good_spots++;
                         for (unsigned j=0u; j<3u; j++) {
-                            STm[j] += s[j] * m;
-                            for (unsigned k=j; k<3u; k++)
-                                STS[j][k] += s[j]*s[k];
+                            ksum(STm[j], STm_r[j], s[j] * m);
+                            for (unsigned k=j; k<3u; k++) {
+                                unsigned l = (j<<1u) - (j>>1u) + k;
+                                ksum(STS[l], STS_r[l], s[j]*s[k]);
+                            }
                         }
                     }
+
+                    good_spots = __reduce_add_sync(all_lanes, good_spots);
 
                     if (good_spots < 6)
                         break;
                 }
 
                 for (unsigned j=0u; j<3u; j++) {
-                    cg::reduce(warp, STm[j], cg::plus<float>());
+                    reduce_add(STm[j]);
                     for (unsigned k=j; k<3u; k++)
-                        cg::reduce(warp, STS[j][k], cg::plus<float>());
+                        reduce_add(STS[(j<<1u)-(j>>1u)+k]);
                 }
 
                 if (threadIdx.x == 0)
                     sym_solve(z, STS, STm);
 
-                for (unsigned j=0u; j<3u; j++)
-                    z[j] = __shfl_sync(0xffffffff, z[j], 0);
-            }
+                if (threadIdx.x == 0)
+                    printf("gpu_refine_cand %u: z=%f,%f,%f\n", (unsigned)blockIdx.x, z[0], z[1], z[2]);
 
-            // if ((blockIdx.x == 0) && (blockIdx.y == 0) && (threadIdx.x == 0)) {
-            //     printf("gpu_refine_cand() threads=%u, cands=%u, ncg=%u\n", (unsigned)blockDim.x, (unsigned)gridDim.x, (unsigned)gridDim.y);
-            // }
+                for (unsigned j=0u; j<3u; j++)
+                    z[j] = __shfl_sync(all_lanes, z[j], 0);
+            }
 
             if (threadIdx.x == 0) {
                 float_type* refined_candidate = &data->refined_candidates[(cand_grp * n_cand + cand) * constant<float_type>::mem_txn_unit];
@@ -2010,6 +2044,7 @@ namespace gpu {
             gpu_state::init_cand(state_id, n_cand_groups, n_vec_cgrps, instance.cpers, candidate_length, candidate_idx, cell_candidate, vec_cgrps, stream);
             state.start.record(stream);
             gpu_find_candidates<float_type><<<n_blocks, n_threads, shared_sz, stream>>>(gpu_state::ptr(state_id).get());
+            CU_CHECK(cudaPeekAtLastError());
             if (dbg_flag)
                 gpu_debug_out<float_type><<<1, 1, 0, stream>>>(gpu_state::ptr(state_id).get(), 0u);
         }
@@ -2019,7 +2054,9 @@ namespace gpu {
                 instance.cpers.num_candidate_vectors,                                   // x: number of canditate vectors (per candidate group)
                 instance.cpers.redundant_computations ? n_cand_groups : n_vec_cgrps     // y: number of (cell representing vector) candidate groups
             };
+            std::cout << "@gpu_refine_cand: n_blocks=" << n_blocks.x << ',' << n_blocks.y << ',' << n_blocks.z << " threads=" << warp_size << '\n';
             gpu_refine_cand<float_type><<<n_blocks, warp_size, 0, stream>>>(gpu_state::ptr(state_id).get());
+            CU_CHECK(cudaPeekAtLastError());
             if (dbg_flag)
                 gpu_debug_out<float_type><<<1, 1, 0, stream>>>(gpu_state::ptr(state_id).get(), 1u);
         }
@@ -2034,9 +2071,11 @@ namespace gpu {
             const unsigned shared_sz = std::max(n_cells_out * sizeof(cell_cand_t<float_type>),
                                                 sizeof(typename BlockRadixSort<float_type>::TempStorage));
             gpu_find_cells<float_type><<<n_blocks, n_threads, shared_sz, stream>>>(gpu_state::ptr(state_id).get());
+            CU_CHECK(cudaPeekAtLastError());
             if (dbg_flag)
                 gpu_debug_out<float_type><<<1, 1, 0, stream>>>(gpu_state::ptr(state_id).get(), 2u);
             gpu_expand_cells<float_type><<<1, n_cells_out, 0, stream>>>(gpu_state::ptr(state_id).get(), n_xblocks * n_threads);
+            CU_CHECK(cudaPeekAtLastError());
             if (dbg_flag)
                 gpu_debug_out<float_type><<<1, 1, 0, stream>>>(gpu_state::ptr(state_id).get(), 3u);
             state.end.record(stream);
