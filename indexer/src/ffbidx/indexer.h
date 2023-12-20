@@ -295,6 +295,8 @@ namespace fast_feedback {
     struct pinned_deleter final {
         inline void operator()(T* ptr) const
         {
+            if (ptr == nullptr)
+                return;
             try {
                 ptr->~T();
             } catch (...) {

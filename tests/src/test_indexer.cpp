@@ -30,6 +30,7 @@ Author: hans-christian.stadler@psi.ch
 #include <array>
 #include <thread>
 #include <cmath>
+#include "ffbidx/exception.h"
 #include "ffbidx/simple_data.h"
 #include "ffbidx/indexer.h"
 
@@ -95,15 +96,30 @@ int main (int argc, char *argv[])
         fast_feedback::input<float> in{{&x[0], &y[0], &z[0]}, {&x[3], &y[3], &z[3]}, 1u, i-3u, true, true}; // create indexer input object
         fast_feedback::output<float> out{&buf[0], &buf[3], &buf[6], &buf[9], 1u};   // create indexer output object
 
-        std::thread parallel([&in, &crt, &buf]() {                                  // parallel indexing thread
-            fast_feedback::indexer indexer;
-            fast_feedback::output<float> out{&buf[10], &buf[13], &buf[16], &buf[19], 1u};
+        {
+            bool stop = true;
+            std::thread parallel([&stop, &in, &crt, &buf]() {                                  // parallel indexing thread
+                try {
+                    fast_feedback::indexer indexer;
+                    fast_feedback::output<float> out{&buf[10], &buf[13], &buf[16], &buf[19], 1u};
 
-            indexer.index(in, out, crt);
-            std::cout << "parallel indexing thread finished\n";
-        });
-        indexer.index(in, out, crt);                    // run indexer
-        parallel.join();
+                    indexer.index(in, out, crt);
+
+                    std::cout << "parallel indexing thread finished\n";
+                    stop = false;
+                } catch (fast_feedback::exception& ex) {
+                    std::cerr << "thread failed: " << ex.what() << " at " << ex.file_name << ':' << ex.line_number << '\n';
+                } catch (std::exception& ex) {
+                    std::cerr << "thread failed: " << ex.what() << '\n';
+                } catch (...) {
+                    std::cerr << "thared failed: unknown exception\n";
+                }
+            });
+            indexer.index(in, out, crt);                    // run indexer
+            parallel.join();
+            if (stop)
+                throw std::runtime_error("thread failed");
+        }
 
         constexpr float max_score = -100.0f;            // maximum acceptable output score
         std::cout << "score: " << out.score[0];
@@ -144,6 +160,8 @@ int main (int argc, char *argv[])
 
         std::cout << "Test failed.\n" << failure;
 
+    } catch (fast_feedback::exception& ex) {
+        std::cerr << "Test failed: " << ex.what() << " at " << ex.file_name << ':' << ex.line_number << '\n' << failure;
     } catch (std::exception& ex) {
         std::cerr << "Test failed: " << ex.what() << '\n' << failure;
     }

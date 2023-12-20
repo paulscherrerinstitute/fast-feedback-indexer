@@ -34,6 +34,7 @@ Author: hans-christian.stadler@psi.ch
 #include <chrono>
 #include <algorithm>
 #include <limits>
+#include <cassert>
 #include <cub/block/block_radix_sort.cuh>
 #include "ffbidx/exception.h"
 #include "ffbidx/log.h"
@@ -131,10 +132,27 @@ namespace {
 
     #define CU_EXCEPTION(err) cuda_exception(err, __FILE__, __LINE__)
 
-    #define CU_CHECK(err) {        \
-        cudaError_t error = (err); \
-        if (error != cudaSuccess)  \
-            throw CU_EXCEPTION(error); \
+    #define CU_CHECK(err) {             \
+        cudaError_t error = (err);      \
+        if (error != cudaSuccess)       \
+            throw CU_EXCEPTION(error);  \
+    }
+
+    #define CU_CHECK_EXT(err)               \
+        switch (err) {                      \
+            case cudaSuccess:               \
+            case cudaErrorCudartUnloading:  \
+                break;;                     \
+            default:                        \
+                throw CU_EXCEPTION(err);    \
+        }
+
+    #define DEBUG_STREAM_SYNC(stream) { \
+        stream.sync();                  \
+    }
+
+    #define DEBUG_DEVICE_SYNC() {           \
+        CU_CHECK(cudaDeviceSynchronize());  \
     }
 
     // Cuda device infos
@@ -244,7 +262,7 @@ namespace {
     struct gpu_deleter final {
         void operator()(T* ptr) const
         {
-            CU_CHECK(cudaFree(ptr));
+            CU_CHECK_EXT(cudaFree(ptr));
         }
     };
 
@@ -269,33 +287,41 @@ namespace {
         {
             std::swap(other.event, event);
         }
+
+        static void drop(cudaEvent_t& event)
+        {
+            if (event == cudaEvent_t{})
+                return;
+            CU_CHECK(cudaEventDestroy(event));
+            event = cudaEvent_t{};
+        }
         
         gpu_event& operator=(gpu_event&& other)
         {
-            event = cudaEvent_t{};
             std::swap(other.event, event);
             return *this;
         }
 
         inline ~gpu_event()
         {
-            if (event != cudaEvent_t{})
-                cudaEventDestroy(event); // don't throw exception here
+            drop(event);
         }
 
         inline void init()
         {
-            if (event == cudaEvent_t{})
-                CU_CHECK(cudaEventCreateWithFlags(&event, flags));
+            assert(event == cudaEvent_t{});
+            CU_CHECK(cudaEventCreateWithFlags(&event, flags));
         }
 
         inline void record(cudaStream_t stream=0)
         {
+            assert(event != cudaEvent_t{});
             CU_CHECK(cudaEventRecord(event, stream));
         }
 
         inline void sync()
         {
+            assert(event != cudaEvent_t{});
             CU_CHECK(cudaEventSynchronize(event));
         }
     };
@@ -304,6 +330,8 @@ namespace {
     static float gpu_timing(const gpu_event<flags>& start, const gpu_event<flags>& end)
     {
         static_assert(!(flags & cudaEventDisableTiming), "GPU timing measurement are only valid on events that don't have the cudaEventDisableTiming flag set");
+        assert(start.event != cudaEvent_t{});
+        assert(end.event != cudaEvent_t{});
         float time;
         CU_CHECK(cudaEventElapsedTime(&time, start.event, end.event));
         return time;
@@ -365,7 +393,7 @@ namespace {
         void release()
         {
             if (ready) {
-                CU_CHECK(cudaStreamDestroy(stream));
+                CU_CHECK_EXT(cudaStreamDestroy(stream));
                 ready = false;
             }
         }
@@ -495,6 +523,7 @@ namespace {
         // e        on GPU input and output elements pointed to by d->elements
         // cl       on GPU candidate lengths pointed to by d->candidate_length
         // cv       on GPU candidate vector objective function values pointed to by d->candidate_value
+        // rc       on GPU refined candidates vector pointed to by d->refined_candidates
         // cs       on GPU candidate vector sample numbers pointed to by d->candidate_sample
         // v2c      on GPU input cell vector to candidate group mapping pointed to by d->cellvec_to_cand
         // c2v      on GPU input cell to cell representing vector mapping pointed to by d->cell_to_cellvec
@@ -575,10 +604,10 @@ namespace {
         static inline void copy_crt(const key_type& state_id, const fast_feedback::config_runtime<float_type>& crt, cudaStream_t stream=0)
         {
             const auto crt_dp = &ptr(state_id)->crt;
+            CU_CHECK(cudaMemcpyAsync(crt_dp, &crt, sizeof(crt), cudaMemcpyHostToDevice, stream));
             LOG_START(logger::l_debug) {
                 logger::debug << stanza << "copy runtime config data: " << &crt << "-->" << crt_dp << '\n';
             } LOG_END;
-            CU_CHECK(cudaMemcpyAsync(crt_dp, &crt, sizeof(crt), cudaMemcpyHostToDevice, stream));
         }
 
         // Copy input data to GPU
@@ -936,6 +965,7 @@ namespace {
         float r = .0f;
         for (unsigned d=1; d<warp_size; d <<= 1u) {
             const float b = __shfl_down_sync(all_lanes, a, d, d << 1u);
+            r = __shfl_down_sync(all_lanes, r, d, d << 1u);
             ksum(a, r, b);
         }
     }
@@ -1643,9 +1673,6 @@ namespace {
                 if (threadIdx.x == 0)
                     sym_solve(z, STS, STm);
 
-                if (threadIdx.x == 0)
-                    printf("gpu_refine_cand %u: z=%f,%f,%f\n", (unsigned)blockIdx.x, z[0], z[1], z[2]);
-
                 for (unsigned j=0u; j<3u; j++)
                     z[j] = __shfl_sync(all_lanes, z[j], 0);
             }
@@ -2042,7 +2069,8 @@ namespace gpu {
             gpu_state::copy_crt(state_id, conf_rt, stream);
             gpu_state::copy_in(state_id, instance.cpers, in, out, stream);
             gpu_state::init_cand(state_id, n_cand_groups, n_vec_cgrps, instance.cpers, candidate_length, candidate_idx, cell_candidate, vec_cgrps, stream);
-            state.start.record(stream);
+            if (timing)
+                state.start.record(stream);
             gpu_find_candidates<float_type><<<n_blocks, n_threads, shared_sz, stream>>>(gpu_state::ptr(state_id).get());
             CU_CHECK(cudaPeekAtLastError());
             if (dbg_flag)
@@ -2054,7 +2082,6 @@ namespace gpu {
                 instance.cpers.num_candidate_vectors,                                   // x: number of canditate vectors (per candidate group)
                 instance.cpers.redundant_computations ? n_cand_groups : n_vec_cgrps     // y: number of (cell representing vector) candidate groups
             };
-            std::cout << "@gpu_refine_cand: n_blocks=" << n_blocks.x << ',' << n_blocks.y << ',' << n_blocks.z << " threads=" << warp_size << '\n';
             gpu_refine_cand<float_type><<<n_blocks, warp_size, 0, stream>>>(gpu_state::ptr(state_id).get());
             CU_CHECK(cudaPeekAtLastError());
             if (dbg_flag)
@@ -2078,7 +2105,8 @@ namespace gpu {
             CU_CHECK(cudaPeekAtLastError());
             if (dbg_flag)
                 gpu_debug_out<float_type><<<1, 1, 0, stream>>>(gpu_state::ptr(state_id).get(), 3u);
-            state.end.record(stream);
+            if (timing)
+                state.end.record(stream);
         }
         if (host_callback != nullptr) {
             state.callback_mode = true;
@@ -2124,7 +2152,7 @@ namespace gpu {
     // Raw memory unpin
     void unpin_memory(void* ptr)
     {
-        CU_CHECK(cudaHostUnregister(ptr));
+        CU_CHECK_EXT(cudaHostUnregister(ptr));
     }
 
     void* alloc_pinned(std::size_t num_bytes)
@@ -2136,7 +2164,7 @@ namespace gpu {
 
     void dealloc_pinned(void* ptr)
     {
-        CU_CHECK(cudaFreeHost(ptr));
+        CU_CHECK_EXT(cudaFreeHost(ptr));
     }
 
     template void init<float> (const indexer<float>&);
