@@ -228,6 +228,10 @@ namespace {
             if ((dev < 0) || (dev >= (int)list.size()))
                 throw FF_EXCEPTION_OBJ << "illegal value for GPU device";
 
+            auto compcap = list[dev].prop.major;    // COMPUTE CAPABILITY CHECK (__shuffle_sync requires >= 5.x)
+            if (compcap < 5)
+                throw FF_EXCEPTION_OBJ << "unsupported compute capability " << compcap << ".x (must be >= 5.x)";
+
             CU_CHECK(cudaSetDevice(dev));
         }
     };
@@ -970,6 +974,18 @@ namespace {
         }
     }
 
+    // warpwise aggregate of unsigned a in all lanes
+    __device__ __forceinline__ void reduce_add_broadcast(unsigned &a) noexcept
+    {
+        #if __CUDA_ARCH__ >= 800
+            a = __reduce_add_sync(all_lanes, a);
+        #else
+            for (unsigned d=1; d<warp_size; d <<= 1u)
+                a += __shfl_down_sync(all_lanes, a, d, d << 1u);
+            a = __shfl_sync(all_lanes, a, 0);
+        #endif
+    }
+
     // max of a, b, c
     template<typename float_type>
     __device__ __forceinline__ float_type max3(const float_type a, const float_type b, const float_type c) noexcept
@@ -1658,7 +1674,7 @@ namespace {
                         }
                     }
 
-                    good_spots = __reduce_add_sync(all_lanes, good_spots);
+                    reduce_add_broadcast(good_spots);
 
                     if (good_spots < 6)
                         break;
