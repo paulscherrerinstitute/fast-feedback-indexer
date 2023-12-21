@@ -1,3 +1,18 @@
+## Fast feedback indexer C++ library
+
+This directory contains the code for the fast feedback indexer library, implementaed in C++17 and CUDA.
+
+### Vector candidate refinement
+
+The algorithm features four steps
+
+ 1. Vector candidate sampling (on GPU)
+ 1. Vector candidate refinement (on GPU, optional)
+ 1. Unit cell sampling (on GPU)
+ 1. Unit cell refinement (on CPU)
+
+The vector candidate refinement can be switched off using the VECTOR_CANDIDATE_REFINEMENT cmake option.
+
 ### Performance issues
 
 * Keep memory for each coordinate dimension separate to avoid a stride of 3 elements in GPU kernels

@@ -7,6 +7,13 @@ project(fast_indexer
 
 option(BUILD_FAST_INDEXER "Build fast indexer library" ON)
 option(BUILD_FAST_INDEXER_STATIC "Build fast indexer static library" ON)
+option(VECTOR_CANDIDATE_REFINEMENT "Use candidate refinement after vector candidate sampling" ON)
+
+if (VECTOR_CANDIDATE_REFINEMENT)
+        set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -DVECTOR_CANDIDATE_REFINEMENT=1")
+else()
+        set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -DVECTOR_CANDIDATE_REFINEMENT=0")
+endif()
 
 if (BUILD_FAST_INDEXER OR BUILD_FAST_INDEXER_STATIC)
         set(THREADS_PREFER_PTHREAD_FLAG ON)

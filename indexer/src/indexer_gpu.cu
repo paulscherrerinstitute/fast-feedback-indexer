@@ -45,7 +45,7 @@ Author: hans-christian.stadler@psi.ch
 #define VCR_ROPT 1  // Vector candidate refinement with robust optimization
 
 #ifndef VECTOR_CANDIDATE_REFINEMENT // Macro for switching on vector candidate refinement
-    #define VCANDREF VCR_NONE   // Use no candidate vector refinement
+    #define VCANDREF VCR_ROPT   // Use no candidate vector refinement
 #elif VECTOR_CANDIDATE_REFINEMENT == VCR_NONE
     #define VCANDREF VCR_NONE   // Use no candidate vector refinement
 #elif VECTOR_CANDIDATE_REFINEMENT == VCR_ROPT
