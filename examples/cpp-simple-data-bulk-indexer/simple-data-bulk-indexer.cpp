@@ -74,10 +74,13 @@ namespace {
     [[noreturn]] void usage (std::string msg = {})
     {
         std::cout << "usage: " << program_invocation_short_name << " --method=(raw|ifss|ifse) [options] file1 file2 ...\n\n"
-                     "  Index simple data files."
-                     "options:\n"
+                     "  Index simple data files.\n\n"
+                     "output options:\n"
                      "  --help         show this help\n"
-                     "  --gpus         comma separated list of gpu idranges. range = single number or dash separated numbers\n"
+                     "  --quiet        no indexing result output\n"
+                     "indexer options:\n"
+                     "  --method       output cell refinement method, one of raw, ifss(default), ifse\n"
+                     "  --reducalc     calculate candidate vectors for all cell vectors instead of one\n"
                      "  --maxspot      maximum number of spots\n"
                      "  --cells        number of output cells with scores\n"
                      "  --cands        number of candidate vectors\n"
@@ -88,14 +91,13 @@ namespace {
                      "  --delta        log2 curve position\n"
                      "  --contr        ifss/ifse threshold contraction\n"
                      "  --minpts       ifss/ifse minimum number of points for fitting\n"
-                     "  --iter         ifse maximum iterations\n"
+                     "  --iter         ifse/ifse maximum iterations\n"
+                     "pipeline options:\n"
+                     "  --gpus         comma separated list of gpu idranges. range = single number or dash separated numbers\n"
+                     "  --ipg          indexer objects per gpu\n"
                      "  --ths          worker threads\n"
                      "  --rblks        refinement blocks\n"
-                     "  --ipg          indexer objects per gpu\n"
-                     "  --rep          repetitions, every file will be indexer that many times\n"
-                     "  --quiet        no indexing result output\n"
-                     "  --method       output cell refinement method, one of raw, ifss(default), ifse\n"
-                     "  --reducalc     calculate candidate vectors for all cell vectors instead of one\n\n";
+                     "  --rep          repetitions, every file will be indexed that many times\n\n";
         if (! msg.empty())
             error(msg);
         std::cout << success;
