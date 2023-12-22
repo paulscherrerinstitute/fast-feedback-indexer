@@ -1631,7 +1631,7 @@ namespace {
             //             b = np.linalg.lstsq(self.spots[self.select,:], miller[self.select],rcond=-1)[0] # use least squares fit to selected spots for a better approximation vector
             //         return b
             static constexpr unsigned n_rounds = 4;
-            static constexpr float_type beta[n_rounds] = {.3, .15, .1, .075};           // beta values per round
+            static constexpr float_type beta[n_rounds] = {.3, .15, .075, 0.0375};       // beta values per round
             const unsigned n_cand = gridDim.x;                                          // number of candidates per candidate group
             const unsigned cand = blockIdx.x;                                           // candidate vector index (within candidate group)
             const unsigned cand_grp = blockIdx.y;                                       // candidate group index
