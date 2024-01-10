@@ -1,4 +1,4 @@
-CMakeLists.txt.user
+/.vscode/
 /build/
 /install/
 __pycache__/
