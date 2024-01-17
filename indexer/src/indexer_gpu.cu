@@ -872,10 +872,10 @@ namespace {
             return sincosf(angle, sine, cosine);
         }
 
-        __device__ __forceinline__ static float cos(const float angle) noexcept
-        {
-            return cosf(angle);
-        }
+        // __device__ __forceinline__ static float cos(const float angle) noexcept
+        // {
+        //     return cosf(angle);
+        // }
 
         __device__ __forceinline__ static float acos(const float x) noexcept
         {
@@ -897,10 +897,10 @@ namespace {
             return sqrtf(x);
         }
         
-        __device__ __forceinline__ static float rem(const float x, const float y) noexcept
-        {
-            return remainderf(x, y);
-        }
+        // __device__ __forceinline__ static float rem(const float x, const float y) noexcept
+        // {
+        //     return remainderf(x, y);
+        // }
 
         __device__ __forceinline__ static float norm(const float x, const float y, const float z) noexcept
         {   // sqrt(x*x + y*y + z*z)
@@ -917,26 +917,26 @@ namespace {
             return fmaf(x, y, z);
         }
 
-        __device__ __forceinline__ static void sincospi(const float a, float* sinp, float* cosp) noexcept
-        {
-            sincospif(a, sinp, cosp);
-        }
+        // __device__ __forceinline__ static void sincospi(const float a, float* sinp, float* cosp) noexcept
+        // {
+        //     sincospif(a, sinp, cosp);
+        // }
 
-        __device__ __forceinline__ static float cospi(const float a) noexcept
-        {
-            return cospif(a);
-        }
+        // __device__ __forceinline__ static float cospi(const float a) noexcept
+        // {
+        //     return cospif(a);
+        // }
         
-        __device__ __forceinline__ static void from_unsigned(float& f1, float& f2, const unsigned n) noexcept
-        {
-            static constexpr unsigned nbits = 8u * sizeof(unsigned);
-            static constexpr unsigned mant_bits = std::numeric_limits<float>::digits;
-            static constexpr unsigned mask_upper = ((1u << mant_bits) - 1u) << (nbits - mant_bits);;
-            static constexpr unsigned mask_lower = ~mask_upper;
+        // __device__ __forceinline__ static void from_unsigned(float& f1, float& f2, const unsigned n) noexcept
+        // {
+        //     static constexpr unsigned nbits = 8u * sizeof(unsigned);
+        //     static constexpr unsigned mant_bits = std::numeric_limits<float>::digits;
+        //     static constexpr unsigned mask_upper = ((1u << mant_bits) - 1u) << (nbits - mant_bits);;
+        //     static constexpr unsigned mask_lower = ~mask_upper;
 
-            f1 = n & mask_upper;
-            f2 = n & mask_lower;
-        }
+        //     f1 = n & mask_upper;
+        //     f2 = n & mask_lower;
+        // }
     };
 
     // acquire block sequentializer in busy wait loop
@@ -1326,27 +1326,36 @@ namespace {
         // x = np.cos(np.pi * l) * r
         // y = np.sin(np.pi * l) * r
 
-        float_type x, y, z;
-        float_type si1, si2, ns1, ns2;
-        util<float_type>::from_unsigned(si1, si2, sample_idx);
-        util<float_type>::from_unsigned(ns1, ns2, n_samples);
-        const float_type dz = float_type{1.} / ns1 - ns2 / (ns1 * ns1 + ns1 * ns2);
-
         float_type rest = float_type{.0};
-        z = float_type{1.};
-        ksum(z, rest, -si1 * dz);
-        ksum(z, rest, -si2 * dz);
-        ksum(z, rest, -float_type{.5} * dz);
-        const float_type r_xy = util<float_type>::sqrt(float_type{1.} - z * z);
-
-        static_assert(sizeof(unsigned) == 4, "assumption about sizeof(unsigned) violated");
-        float_type l = float_type{.0};
-        for (unsigned i=0; i<32; i++) {
-            if (sample_idx & (1u << i))
-                ksum(l, rest, dl2pNmod2pi<float_type>[i]);
+        float_type z = float_type{1.};
+        {
+            // float_type si1, si2, ns1, ns2;
+            // util<float_type>::from_unsigned(si1, si2, sample_idx);
+            // util<float_type>::from_unsigned(ns1, ns2, n_samples);
+            // const float_type dz = float_type{1.} / ns1 - ns2 / (ns1 * ns1 + ns1 * ns2);
+            const float_type dz = float_type{1.} / static_cast<float_type>(n_samples);
+            const float_type si = static_cast<float_type>(sample_idx);
+            ksum(z, rest, -float_type{.5} * dz);
+            // ksum(z, rest, -si1 * dz);
+            // ksum(z, rest, -si2 * dz);
+            ksum(z, rest, -si * dz);
+            rest = .0;
         }
+
+        float_type l = float_type{.0};
+        {
+
+            static_assert(sizeof(unsigned) == 4, "assumption about sizeof(unsigned) violated");
+            for (unsigned i=0; i<32; i++) {
+                if (sample_idx & (1u << i))
+                    ksum(l, rest, dl2pNmod2pi<float_type>[i]);
+            }
+        }
+
+        float_type x, y;
         util<float_type>::sincos(l, &y, &x);
 
+        const float_type r_xy = util<float_type>::sqrt(float_type{1.} - z * z);
         x *= r_xy;
         y *= r_xy;
         v[0] = x;
@@ -1554,37 +1563,31 @@ namespace {
     {
         extern __shared__ double* shared_ptr[];
 
-        unsigned sample = blockDim.x * blockIdx.x + threadIdx.x;
+        unsigned sample[1] = {blockDim.x * blockIdx.x + threadIdx.x};
         const unsigned n_samples = data->crt.num_halfsphere_points;
         const unsigned c_group = data->cpers.redundant_computations ? blockIdx.y : data->vec_cgrps[blockIdx.y];
-        float_type v = 0.;  // objective function value for sample vector
+        float_type v[1] = {0.}; // objective function value for sample vector
 
-        if (sample < n_samples) {                                   // calculate v
+        if (*sample < n_samples) {                                   // calculate v
             const float_type sl = data->candidate_length[c_group];  // sample vector length
             float_type sv[3];                                       // unit vector in sample direction
-            sample_point(sample, n_samples, sv);
+            sample_point(*sample, n_samples, sv);
 
             const fast_feedback::input<float_type>& in = data->input;
             const unsigned n_spots = in.n_spots;
-            v = sample1(data->crt, sv, sl, in.spot.x, in.spot.y, in.spot.z, n_spots);
+            *v = sample1(data->crt, sv, sl, in.spot.x, in.spot.y, in.spot.z, n_spots);
         }
 
         {   // sort within block {objective function value, sample} ascending by objective function value
-            float_type key[1] = {v};
-            unsigned val[1] = {sample};
-            {
-                auto sort_ptr = reinterpret_cast<typename BlockRadixSort<float_type>::TempStorage*>(shared_ptr);
-                BlockRadixSort<float_type>(*sort_ptr).Sort(key, val);
-            }
-            v = *key;
-            sample = *val;
+            auto sort_ptr = reinterpret_cast<typename BlockRadixSort<float_type>::TempStorage*>(shared_ptr);
+            BlockRadixSort<float_type>(*sort_ptr).Sort(v, sample);
             __syncthreads();    // protect sort_ptr[] (it's in the same memory as cand_ptr)
         }
 
         const unsigned num_candidate_vectors = data->cpers.num_candidate_vectors;
         auto cand_ptr = reinterpret_cast<vec_cand_t<float_type>*>(shared_ptr); // [num_candidate_vectors]
         if (threadIdx.x < num_candidate_vectors)    // store top candidate vectors into cand_ptr
-            cand_ptr[threadIdx.x] = { v, sample };
+            cand_ptr[threadIdx.x] = { *v, *sample };
 
         if (num_candidate_vectors < warp_size) {    // wait for cand_ptr
             if (threadIdx.x < warp_size)
@@ -1602,8 +1605,8 @@ namespace {
         }
 
         // clear output cell scores
-        if (sample < data->cpers.max_output_cells) {
-            data->output.score[sample] = float_type{.0f};
+        if (*sample < data->cpers.max_output_cells) {
+            data->output.score[*sample] = float_type{.0f};
         }
     }
 
@@ -1643,15 +1646,18 @@ namespace {
             const float_type* sx = in.spot.x;
             const float_type* sy = in.spot.y;                                           // reciprocal spot coordinates
             const float_type* sz = in.spot.z;
-            float_type z[3];                                                            // sample vector
+            float_type z0[3];                                                           // sample vector
+            float_type z[3];                                                            // refined sample vector
             float_type STS[6] = {};                                                     // S.T @ S, i'th block (upper trinagle)
             float_type STS_r[6] = {};                                                   // rest values
             float_type STm[3] = {};                                                     // S.T @ m, i'th block
             float_type STm_r[3] = {};                                                   // rest values
 
             sample_point(vsample, n_vsamples, z);   // sample unit vector
-            for (unsigned i=0u; i<3u; i++)
-                z[i] *= vlength;                    // sample vector
+            for (unsigned i=0u; i<3u; i++) {
+                z[i] *= vlength;                    // refined sample vector
+                z0[i] = z[i];                       // sample vector
+            }
 
             for (unsigned round=0; round<n_rounds; round++) {
                 {   // calculate miller indices and count good spots
@@ -1659,9 +1665,8 @@ namespace {
                     unsigned good_spots = 0;
                     for (unsigned i=threadIdx.x; i<n_spots; i+= warp_size) {
                         const float_type s[3] = { sx[i], sy[i], sz[i] };                    // spot i
-                        const float_type c = dot(s, z);
-                        const float_type m = util<float_type>::rint(c);                     // Miller index i
-                        const float_type d = std::abs(c - m);
+                        const float_type m = util<float_type>::rint(dot(s, z0));            // Miller index i
+                        const float_type d = std::abs(dot(s, z) - m);
                         if (d >= b)
                             continue;
                         good_spots++;
