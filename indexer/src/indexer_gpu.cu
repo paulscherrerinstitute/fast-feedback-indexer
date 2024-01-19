@@ -1326,25 +1326,18 @@ namespace {
         // x = np.cos(np.pi * l) * r
         // y = np.sin(np.pi * l) * r
 
-        float_type rest = float_type{.0};
-        float_type z = float_type{1.};
+        float_type z = 1.;
         {
-            // float_type si1, si2, ns1, ns2;
-            // util<float_type>::from_unsigned(si1, si2, sample_idx);
-            // util<float_type>::from_unsigned(ns1, ns2, n_samples);
-            // const float_type dz = float_type{1.} / ns1 - ns2 / (ns1 * ns1 + ns1 * ns2);
+            float_type rest = .0;
             const float_type dz = float_type{1.} / static_cast<float_type>(n_samples);
             const float_type si = static_cast<float_type>(sample_idx);
             ksum(z, rest, -float_type{.5} * dz);
-            // ksum(z, rest, -si1 * dz);
-            // ksum(z, rest, -si2 * dz);
             ksum(z, rest, -si * dz);
-            rest = .0;
         }
 
-        float_type l = float_type{.0};
+        float_type l = .0;
         {
-
+            float_type rest = .0;
             static_assert(sizeof(unsigned) == 4, "assumption about sizeof(unsigned) violated");
             for (unsigned i=0; i<32; i++) {
                 if (sample_idx & (1u << i))
