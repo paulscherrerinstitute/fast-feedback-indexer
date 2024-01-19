@@ -57,25 +57,34 @@ namespace {
             std::istringstream iss(argv[8]);
             iss >> conf.threshold_contraction;
             if (! iss)
-                throw std::runtime_error("unable to parse sixth argument: threshold contraction");
+                throw std::runtime_error("unable to parse eighth argument: threshold contraction");
             std::cout << "threshold_contraction=" << conf.threshold_contraction << '\n';
             if ((conf.threshold_contraction <= .0f) || (conf.threshold_contraction >= 1.f))
                 throw std::runtime_error("threshold_contraction must be in range (0..1)");
         }
         {
             std::istringstream iss(argv[9]);
+            iss >> conf.max_distance;
+            if (! iss)
+                throw std::runtime_error("unable to parse nineth argument: max distance to int");
+            std::cout << "max_dist=" << conf.max_distance << '\n';
+            if ((conf.max_distance <= .0f) || (conf.max_distance >= .5f))
+                throw std::runtime_error("max dist must be in range (0..0.5)");
+        }
+        {
+            std::istringstream iss(argv[10]);
             iss >> conf.min_spots;
             if (! iss)
-                throw std::runtime_error("unable to parse seventh argument: minimum number of spots for fitting");
+                throw std::runtime_error("unable to parse tenth argument: minimum number of spots for fitting");
             std::cout << "min_spots=" << conf.min_spots << '\n';
             if (conf.min_spots <= 3u)
                 throw std::runtime_error("min_spots must be > 3");
         }
         {
-            std::istringstream iss(argv[10]);
+            std::istringstream iss(argv[11]);
             iss >> conf.max_iter;
             if (! iss)
-                throw std::runtime_error("unable to parse eight argument: max iterations");
+                throw std::runtime_error("unable to parse eleventh argument: max iterations");
             std::cout << "max_iter=" << conf.max_iter << '\n';
             if (conf.max_iter <= 0)
                 throw std::runtime_error("max iterations must be positive");
@@ -91,8 +100,8 @@ int main (int argc, char *argv[])
     using duration = std::chrono::duration<double>;
 
     try {
-        if (argc <= 10)
-            throw std::runtime_error("missing arguments, use\n<file name> <max number of spots> <max number of output cells> <number of kept candidate vectors> <number of half sphere sample points> <redundant computations?> (ifss|ifse) <threshold contraction> <min spots> <max iterations>");
+        if (argc <= 11)
+            throw std::runtime_error("missing arguments, use\n<file name> <max number of spots> <max number of output cells> <number of kept candidate vectors> <number of half sphere sample points> <redundant computations?> (ifss|ifse) <threshold contraction> <max dist> <min spots> <max iterations>");
 
         fast_feedback::config_runtime<float> crt{};         // default runtime config
         {
@@ -130,7 +139,7 @@ int main (int argc, char *argv[])
                 std::istringstream iss(argv[6]);
                 iss >> std::boolalpha >> cpers.redundant_computations;
                 if (! iss)
-                    throw std::runtime_error("unable to parse fifth argument: redundant computations? (true|false)");
+                    throw std::runtime_error("unable to parse sixth argument: redundant computations? (true|false)");
                 std::cout << "redu_comp=" << cpers.redundant_computations << '\n';
             }
         }

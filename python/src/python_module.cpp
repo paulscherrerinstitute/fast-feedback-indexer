@@ -78,7 +78,7 @@ namespace {
                                       "method",
                                       "length_threshold", "triml", "trimh", "delta",
                                       "num_sample_points", "n_output_cells",
-                                      "contraction",
+                                      "contraction", "max_dist",
                                       "min_spots", "n_iter",
                                       nullptr};
         long handle;
@@ -87,12 +87,12 @@ namespace {
         const char* method = "ifss";
         double length_threshold=1e-9, triml=.05, trimh=.15, delta=.1;
         long num_sample_points=32*1024, n_output_cells=1;
-        double contraction=.8;
+        double contraction=.8, max_dist=.001;
         long min_spots=6, n_iter=15;
-        if (PyArg_ParseTupleAndKeywords(args, kwds, "lO!O!|sddddlldll", (char**)kw,
+        if (PyArg_ParseTupleAndKeywords(args, kwds, "lO!O!|sddddllddll", (char**)kw,
                                         &handle, &PyArray_Type, &spots_ndarray, &PyArray_Type, &input_cells_ndarray,
                                         &method, &length_threshold, &triml, &trimh, &delta, &num_sample_points, &n_output_cells,
-                                        &contraction, &min_spots, &n_iter) == 0)
+                                        &contraction, &max_dist, &min_spots, &n_iter) == 0)
             return nullptr;
 
         if (handle < 0 || handle > numeric_limits<unsigned>::max()) {
@@ -138,6 +138,11 @@ namespace {
 
         if (contraction <= .0) {
             PyErr_SetString(PyExc_ValueError, "contraction parameter <= 0");
+            return nullptr;
+        }
+
+        if (max_dist <= .0) {
+            PyErr_SetString(PyExc_ValueError, "max distance parameter <= 0");
             return nullptr;
         }
 
@@ -314,14 +319,13 @@ namespace {
                 Map<VectorXf> scores{score_data, n_out};
 
                 if (smethod == "ifss") {
-                    config_ifss<float> cifss{(float)contraction, (unsigned)min_spots, (unsigned)n_iter};
+                    config_ifss<float> cifss{(float)contraction, (float)max_dist, (unsigned)min_spots, (unsigned)n_iter};
                     indexer_ifss<float>::refine(spots, cells, scores, cifss);
                 } else { // ifse
-                    config_ifse<float> cifse{(float)contraction, (unsigned)min_spots, (unsigned)n_iter};
+                    config_ifse<float> cifse{(float)contraction, (float)max_dist, (unsigned)min_spots, (unsigned)n_iter};
                     indexer_ifse<float>::refine(spots, cells, scores, cifse);
                 }
             }
-
         } catch (std::exception& ex) {
             entry->n_spots = 0u;
             entry->n_input_cells = 0u;

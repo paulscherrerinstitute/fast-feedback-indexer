@@ -90,6 +90,7 @@ namespace {
                      "  --trimh        trim heights\n"
                      "  --delta        log2 curve position\n"
                      "  --contr        ifss/ifse threshold contraction\n"
+                     "  --maxdist      ifss/ifse maximum distance to integer\n"
                      "  --minpts       ifss/ifse minimum number of points for fitting\n"
                      "  --iter         ifse/ifse maximum iterations\n"
                      "pipeline options:\n"
@@ -115,6 +116,7 @@ namespace {
     float trimh;
     float delta;
     float contr;
+    float maxdist;
     unsigned minpts;
     unsigned iter;
     unsigned worker_threads = 1u;       // number of worker threads
@@ -188,16 +190,17 @@ namespace {
             { "trimh",    1, nullptr, 7 },
             { "delta",    1, nullptr, 8 },
             { "contr",    1, nullptr, 9 },
-            { "minpts",   1, nullptr, 10},
-            { "iter",     1, nullptr, 11},
-            { "ths",      1, nullptr, 12},
-            { "rblks",    1, nullptr, 13},
-            { "ipg",      1, nullptr, 14},
-            { "rep",      1, nullptr, 15},
-            { "quiet",    0, nullptr, 16},
-            { "method",   1, nullptr, 17},
-            { "reducalc", 0, nullptr, 18},
-            { "help",     0, nullptr, 19},
+            { "maxdist",  1, nullptr, 10},
+            { "minpts",   1, nullptr, 11},
+            { "iter",     1, nullptr, 12},
+            { "ths",      1, nullptr, 13},
+            { "rblks",    1, nullptr, 14},
+            { "ipg",      1, nullptr, 15},
+            { "rep",      1, nullptr, 16},
+            { "quiet",    0, nullptr, 17},
+            { "method",   1, nullptr, 18},
+            { "reducalc", 0, nullptr, 19},
+            { "help",     0, nullptr, 20},
             { nullptr,    0, nullptr, -1}
         };
 
@@ -229,41 +232,43 @@ namespace {
                 case 9:
                     parse_val(contr, optarg, true); break;
                 case 10:
-                    parse_val(minpts, optarg, true); break;
+                    parse_val(maxdist, optarg, true); break;
                 case 11:
-                    parse_val(iter, optarg, true); break;
+                    parse_val(minpts, optarg, true); break;
                 case 12:
+                    parse_val(iter, optarg, true); break;
+                case 13:
                     parse_val(worker_threads, optarg);
                     if (worker_threads < 1u)
                         error("no worker threads");
                     break;
-                case 13:
+                case 14:
                     parse_val(refinement_blocks, optarg);
                     if (refinement_blocks < 1u)
                         error("no refinement blocks");
                     break;
-                case 14:
+                case 15:
                     parse_val(indexers_per_gpu, optarg);
                     if (indexers_per_gpu < 1u)
                         error("no indexers");
                     break;
-                case 15:
+                case 16:
                     parse_val(repetitions, optarg);
                     if (repetitions < 1u)
                         error("no repetitions");
                     break;
-                case 16:
+                case 17:
                     quiet = true;
                     break;
-                case 17:
+                case 18:
                     if (! method.empty())
                         error("method already set");
                     parse_val(method, optarg);
                     break;
-                case 18:
+                case 19:
                     reducalc = true;
                     break;
-                case 19:
+                case 20:
                     usage();
                 default:
                     error("internal: unknown option id");
@@ -289,6 +294,7 @@ namespace {
         delta = crt.delta;
         // initialize these later, set to invalid here
         contr = -1.;
+        maxdist = -1.;
         minpts = 0u;
         iter = 0u;
     }
@@ -319,6 +325,8 @@ namespace {
         crt.delta = delta;
         if (contr >= .0f)
             cifss.threshold_contraction = cifse.threshold_contraction = contr;
+        if (maxdist >= .0f)
+            cifss.max_distance = cifse.max_distance = maxdist;
         if (minpts > 0u)
             cifss.min_spots = cifse.min_spots = minpts;
         if (iter == 0u)

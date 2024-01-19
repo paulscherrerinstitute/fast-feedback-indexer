@@ -367,6 +367,7 @@ namespace fast_feedback {
         template <typename float_type=float>
         struct config_ifss final {
             float_type threshold_contraction=.8;    // contract error threshold by this value in every iteration
+            float_type max_distance=.001;           // max distance to integer for inliers
             unsigned min_spots=6;                   // minimum number of spots to fit against
             unsigned max_iter=15;                   // max number of iterations
         };
@@ -441,7 +442,7 @@ namespace fast_feedback {
                 for (unsigned j=startcell; j<endcell; j++) {
                     cell = cells.block(3u * j, 0u, 3u, 3u).transpose();  // cell: col vectors
                     float_type threshold = indexer<float_type>::score_parts(scores[j]).second;
-                    for (unsigned niter=0; niter<cifss.max_iter; niter++) {
+                    for (unsigned niter=0; niter<cifss.max_iter && threshold>cifss.max_distance; niter++) {
                         resid = spots * cell;   // coordinates in system <cell>
                         miller = round(resid.array());
                         resid -= miller;
@@ -512,6 +513,7 @@ namespace fast_feedback {
         template <typename float_type=float>
         struct config_ifse final {
             float_type threshold_contraction=.8;    // contract error threshold by this value in every iteration
+            float_type max_distance=.001;           // max distance to integer for inliers
             unsigned min_spots=6;                   // minimum number of spots to fit against
             unsigned max_iter=15;                   // max number of iterations
         };
@@ -582,7 +584,7 @@ namespace fast_feedback {
                 for (unsigned j=startcell; j<endcell; j++) {
                     cell = cells.block(3u * j, 0u, 3u, 3u).transpose();  // cell: col vectors
                     float_type threshold = indexer<float_type>::score_parts(scores[j]).second;
-                    for (unsigned niter=0; niter<cifse.max_iter; niter++) {
+                    for (unsigned niter=0; niter<cifse.max_iter && threshold>cifse.max_distance; niter++) {
                         resid = spots * cell;   // coordinates in system <cell>
                         miller = round(resid.array());
                         resid -= miller;
