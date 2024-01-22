@@ -32,7 +32,7 @@ Handle to the indexer object
 
 This allocates space on the GPU for all the data structures used in the computation. The GPU device is parsed from the *INDEXER_GPU_DEVICE* environment variable. If it is not set, the current GPU device is used.
 
-#### ffbidx.index(handle, spots, input_cells, method='ifss', length_threshold=1e-9, triml=.05, trimh=.15, delta=0.1, num_sample_points=32*1024, n_output_cells=1, contraction=.8, min_spots=6, n_iter=15)
+#### ffbidx.index(handle, spots, input_cells, method='ifss', length_threshold=1e-9, triml=.05, trimh=.15, delta=0.1, num_sample_points=32*1024, n_output_cells=1, contraction=.8, max_dist=.001, min_spots=6, n_iter=15)
 
 Run the fast feedback indexer on given 3D real space input cells and reciprocal spots packed in the **input_cells** and **spots** numpy array and return oriented cells and their scores. The still experimental *'raw'* method first finds candidate vectors according to the score $\sum_{s \in spots} \log_2(trim_l^h(dist(s, clp)) + delta))$, which are then used as rotation axes for the input cell. The cell score for the *'raw'* method is
 $-| \\{ s \in spots: dist(s, clp) < h \\} | + 2^{\frac{\sum_{s \in spots} \log_2(trim_l^h(dist(s, clp)) + delta))}{|spots|}} - delta$, where $trim$ stands for trimming, $dist(s, clp)$ for the distance of a spot to the closest lattice point, and $l,h$ are the lower and higher trimming thresholds.
@@ -57,6 +57,7 @@ A tuple of numpy arrays *(output_cells, scores)*
 - **num_sample_points** is the number of sampling points per sample vector length on the half sphere
 - **n_output_cells** is the number of desired output cells
 - **contraction** threshold contraction parameter for methods *'ifss'* and *'ifse'*
+- **max_dist** maximum distance parameter for methods *'ifss'* and *'ifse'*
 - **min_spots** minimum number of spots to fit against for methods *'ifss'* and *'ifse'*
 - **n_iter** maximum number of iterations for methods *'ifss'* and *'ifse'*
 
@@ -65,9 +66,9 @@ A tuple of numpy arrays *(output_cells, scores)*
 After running the *'raw'* method, there's the possibility to refine the cells using two experimental methods currently.
 Both methods use the normalized sum of logarithms part from the *'raw'* cell score as the initial threshold $t$.
 
-*'ifss'*: Iteratively fit a new cell to the spots $\\{ s \in spots: dist(s, clp) < t \\}$ and contract the threshold. Stop when the maximum number of iterations is reached, or the spot set size is below the minimum number of spots.
+*'ifss'*: Iteratively fit a new cell to the spots $\\{ s \in spots: dist(s, clp) < t \\}$ and contract the threshold. Stop when the maximum number of iterations is reached, or the maximum distance has been reached, or the spot set size is below the minimum number of spots.
 
-*'ifse'*: Iteratively fit an additive delta to the errors $\\{ dist(s, clp) : s \in spots \land dist(s, clp) < t \\}$ and contract the threshold. Stop when the maximum number of iterations is reached, or the errors set size is below the minimum number of spots.
+*'ifse'*: Iteratively fit an additive delta to the errors $\\{ dist(s, clp) : s \in spots \land dist(s, clp) < t \\}$ and contract the threshold. Stop when the maximum number of iterations is reached, or the maximum distance has been reached, or the errors set size is below the minimum number of spots.
 
 #### ffbidx.release(handle)
 
