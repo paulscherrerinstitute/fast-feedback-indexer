@@ -7,12 +7,16 @@ project(fast_indexer
 
 option(BUILD_FAST_INDEXER "Build fast indexer library" ON)
 option(BUILD_FAST_INDEXER_STATIC "Build fast indexer static library" ON)
-option(VECTOR_CANDIDATE_REFINEMENT "Use candidate refinement after vector candidate sampling" ON)
 
-if (VECTOR_CANDIDATE_REFINEMENT)
+set(VECTOR_CANDIDATE_REFINEMENT "ropt" CACHE STRING "Vector candidate refinement method")
+set_property(CACHE VECTOR_CANDIDATE_REFINEMENT PROPERTY STRINGS none ropt)
+
+if (VECTOR_CANDIDATE_REFINEMENT STREQUAL "none")
+        set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -DVECTOR_CANDIDATE_REFINEMENT=0")
+elseif(VECTOR_CANDIDATE_REFINEMENT STREQUAL "ropt")
         set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -DVECTOR_CANDIDATE_REFINEMENT=1")
 else()
-        set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -DVECTOR_CANDIDATE_REFINEMENT=0")
+        message(FATAL_ERROR "VECTOR_CANDIDATE_REFINEMENT is '${VECTOR_CANDIDATE_REFINEMENT}', must be one of none,ropt")
 endif()
 
 if (BUILD_FAST_INDEXER OR BUILD_FAST_INDEXER_STATIC)
