@@ -75,9 +75,9 @@ Steer library behaviour with environment variables.
 * CMAKE_CUDA_ARCHITECTURES: GPU architecture, default \"75;80\"
    * https://cmake.org/cmake/help/latest/variable/CMAKE_CUDA_ARCHITECTURES.html
    * https://docs.nvidia.com/cuda/cuda-compiler-driver-nvcc/index.html#gpu-feature-list
-* CUDA_NVCC_FLAGS: Extra flags to pass to the cuda compiler
-   * https://forums.developer.nvidia.com/t/passing-flags-to-nvcc-via-cmake/75768
+* CMAKE_CUDA_FLAGS: Extra flags to pass to the cuda compiler
+   * https://cmake.org/cmake/help/latest/envvar/CUDAFLAGS.html
 * CXXFLAGS: Extra flags for initializing CMAKE_CXX_FLAGS
    * https://cmake.org/cmake/help/latest/variable/CMAKE_LANG_FLAGS.html
 * CXX: C++ Compiler
-   * https://cmake.org/cmake/help/v3.27/envvar/CXX.html#cxx
+   * https://cmake.org/cmake/help/latest/envvar/CXX.html#cxx
