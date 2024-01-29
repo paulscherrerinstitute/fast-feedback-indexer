@@ -82,7 +82,3 @@ Release the indexer object and associated GPU memory. The handle must not be use
 
    * The module sets the logging level just once on loading, so the *INDEXER_LOG_LEVEL* environment variable has to be set before the import statement.
    * The handles are taken from an increasing 32 bit counter that wraps around
-
-### Note
-
-To avoid a `make install`, there's a script `pythonlib.sh` at the top level for installing the python module after building it.
