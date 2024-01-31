@@ -43,11 +43,11 @@ class Ffbidx(CMakePackage, CudaPackage):
     variant("simple_data_indexer", default=False, description="Build simple data reader library and indexer")
     variant("test_all", default=False, description="Enable testing")
 
-    depends_on("python@3.1.5:", when='+python')
+    depends_on("python@3:", when='+python')
     depends_on("py-numpy", when='+python')
-    depends_on("eigen@3.4.0:", type=('build', 'link'), when='+simple_data_indexer')
-    depends_on("eigen@3.4.0:", type=('build', 'link'), when='+fast_indexer')
-    depends_on("cmake@3.21.0:", type='build')
+    depends_on("eigen@3.4:", type=('build', 'link'), when='+simple_data_indexer')
+    depends_on("eigen@3.4:", type=('build', 'link'), when='+fast_indexer')
+    depends_on("cmake@3.21:", type='build')
 
     conflicts('cuda_arch=none', when='+fast_indexer',
               msg='CUDA architecture is required when building the fast feedback indexer library')
