@@ -442,10 +442,20 @@ namespace fast_feedback {
                 for (unsigned j=startcell; j<endcell; j++) {
                     cell = cells.block(3u * j, 0u, 3u, 3u).transpose();  // cell: col vectors
                     float_type threshold = indexer<float_type>::score_parts(scores[j]).second;
-                    for (unsigned niter=0; niter<cifss.max_iter && threshold>cifss.max_distance; niter++) {
-                        resid = spots * cell;   // coordinates in system <cell>
-                        miller = round(resid.array());
+                    resid = spots * cell;       // coordinates in system <cell>
+                    miller = round(resid.array());
+                    if (threshold>cifss.max_distance) {
                         resid -= miller;
+                        below = (resid.rowwise().norm().array() < threshold);
+                        if (below.count() < cifss.min_spots)
+                            goto calc_score;
+                        threshold *= cifss.threshold_contraction;
+                        sel.colwise() = below;
+                        HouseholderQR<Mx3> qr{sel.select(spots, .0f)};
+                        cell = qr.solve(sel.select(miller, .0f));
+                    }
+                    for (unsigned niter=1; niter<cifss.max_iter && threshold>cifss.max_distance; niter++) {
+                        resid = (spots * cell) - miller;
                         below = (resid.rowwise().norm().array() < threshold);
                         if (below.count() < cifss.min_spots)
                             break;
@@ -454,7 +464,7 @@ namespace fast_feedback {
                         HouseholderQR<Mx3> qr{sel.select(spots, .0f)};
                         cell = qr.solve(sel.select(miller, .0f));
                     }
-                    {
+                    calc_score: {
                         ArrayX<float_type> dist = resid.rowwise().norm();
                         const auto front = std::begin(dist);
                         auto back = std::end(dist);
