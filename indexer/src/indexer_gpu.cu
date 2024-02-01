@@ -1032,6 +1032,15 @@ namespace {
         a[1] = util<float_type>::fma(b[2], c[0], -b[0] * c[2]);
         a[2] = util<float_type>::fma(b[0], c[1], -b[1] * c[0]);
     }
+    
+    // a = -a
+    template<typename float_type>
+    __device__ __forceinline__ void flip(float_type a[3]) noexcept
+    {
+        a[0] = -a[0];
+        a[1] = -a[1];
+        a[2] = -a[2];
+    }
 
     // x = inv(A) * v; A in R^3 symmetric positive definite (only upper triangle is present)
     // out: x
@@ -1376,8 +1385,10 @@ namespace {
     {
         const unsigned cell_base = cell_vec / 3u;
         float_type t[3] = { cx[cell_vec], cy[cell_vec], cz[cell_vec] };
+        if (dot(t, z) < float_type{.0})     // flip z to make mirroring stable
+            flip(z);
         // Align cell to sample vector z by finding and mirroring on t
-        add_unify(t, z, vlength);   // now z has unit length, vlength is it's original length
+        add_unify(t, z, vlength);           // now z has unit length, vlength is it's original length
         unsigned idx = cell_base + (cell_vec + 1u) % 3u;
         a[0] = cx[idx]; a[1] = cy[idx]; a[2] = cz[idx];
         idx = cell_base + (cell_vec + 2u) % 3u;
@@ -1391,7 +1402,7 @@ namespace {
         project_unify(t, b, z, lbz, lbxy);
         cross(y, z, x);
         // Rotation around z for a, b
-        float_type delta = util<float_type>::acos(dot(t, x));                   // angle delta between axy and bxy vectors
+        float_type delta = util<float_type>::acos(dot(t, x)); // angle delta between axy and bxy vectors
         if (dot(t, y) < .0f)
             delta = -delta;
         const float_type alpha = rsample * constant<float_type>::pi2 / static_cast<float_type>(n_rsamples); // sample angle
