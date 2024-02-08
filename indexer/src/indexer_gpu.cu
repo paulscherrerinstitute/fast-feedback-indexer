@@ -1424,18 +1424,18 @@ namespace {
     {
         float_type sval = float_type{0.f};
         float_type rest = float_type{0.f};
-        // unsigned n_good = 0u;
+        unsigned n_good = 0u;
 
         const float_type delta = crt.delta;
         for (unsigned i=0u; i<n_spots; i++) {
             const float_type s[3] = { sx[i], sy[i], sz[i] };
             const float_type d = dist2int(vlength * dot(v, s));
-            // n_good += (d < crt.trimh) ? 1u : 0u;
+            n_good += (d < crt.triml) ? 1u : 0u;
             const float_type dv = util<float_type>::log2(trim(crt, d) + delta);
             ksum(sval, rest, dv);
         }
-        // return util<float_type>::exp2(sval / (float_type)n_spots) - delta - (float_type)n_good;
-        return sval;
+        return util<float_type>::exp2(sval / (float_type)n_spots) - delta - (float_type)n_good;
+        // return sval;
     }
 
     // sum(s ∈ spots) sum(log2(trim[triml..trimh](sqrt(sum[i=a,b,c](dist2int(s 🞄 vi / |vi|²)²))) + delta))
@@ -1460,7 +1460,7 @@ namespace {
             const float_type ca = dist2int(dot(a, s));
             const float_type cb = dist2int(dot(b, s));
             const float_type dn = util<float_type>::norm(cc, ca, cb);
-            n_good += (dn < crt.trimh) ? 1u : 0u;
+            n_good += (dn < crt.triml) ? 1u : 0u;
             const float_type dv = util<float_type>::log2(trim(crt, dn) + delta);
             ksum(sval, rest, dv);
         }
@@ -1517,7 +1517,7 @@ namespace {
                 }
             }
             #if VCANDREF == VCR_ROPT
-                else { // kind == 1
+                else if (kind == 1u) { // kind == 1
                     // Vector candidates refined
                     const float_type* const rca = data->refined_candidates;
                     for (unsigned i=0u; i<(3u*n_cells_in); ++i) {
@@ -1536,21 +1536,21 @@ namespace {
                     return;
                 }
             #endif
-        }
-
-        const fast_feedback::output<float_type>& out = data->output;
-        const unsigned n_cells_out  = data->cpers.max_output_cells;
-        printf("output n_cells=%u\n", out.n_cells);
-        for (unsigned i=0u; i<n_cells_out; ++i) {
-            printf("output cell%u s=%f:\n", i, out.score[i]);
-            for (unsigned j=3u*i; j<3u*i+3u; ++j) {
-                if (kind == 2u) {
-                    printf(" %u  %u  %u\n",
-                        *reinterpret_cast<unsigned*>(&out.x[j]),
-                        *reinterpret_cast<unsigned*>(&out.y[j]),
-                        *reinterpret_cast<unsigned*>(&out.z[j]));
-                } else {
-                    printf(" %f  %f  %f\n", out.x[j], out.y[j], out.z[j]);
+        } else {
+            const fast_feedback::output<float_type>& out = data->output;
+            const unsigned n_cells_out  = data->cpers.max_output_cells;
+            printf("output n_cells=%u\n", out.n_cells);
+            for (unsigned i=0u; i<n_cells_out; ++i) {
+                printf("output cell%u s=%f:\n", i, out.score[i]);
+                for (unsigned j=3u*i; j<3u*i+3u; ++j) {
+                    if (kind == 2u) {
+                        printf(" %u  %u  %u\n",
+                            *reinterpret_cast<unsigned*>(&out.x[j]),
+                            *reinterpret_cast<unsigned*>(&out.y[j]),
+                            *reinterpret_cast<unsigned*>(&out.z[j]));
+                    } else {
+                        printf(" %f  %f  %f\n", out.x[j], out.y[j], out.z[j]);
+                    }
                 }
             }
         }
