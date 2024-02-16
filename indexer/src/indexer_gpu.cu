@@ -1098,6 +1098,7 @@ namespace {
     }
 
     // Calculate in a the unified mirroring vector that brings a to b
+    // Return unified mirroring vector in a, unified b in b, and length of b in l
     // lb = |b|
     // b = b / lb
     // a = (a + l * b); a /= |a|
@@ -1366,7 +1367,7 @@ namespace {
     }
 
     // Get sample cell vectors a, b, and unified c
-    // z            (in) sample cell vector c
+    // z            (inout) sample cell vector c, maybe refined
     // a            (out) sample cell vector a
     // b            (out) sample cell vector b
     // cx           input cell vectors x coordinates
@@ -1376,6 +1377,7 @@ namespace {
     // rsample      sample rotation angle index of sample cell [0 .. n_rsamples[
     // n_rsamples   number of sample angles around sample cell vector c
     // cell_vec     input cell vector index [0 .. 3*n_input_cells[
+    // post |z_out|=1, vlength=|z_in|
     template<typename float_type>
     __device__ __forceinline__ void sample_cell(float_type z[3], float_type a[3], float_type b[3],
                                                 const float_type* cx, const float_type* cy, const float_type* cz,                                                
@@ -1424,7 +1426,7 @@ namespace {
     {
         float_type sval = float_type{0.f};
         float_type rest = float_type{0.f};
-        unsigned n_good = 0u;
+        unsigned n_good = 1u; // 1 too many to prevent positive numbers
 
         const float_type delta = crt.delta;
         for (unsigned i=0u; i<n_spots; i++) {
@@ -1442,6 +1444,7 @@ namespace {
     // crt          runtime configuration with triml/h and delta
     // z, a, b      sample vectors, z is c normalized
     // s{x,y,z}     spot coordinate pointers [n_spots]
+    // lz           length of c
     // n_spots      number of spots
     template<typename float_type>
     __device__ __forceinline__ float_type sample3(const fast_feedback::config_runtime<float_type>& crt,
@@ -1451,7 +1454,7 @@ namespace {
     {
         float_type sval = float_type{0.f};
         float_type rest = float_type{0.f};
-        unsigned n_good = 0u;
+        unsigned n_good = 1u; // 1 too many to prevent positive numbers
 
         const float_type delta = crt.delta;
         for (unsigned i=0u; i<n_spots; i++) {
@@ -1745,9 +1748,10 @@ namespace {
                 for (unsigned i=0u; i<3u; i++)
                     z[i] *= vlength;
             #endif
-            // z = rotated cell vector
+            // z = (refined) rotated cell vector, vlength = original cell vector length
 
             sample_cell(z, a, b, in.cell.x, in.cell.y, in.cell.z, vlength, rsample, n_rsamples, cell_vec);
+            // z unified, vlength has it's original length
 
             const unsigned n_spots = in.n_spots;
             vabc = sample3(data->crt, z, a, b, in.spot.x, in.spot.y, in.spot.z, vlength, n_spots);
