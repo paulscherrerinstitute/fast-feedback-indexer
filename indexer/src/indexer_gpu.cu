@@ -75,6 +75,7 @@ namespace {
         [[maybe_unused]] static constexpr float_type dl = 0.76393202250021030359082633; // 3 - sqrt(5), for spiral sample points on a half sphere
         #pragma nv_diag_suppress 177 // suppress unused warning
         [[maybe_unused]] static constexpr unsigned mem_txn_unit = ::mem_txn_unit / sizeof(float_type); // minimum memory transaction unit
+        static constexpr float_type eps = std::numeric_limits<float_type>::epsilon();
     };
 
     // NOTE: not allowed as member of constant
@@ -839,10 +840,13 @@ namespace {
 
     template<typename float_type>
     struct cell_cand_t final {
+        constexpr static unsigned FLIPPED = 1u<<31;
         float_type value;   // objective function value
         unsigned vsample;   // sample point index, or plain candidate index
         unsigned rsample;   // sample rotation angle index
-        unsigned cell_vec;  // cell vector index
+        unsigned cell_vec;  // cell vector index:
+                            // lower 31 bits: index
+                            // highest bit  : use flipped candidate vector
     };
 
     template<typename float_type>
@@ -1097,15 +1101,16 @@ namespace {
         x[2] = t * r_det_A;
     }
 
-    // Calculate in a the unified mirroring vector that brings a to b
-    // Return unified mirroring vector in a, unified b in b, and length of b in l
+    // Calculate in a the unique unified mirroring vector that brings a to b if it exists
+    // Return unified mirroring vector in a, unified b in b, and length of b in l, and if the unique mirroring vector exists
     // lb = |b|
     // b = b / lb
     // a = (a + l * b); a /= |a|
     // l = lb
     // pre: l = |a|
+    // post: result is false if and only if a is not unique (a and b collinear)
     template<typename float_type>
-    __device__ __forceinline__ void add_unify(float_type a[3], float_type b[3], float_type& l) noexcept
+    __device__ __forceinline__ bool add_unify(float_type a[3], float_type b[3], float_type& l) noexcept
     {
         const float_type lb = util<float_type>::norm(b[0], b[1], b[2]);
         for (unsigned i=0u; i<3u; i++) {
@@ -1113,6 +1118,23 @@ namespace {
             a[i] = util<float_type>::fma(l, b[i], a[i]);
         }
         l = lb;
+        const float_type f = util<float_type>::norm(a[0], a[1], a[2]);
+        if (f >= constant<float_type>::eps) {
+            for (unsigned i=0u; i<3u; i++)
+                a[i] /= f;
+            return true;
+        }
+        return false;
+    }
+
+    // Calculate a unit vector in a perpendicular to b and c
+    // a = b X c
+    // l = |a|
+    // a /= l
+    template<typename float_type>
+    __device__ __forceinline__ void perpendicular_unit(float_type a[3], const float_type b[3], const float_type c[3]) noexcept
+    {
+        cross(a, b, c);
         const float_type f = util<float_type>::rnorm(a[0], a[1], a[2]);
         for (unsigned i=0u; i<3u; i++)
             a[i] *= f;
@@ -1385,16 +1407,21 @@ namespace {
                                                 const unsigned rsample, const unsigned n_rsamples,
                                                 const unsigned cell_vec) noexcept
     {
-        const unsigned cell_base = cell_vec / 3u;
+        {   // Get input cell vectors a and b
+            const unsigned cell_base = cell_vec / 3u;
+            {
+                const unsigned idx = cell_base + (cell_vec + 1u) % 3u;
+                a[0] = cx[idx]; a[1] = cy[idx]; a[2] = cz[idx];
+            }
+            {
+                const unsigned idx = cell_base + (cell_vec + 2u) % 3u;
+                b[0] = cx[idx]; b[1] = cy[idx]; b[2] = cz[idx];
+            }
+        }
         float_type t[3] = { cx[cell_vec], cy[cell_vec], cz[cell_vec] };
-        if (dot(t, z) < float_type{.0})     // flip z to make mirroring stable
-            flip(z);
         // Align cell to sample vector z by finding and mirroring on t
-        add_unify(t, z, vlength);           // now z has unit length, vlength is it's original length
-        unsigned idx = cell_base + (cell_vec + 1u) % 3u;
-        a[0] = cx[idx]; a[1] = cy[idx]; a[2] = cz[idx];
-        idx = cell_base + (cell_vec + 2u) % 3u;
-        b[0] = cx[idx]; b[1] = cy[idx]; b[2] = cz[idx];
+        if (! add_unify(t, z, vlength))     // now z has unit length, vlength is it's original length
+            perpendicular_unit(t, z, a);
         mirror(a, t);
         mirror(b, t);
         // Basis perpendicular to z and projections of a/b to z, xy
@@ -1432,7 +1459,7 @@ namespace {
         for (unsigned i=0u; i<n_spots; i++) {
             const float_type s[3] = { sx[i], sy[i], sz[i] };
             const float_type d = dist2int(vlength * dot(v, s));
-            n_good += (d < crt.triml) ? 1u : 0u;
+            n_good += (d < crt.trimh) ? 1u : 0u;
             const float_type dv = util<float_type>::log2(trim(crt, d) + delta);
             ksum(sval, rest, dv);
         }
@@ -1463,7 +1490,7 @@ namespace {
             const float_type ca = dist2int(dot(a, s));
             const float_type cb = dist2int(dot(b, s));
             const float_type dn = util<float_type>::norm(cc, ca, cb);
-            n_good += (dn < crt.triml) ? 1u : 0u;
+            n_good += (dn < crt.trimh) ? 1u : 0u;
             const float_type dv = util<float_type>::log2(trim(crt, dn) + delta);
             ksum(sval, rest, dv);
         }
@@ -1547,10 +1574,12 @@ namespace {
                 printf("output cell%u s=%f:\n", i, out.score[i]);
                 for (unsigned j=3u*i; j<3u*i+3u; ++j) {
                     if (kind == 2u) {
-                        printf(" %u  %u  %u\n",
+                        const unsigned cell_vec = *reinterpret_cast<unsigned*>(&out.z[j]);
+                        printf(" %u  %u  %u %s\n",
                             *reinterpret_cast<unsigned*>(&out.x[j]),
                             *reinterpret_cast<unsigned*>(&out.y[j]),
-                            *reinterpret_cast<unsigned*>(&out.z[j]));
+                            cell_vec & ~cell_cand_t<float_type>::FLIPPED,
+                            cell_vec & cell_cand_t<float_type>::FLIPPED ? "flipped" : "");
                     } else {
                         printf(" %f  %f  %f\n", out.x[j], out.y[j], out.z[j]);
                     }
@@ -1718,7 +1747,8 @@ namespace {
     //      input cell index = blockIdx.y
     // for redundant computations:
     //      cell vector index = blockIdx.y
-    // vector candidate index = blockIdx.z
+    // vector candidate index = blockIdx.z / 2
+    // flipped candidate = blockIdx.z & 1
     template<typename float_type>
     __global__ void gpu_find_cells(indexer_device_data<float_type>* data)
     {
@@ -1727,7 +1757,8 @@ namespace {
         const unsigned n_vsamples = data->crt.num_halfsphere_points;
         unsigned rsample = blockIdx.x * blockDim.x + threadIdx.x;
         const unsigned cell_vec = data->cpers.redundant_computations ? blockIdx.y : data->cell_to_cellvec[blockIdx.y];
-        const unsigned cand = blockIdx.z;
+        const unsigned cand = blockIdx.z / 2u;
+        const bool flipped = blockIdx.z & 1;    // use flipped candidate vector?
         const unsigned cand_grp = data->cellvec_to_cand[cell_vec];
         const unsigned n_cand = data->cpers.num_candidate_vectors;
         const unsigned vsample = data->candidate_sample[cand_grp * n_cand + cand];
@@ -1749,6 +1780,8 @@ namespace {
                     z[i] *= vlength;
             #endif
             // z = (refined) rotated cell vector, vlength = original cell vector length
+            if (flipped)
+                flip(z);
 
             sample_cell(z, a, b, in.cell.x, in.cell.y, in.cell.z, vlength, rsample, n_rsamples, cell_vec);
             // z unified, vlength has it's original length
@@ -1774,9 +1807,9 @@ namespace {
         auto cand_ptr = reinterpret_cast<cell_cand_t<float_type>*>(shared_ptr); // [output.n_cells]
         if (threadIdx.x < n_output_cells)   // store top candidate cells into cand_ptr
             #if VCANDREF == VCR_ROPT
-                cand_ptr[threadIdx.x] = { vabc, cand, rsample, cell_vec };
+                cand_ptr[threadIdx.x] = { vabc, cand, rsample, flipped ? (cell_vec | cell_cand_t<float_type>::FLIPPED) : cell_vec };
             #else
-                cand_ptr[threadIdx.x] = { vabc, vsample, rsample, cell_vec };
+                cand_ptr[threadIdx.x] = { vabc, vsample, rsample, flipped ? (cell_vec | cell_cand_t<float_type>::FLIPPED) : cell_vec };
             #endif
 
         if (n_output_cells < warp_size) {   // wait for cand_ptr
@@ -1805,7 +1838,8 @@ namespace {
         float_type* oz = out.z;
         const unsigned cell_base = 3u * threadIdx.x;
         const unsigned rsample = *reinterpret_cast<unsigned*>(&oy[cell_base]);
-        const unsigned cell_vec = *reinterpret_cast<unsigned*>(&oz[cell_base]);
+        const unsigned cell_vec = *reinterpret_cast<unsigned*>(&oz[cell_base]) & ~cell_cand_t<float_type>::FLIPPED;
+        const bool flipped = *reinterpret_cast<unsigned*>(&oz[cell_base]) & cell_cand_t<float_type>::FLIPPED;
         const unsigned cand_grp = data->cellvec_to_cand[cell_vec];
         const unsigned n_cand = data->cpers.num_candidate_vectors;
         float_type vlength = data->candidate_length[cand_grp];
@@ -1823,6 +1857,8 @@ namespace {
             for (unsigned i=0u; i<3u; i++)
                 z[i] *= vlength;
         #endif
+        if (flipped)
+            flip(z);
         // z = rotated cell vector
 
         sample_cell(z, a, b, in.cell.x, in.cell.y, in.cell.z, vlength, rsample, n_rsamples, cell_vec);
@@ -2123,7 +2159,7 @@ namespace gpu {
                                            :(conf_rt.num_angle_points + n_threads - 1u) / n_threads);
             const dim3 n_blocks(n_xblocks,                                                              // rotation samples
                                 instance.cpers.redundant_computations ? 3u * n_cells_in : n_cells_in,   // num cell vectors / num cells
-                                instance.cpers.num_candidate_vectors);                                  // num cand vecs
+                                2u * instance.cpers.num_candidate_vectors);                             // num cand vecs (original/flipped)
             const unsigned shared_sz = std::max(n_cells_out * sizeof(cell_cand_t<float_type>),
                                                 sizeof(typename BlockRadixSort<float_type>::TempStorage));
             gpu_find_cells<float_type><<<n_blocks, n_threads, shared_sz, stream>>>(gpu_state::ptr(state_id).get());

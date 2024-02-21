@@ -270,7 +270,7 @@ namespace fast_feedback {
             {
                 float_type nsp = -std::floor(score);
                 float_type s = score + nsp;
-                return std::make_pair(nsp, s);
+                return std::make_pair(nsp-1, s);
             }
 
             // Output size access
