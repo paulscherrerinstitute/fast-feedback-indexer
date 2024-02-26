@@ -886,14 +886,20 @@ namespace {
             return acosf(x);
         }
 
-        __device__ __forceinline__ static float log2(const float x) noexcept
-        {
-            return log2f(x);
-        }
+        // __device__ __forceinline__ static float log2(const float x) noexcept
+        // {
+        //     return log2f(x);
+        // }
 
-        __device__ __forceinline__ static float exp2(const float x) noexcept
+        // __device__ __forceinline__ static float exp2(const float x) noexcept
+        // {
+        //     return exp2f(x);
+        // }
+
+        // x ^ y
+        __device__ __forceinline__ static float pow(const float x, const float y) noexcept
         {
-            return exp2f(x);
+            return powf(x, y);
         }
 
         __device__ __forceinline__ static float sqrt(const float x) noexcept
@@ -1439,11 +1445,13 @@ namespace {
         rotate(b, x, y, z, lbz, lbxy, alpha + delta);
     }
 
-    // sum(s ∈ spots) log2(trim[triml..trimh](dist2int(s 🞄 v / vlength)) + delta)
+    // Calculate combined score for single vector
+    // - pow(mul(s ∈ spots) trim[triml..trimh](dist2int(s 🞄 v / vlength)) + delta, 1/|spots|) - delta
+    // - negative number of spots within distance crt.trimh of an integer - 1 (to prevent negative scores)
+    // crt          runtime configuration with triml/h and delta
     // v            unit vector in sample vector direction, |v| == 1
     // vlength      sample vector length
     // s{x,y,z}     spot coordinate pointers [n_spots]
-    // trim{l,h}    lower trim value
     // n_spots      number of spots
     template<typename float_type>
     __device__ __forceinline__ float_type sample1(const fast_feedback::config_runtime<float_type>& crt,
@@ -1451,8 +1459,7 @@ namespace {
                                                   const float_type *sx, const float_type *sy, const float_type *sz,
                                                   const unsigned n_spots) noexcept
     {
-        float_type sval = float_type{0.f};
-        float_type rest = float_type{0.f};
+        float_type sval = float_type{1.f};
         unsigned n_good = 1u; // 1 too many to prevent positive numbers
 
         const float_type delta = crt.delta;
@@ -1460,14 +1467,16 @@ namespace {
             const float_type s[3] = { sx[i], sy[i], sz[i] };
             const float_type d = dist2int(vlength * dot(v, s));
             n_good += (d < crt.trimh) ? 1u : 0u;
-            const float_type dv = util<float_type>::log2(trim(crt, d) + delta);
-            ksum(sval, rest, dv);
+            const float_type dv = trim(crt, d) + delta;
+            sval *= dv;
         }
-        return util<float_type>::exp2(sval / (float_type)n_spots) - delta - (float_type)n_good;
+        return util<float_type>::pow(sval, float_type{1.} / (float_type)n_spots) - delta - (float_type)n_good;
         // return sval;
     }
 
-    // sum(s ∈ spots) sum(log2(trim[triml..trimh](sqrt(sum[i=a,b,c](dist2int(s 🞄 vi / |vi|²)²))) + delta))
+    // Calculate combined score for cell
+    // - pow(mul(s ∈ spots) trim[triml..trimh](sqrt(sum[i=a,b,c](dist2int(s 🞄 vi / |vi|²)²))) + delta, 1/|spots|) - delta
+    // - negative number of spots within distance crt.trimh of an integer - 1 (to prevent negative scores)
     // crt          runtime configuration with triml/h and delta
     // z, a, b      sample vectors, z is c normalized
     // s{x,y,z}     spot coordinate pointers [n_spots]
@@ -1479,8 +1488,7 @@ namespace {
                                                   const float_type *sx, const float_type *sy, const float_type *sz,
                                                   const float_type lz, const unsigned n_spots) noexcept
     {
-        float_type sval = float_type{0.f};
-        float_type rest = float_type{0.f};
+        float_type sval = float_type{1.f};
         unsigned n_good = 1u; // 1 too many to prevent positive numbers
 
         const float_type delta = crt.delta;
@@ -1491,10 +1499,10 @@ namespace {
             const float_type cb = dist2int(dot(b, s));
             const float_type dn = util<float_type>::norm(cc, ca, cb);
             n_good += (dn < crt.trimh) ? 1u : 0u;
-            const float_type dv = util<float_type>::log2(trim(crt, dn) + delta);
-            ksum(sval, rest, dv);
+            const float_type dv = trim(crt, dn) + delta;
+            sval *= dv;
         }
-        return util<float_type>::exp2(sval / (float_type)n_spots) - delta - (float_type)n_good;
+        return util<float_type>::pow(sval, float_type{1.} / (float_type)n_spots) - delta - (float_type)n_good;
     }
 
     // -----------------------------------
