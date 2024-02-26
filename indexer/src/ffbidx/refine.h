@@ -320,11 +320,32 @@ namespace fast_feedback {
             {
                 if (d <= float_type{.0})
                     throw FF_EXCEPTION("nonnegative delta value");
+                crt.delta = d;
             }
 
             inline float_type delta () const noexcept
             {
                 return crt.delta;
+            }
+
+            inline void dist1 (float_type d) noexcept
+            {
+                crt.dist1 = d;
+            }
+
+            inline float_type dist1 () const noexcept
+            {
+                return crt.dist1;
+            }
+
+            inline void dist3 (float_type d) noexcept
+            {
+                crt.dist3 = d;
+            }
+
+            inline float_type dist3 () const noexcept
+            {
+                return crt.dist3;
             }
 
             inline void num_halfsphere_points (unsigned nhsp)
@@ -341,6 +362,21 @@ namespace fast_feedback {
 
             inline unsigned num_halfsphere_points () const noexcept
             { return crt.num_halfsphere_points; }
+
+            inline void num_angle_points (unsigned nap)
+            {
+                unsigned tmp = crt.num_angle_points;
+                crt.num_angle_points = nap;
+                try {
+                    check_config();
+                } catch (...) {
+                    crt.num_angle_points = tmp;
+                    throw;
+                }
+            }
+
+            inline unsigned num_angle_points () const noexcept
+            { return crt.num_angle_points; }
 
             inline const config_runtime<float_type>& conf_runtime () const noexcept
             { return crt; }

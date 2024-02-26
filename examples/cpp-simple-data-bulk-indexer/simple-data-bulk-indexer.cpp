@@ -115,6 +115,8 @@ namespace {
     float triml;
     float trimh;
     float delta;
+    float dist1;
+    float dist3;
     float contr;
     float maxdist;
     unsigned minpts;
@@ -189,18 +191,20 @@ namespace {
             { "triml",    1, nullptr, 6 },
             { "trimh",    1, nullptr, 7 },
             { "delta",    1, nullptr, 8 },
-            { "contr",    1, nullptr, 9 },
-            { "maxdist",  1, nullptr, 10},
-            { "minpts",   1, nullptr, 11},
-            { "iter",     1, nullptr, 12},
-            { "ths",      1, nullptr, 13},
-            { "rblks",    1, nullptr, 14},
-            { "ipg",      1, nullptr, 15},
-            { "rep",      1, nullptr, 16},
-            { "quiet",    0, nullptr, 17},
-            { "method",   1, nullptr, 18},
-            { "reducalc", 0, nullptr, 19},
-            { "help",     0, nullptr, 20},
+            { "dist1",    1, nullptr, 9 },
+            { "dist3",    1, nullptr, 10},
+            { "contr",    1, nullptr, 11},
+            { "maxdist",  1, nullptr, 12},
+            { "minpts",   1, nullptr, 13},
+            { "iter",     1, nullptr, 14},
+            { "ths",      1, nullptr, 15},
+            { "rblks",    1, nullptr, 16},
+            { "ipg",      1, nullptr, 17},
+            { "rep",      1, nullptr, 18},
+            { "quiet",    0, nullptr, 19},
+            { "method",   1, nullptr, 20},
+            { "reducalc", 0, nullptr, 21},
+            { "help",     0, nullptr, 22},
             { nullptr,    0, nullptr, -1}
         };
 
@@ -230,45 +234,49 @@ namespace {
                 case 8:
                     parse_val(delta, optarg); break;
                 case 9:
-                    parse_val(contr, optarg, true); break;
+                    parse_val(dist1, optarg); break;
                 case 10:
-                    parse_val(maxdist, optarg, true); break;
+                    parse_val(dist3, optarg); break;
                 case 11:
-                    parse_val(minpts, optarg, true); break;
+                    parse_val(contr, optarg, true); break;
                 case 12:
-                    parse_val(iter, optarg, true); break;
+                    parse_val(maxdist, optarg, true); break;
                 case 13:
+                    parse_val(minpts, optarg, true); break;
+                case 14:
+                    parse_val(iter, optarg, true); break;
+                case 15:
                     parse_val(worker_threads, optarg);
                     if (worker_threads < 1u)
                         error("no worker threads");
                     break;
-                case 14:
+                case 16:
                     parse_val(refinement_blocks, optarg);
                     if (refinement_blocks < 1u)
                         error("no refinement blocks");
                     break;
-                case 15:
+                case 17:
                     parse_val(indexers_per_gpu, optarg);
                     if (indexers_per_gpu < 1u)
                         error("no indexers");
                     break;
-                case 16:
+                case 18:
                     parse_val(repetitions, optarg);
                     if (repetitions < 1u)
                         error("no repetitions");
                     break;
-                case 17:
+                case 19:
                     quiet = true;
                     break;
-                case 18:
+                case 20:
                     if (! method.empty())
                         error("method already set");
                     parse_val(method, optarg);
                     break;
-                case 19:
+                case 21:
                     reducalc = true;
                     break;
-                case 20:
+                case 22:
                     usage();
                 default:
                     error("internal: unknown option id");
@@ -292,6 +300,8 @@ namespace {
         triml = crt.triml;
         trimh = crt.trimh;
         delta = crt.delta;
+        dist1 = crt.dist1;
+        dist3 = crt.dist3;
         // initialize these later, set to invalid here
         contr = -1.;
         maxdist = -1.;
@@ -323,6 +333,8 @@ namespace {
         crt.triml = triml;
         crt.trimh = trimh;
         crt.delta = delta;
+        crt.dist1 = dist1;
+        crt.dist3 = dist3;
         if (contr >= .0f)
             cifss.threshold_contraction = cifse.threshold_contraction = contr;
         if (maxdist >= .0f)
@@ -769,10 +781,13 @@ int main (int argc, char *argv[])
         checkargs();
         setconf(cpers, crt, cifss, cifse);
 
-        debug << stanza << "cpers: cells=" << cpers.max_output_cells << ", maxspots=" << cpers.max_spots << ", cands=" << cpers.num_candidate_vectors << ", reducalc=" << cpers.redundant_computations << '\n'
-              << stanza << "crt: hs-points=" << crt.num_halfsphere_points << ", a-points=" << crt.num_angle_points << ", triml=" << crt.triml << ", trimh=" << crt.trimh << ", delta=" << crt.delta << '\n';
+        debug << stanza << "cpers: cells=" << cpers.max_output_cells << ", maxspots=" << cpers.max_spots
+                        << ", cands=" << cpers.num_candidate_vectors << ", reducalc=" << cpers.redundant_computations << '\n'
+              << stanza << "crt: hs-points=" << crt.num_halfsphere_points << ", a-points=" << crt.num_angle_points
+                        << ", triml=" << crt.triml << ", trimh=" << crt.trimh << ", delta=" << crt.delta
+                        << ", dist1=" << crt.dist1 << ", dist3=" << crt.dist3 << '\n';
         if (method == "ifss") {
-            debug << stanza << "cifss: contr=" << cifss.threshold_contraction << ", minpts=" << cifss.min_spots << '\n';
+            debug << stanza << "cifss: contr=" << cifss.threshold_contraction << ", minpts=" << cifss.min_spots << ", iter=" << cifss.max_iter << '\n';
         } else {
             debug << stanza << "cifse: contr=" << cifse.threshold_contraction << ", minpts=" << cifss.min_spots << ", iter=" << cifse.max_iter << '\n';
         }

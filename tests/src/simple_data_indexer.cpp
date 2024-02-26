@@ -60,7 +60,8 @@ int main (int argc, char *argv[])
 
     try {
         if (argc <= 6)
-            throw std::runtime_error("missing arguments <file name> <max number of spots> <max number of output cells> <number of kept candidate vectors> <number of half sphere sample points> <redundant computations?>");
+            throw std::runtime_error("missing arguments <file name> <max number of spots> <max number of output cells> "
+                                     "<number of kept candidate vectors> <number of half sphere sample points> <redundant computations?>");
 
         fast_feedback::config_runtime<float> crt{};         // default runtime config
         {

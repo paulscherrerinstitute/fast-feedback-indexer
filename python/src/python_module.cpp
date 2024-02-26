@@ -76,7 +76,7 @@ namespace {
         constexpr const char* kw[] = {"handle",
                                       "spots", "input_cells",
                                       "method",
-                                      "length_threshold", "triml", "trimh", "delta",
+                                      "length_threshold", "triml", "trimh", "delta", "dist1", "dist3",
                                       "num_sample_points", "n_output_cells",
                                       "contraction", "max_dist",
                                       "min_spots", "n_iter",
@@ -85,13 +85,13 @@ namespace {
         PyArrayObject* spots_ndarray = nullptr;
         PyArrayObject* input_cells_ndarray = nullptr;
         const char* method = "ifss";
-        double length_threshold=1e-9, triml=.05, trimh=.15, delta=.1;
+        double length_threshold=1e-9, triml=.05, trimh=.15, delta=.1, dist1=.0, dist3=.0;
         long num_sample_points=32*1024, n_output_cells=1;
         double contraction=.8, max_dist=.001;
         long min_spots=6, n_iter=15;
-        if (PyArg_ParseTupleAndKeywords(args, kwds, "lO!O!|sddddllddll", (char**)kw,
+        if (PyArg_ParseTupleAndKeywords(args, kwds, "lO!O!|sddddddllddll", (char**)kw,
                                         &handle, &PyArray_Type, &spots_ndarray, &PyArray_Type, &input_cells_ndarray,
-                                        &method, &length_threshold, &triml, &trimh, &delta, &num_sample_points, &n_output_cells,
+                                        &method, &length_threshold, &triml, &trimh, &delta, &dist1, &dist3, &num_sample_points, &n_output_cells,
                                         &contraction, &max_dist, &min_spots, &n_iter) == 0)
             return nullptr;
 
@@ -125,6 +125,12 @@ namespace {
             PyErr_SetString(PyExc_ValueError, "delta + triml <= 0");
             return nullptr;
         }
+
+        if (dist1 <= .0)
+            dist1 = trimh;
+
+        if (dist3 <= .0)
+            dist3 = trimh;
 
         if (num_sample_points < 0 || num_sample_points > numeric_limits<unsigned>::max()) {
             PyErr_SetString(PyExc_ValueError, "num_sample_points out of bounds for an unsigned integer");
@@ -290,7 +296,8 @@ namespace {
             float* score_data = (float*)PyArray_DATA(score);
             npy_intp score_bytes = PyArray_NBYTES(score);
 
-            fast_feedback::config_runtime<float> crt{(float)length_threshold, (float)triml, (float)trimh, (float)delta, (unsigned)num_sample_points, 0u};
+            fast_feedback::config_runtime<float> crt{(float)length_threshold, (float)triml, (float)trimh, (float)delta, (float)dist1, (float)dist3,
+                                                     (unsigned)num_sample_points, 0u};
 
             fast_feedback::memory_pin pin_crt{fast_feedback::memory_pin::on(crt)};
             fast_feedback::memory_pin pin_score{score_data, (std::size_t)score_bytes};

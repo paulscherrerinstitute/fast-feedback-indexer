@@ -34,8 +34,8 @@ This allocates space on the GPU for all the data structures used in the computat
 
 #### ffbidx.index(handle, spots, input_cells, method='ifss', length_threshold=1e-9, triml=.05, trimh=.15, delta=0.1, num_sample_points=32*1024, n_output_cells=1, contraction=.8, max_dist=.001, min_spots=6, n_iter=15)
 
-Run the fast feedback indexer on given 3D real space input cells and reciprocal spots packed in the **input_cells** and **spots** numpy array and return oriented cells and their scores. The still experimental *'raw'* method first finds candidate vectors according to the score $\sum_{s \in spots} \log_2(trim_l^h(dist(s, clp)) + delta))$, which are then used as rotation axes for the input cell. The cell score for the *'raw'* method is
-$-| \\{ s \in spots: dist(s, clp) < h \\} | + 2^{\frac{\sum_{s \in spots} \log_2(trim_l^h(dist(s, clp)) + delta))}{|spots|}} - delta$, where $trim$ stands for trimming, $dist(s, clp)$ for the distance of a spot to the closest lattice point, and $l,h$ are the lower and higher trimming thresholds.
+Run the fast feedback indexer on given 3D real space input cells and reciprocal spots packed in the **input_cells** and **spots** numpy array and return oriented cells and their scores. The still experimental *'raw'* method first finds candidate vectors according to the score $\sqrt[|spots|]{\prod_{s \in spots} trim_l^h(dist(s, clp)) + delta} - delta - c - 1$, which are then used as rotation axes for the input cell. The cell score for the *'raw'* method is
+the same. Here, $trim$ stands for trimming, $dist(s, clp)$ for the distance of a spot to the closest lattice point, $l,h$ are the lower and higher trimming thresholds, and $c$ is the number of close spots contributing to the score.
 
 **Return**:
 
@@ -54,6 +54,8 @@ A tuple of numpy arrays *(output_cells, scores)*
 - **triml**: >= 0, low trim value, 0 means no trimming
 - **trimh**: <= 0.5, high trim value, 0.5 means no trimming
 - **delta**: > 0 - triml, $\log_2$ curve position, lower values will be more selective in choosing close spots
+- **dist1**: spots within this distance are contributing to the score in the vector sampling step
+- **dist2**: spots within this distance are contributing to the score in the cell sampling step
 - **num_sample_points** is the number of sampling points per sample vector length on the half sphere
 - **n_output_cells** is the number of desired output cells
 - **contraction** threshold contraction parameter for methods *'ifss'* and *'ifse'*

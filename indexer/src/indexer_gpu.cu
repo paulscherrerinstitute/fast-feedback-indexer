@@ -1466,7 +1466,7 @@ namespace {
         for (unsigned i=0u; i<n_spots; i++) {
             const float_type s[3] = { sx[i], sy[i], sz[i] };
             const float_type d = dist2int(vlength * dot(v, s));
-            n_good += (d < crt.trimh) ? 1u : 0u;
+            n_good += (d < crt.dist1) ? 1u : 0u;
             const float_type dv = trim(crt, d) + delta;
             sval *= dv;
         }
@@ -1498,7 +1498,7 @@ namespace {
             const float_type ca = dist2int(dot(a, s));
             const float_type cb = dist2int(dot(b, s));
             const float_type dn = util<float_type>::norm(cc, ca, cb);
-            n_good += (dn < crt.trimh) ? 1u : 0u;
+            n_good += (dn < crt.dist3) ? 1u : 0u;
             const float_type dv = trim(crt, dn) + delta;
             sval *= dv;
         }

@@ -101,7 +101,9 @@ int main (int argc, char *argv[])
 
     try {
         if (argc <= 11)
-            throw std::runtime_error("missing arguments, use\n<file name> <max number of spots> <max number of output cells> <number of kept candidate vectors> <number of half sphere sample points> <redundant computations?> (ifss|ifse) <threshold contraction> <max dist> <min spots> <max iterations>");
+            throw std::runtime_error("missing arguments, use\n<file name> <max number of spots> <max number of output cells> "
+                                     "<number of kept candidate vectors> <number of half sphere sample points> <redundant computations?> "
+                                     "(ifss|ifse) <threshold contraction> <max dist> <min spots> <max iterations>");
 
         fast_feedback::config_runtime<float> crt{};         // default runtime config
         {
