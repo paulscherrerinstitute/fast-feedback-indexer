@@ -403,7 +403,7 @@ namespace fast_feedback {
         template <typename float_type=float>
         struct config_ifss final {
             float_type threshold_contraction=.8;    // contract error threshold by this value in every iteration
-            float_type max_distance=.001;           // max distance to integer for inliers
+            float_type max_distance=.01;            // max distance to integer for inliers
             unsigned min_spots=6;                   // minimum number of spots to fit against
             unsigned max_iter=15;                   // max number of iterations
         };
@@ -559,7 +559,7 @@ namespace fast_feedback {
         template <typename float_type=float>
         struct config_ifse final {
             float_type threshold_contraction=.8;    // contract error threshold by this value in every iteration
-            float_type max_distance=.001;           // max distance to integer for inliers
+            float_type max_distance=.01;            // max distance to integer for inliers
             unsigned min_spots=6;                   // minimum number of spots to fit against
             unsigned max_iter=15;                   // max number of iterations
         };
