@@ -886,21 +886,21 @@ namespace {
             return acosf(x);
         }
 
-        // __device__ __forceinline__ static float log2(const float x) noexcept
-        // {
-        //     return log2f(x);
-        // }
+        __device__ __forceinline__ static float log2(const float x) noexcept
+        {
+            return log2f(x);
+        }
 
-        // __device__ __forceinline__ static float exp2(const float x) noexcept
-        // {
-        //     return exp2f(x);
-        // }
+        __device__ __forceinline__ static float exp2(const float x) noexcept
+        {
+            return exp2f(x);
+        }
 
         // x ^ y
-        __device__ __forceinline__ static float pow(const float x, const float y) noexcept
-        {
-            return powf(x, y);
-        }
+        // __device__ __forceinline__ static float pow(const float x, const float y) noexcept
+        // {
+        //     return powf(x, y);
+        // }
 
         __device__ __forceinline__ static float sqrt(const float x) noexcept
         {
@@ -1459,19 +1459,27 @@ namespace {
                                                   const float_type *sx, const float_type *sy, const float_type *sz,
                                                   const unsigned n_spots) noexcept
     {
-        float_type sval = float_type{1.f};
-        unsigned n_good = 1u; // 1 too many to prevent positive numbers
+        constexpr unsigned BATCH = 1u << 3;     // 2^n, with n=3
+        constexpr unsigned MASK = BATCH - 1u;   // lower n bits
+        float_type sval = float_type{0.f};
+        float_type sv = float_type{1.f};
+        unsigned n_good = 1u;                   // 1 too many to prevent positive numbers
 
         const float_type delta = crt.delta;
-        for (unsigned i=0u; i<n_spots; i++) {
+        unsigned i = 0u;
+        do {
             const float_type s[3] = { sx[i], sy[i], sz[i] };
             const float_type d = dist2int(vlength * dot(v, s));
             n_good += (d < crt.dist1) ? 1u : 0u;
-            const float_type dv = trim(crt, d) + delta;
-            sval *= dv;
-        }
-        return util<float_type>::pow(sval, float_type{1.} / (float_type)n_spots) - delta - (float_type)n_good;
-        // return sval;
+            sv *= trim(crt, d) + delta;
+            if ((++i & MASK) == 0u) {
+                sval += util<float_type>::log2(sv);
+                sv = float_type{1.};
+            }
+        } while (i<n_spots);
+        if ((i & MASK) != 0u)
+            sval += util<float_type>::log2(sv);
+        return util<float_type>::exp2(sval / (float_type)n_spots) - delta - (float_type)n_good;
     }
 
     // Calculate combined score for cell
@@ -1488,21 +1496,31 @@ namespace {
                                                   const float_type *sx, const float_type *sy, const float_type *sz,
                                                   const float_type lz, const unsigned n_spots) noexcept
     {
+        constexpr unsigned BATCH = 1u << 3;     // 2^n, with n=3
+        constexpr unsigned MASK = BATCH - 1u;   // lower n bits
         float_type sval = float_type{1.f};
-        unsigned n_good = 1u; // 1 too many to prevent positive numbers
+        float_type sv = float_type{1.f};
+        unsigned n_good = 1u;                   // 1 too many to prevent positive numbers
 
         const float_type delta = crt.delta;
-        for (unsigned i=0u; i<n_spots; i++) {
+        unsigned i=0u;
+        do {
             const float_type s[3] = { sx[i], sy[i], sz[i] };
-            const float_type cc = dist2int(lz * dot(z, s));
-            const float_type ca = dist2int(dot(a, s));
-            const float_type cb = dist2int(dot(b, s));
-            const float_type dn = util<float_type>::norm(cc, ca, cb);
+            const float_type dn = util<float_type>::norm(
+                dist2int(lz * dot(z, s)),
+                dist2int(dot(a, s)),
+                dist2int(dot(b, s))
+            );
             n_good += (dn < crt.dist3) ? 1u : 0u;
-            const float_type dv = trim(crt, dn) + delta;
-            sval *= dv;
-        }
-        return util<float_type>::pow(sval, float_type{1.} / (float_type)n_spots) - delta - (float_type)n_good;
+            sv *= trim(crt, dn) + delta;
+            if ((++i & MASK) == 0u) {
+                sval += util<float_type>::log2(sv);
+                sv = float_type{1.};
+            }
+        } while (i<n_spots);
+        if ((i & MASK) != 0u)
+            sval += util<float_type>::log2(sv);
+        return util<float_type>::exp2(sval / (float_type)n_spots) - delta - (float_type)n_good;
     }
 
     // -----------------------------------
