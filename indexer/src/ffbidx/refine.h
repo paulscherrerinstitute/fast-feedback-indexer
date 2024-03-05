@@ -789,7 +789,7 @@ namespace fast_feedback {
             std::sort(std::begin(vlen_a), std::end(vlen_a));
             std::sort(std::begin(vlen_b), std::end(vlen_b));
             const float_type detA = cellA.determinant();
-            const float_type f = std::abs(cellB.determinant() - detA) / detA;
+            const float_type f = std::abs((cellB.determinant() - detA) / detA);
             float_type score = .0f;
             for (unsigned i=0; i<3u; i++)
                 score = std::max(score, std::abs(vlen_a[i] - vlen_b[i]));
