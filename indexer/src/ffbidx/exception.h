@@ -40,16 +40,24 @@ namespace fast_feedback {
         const char* file_name;
         unsigned line_number;
 
-        inline exception(const std::string& message, const char* file, unsigned line)
-            : error_message(message), file_name(file), line_number(line)
+        inline static bool verbose()
         {
-            const bool verbose = envvar<bool>(INDEXER_VERBOSE_EXCEPTION, []()->bool{return false;});
-            if (verbose) {
+            return envvar<bool>(INDEXER_VERBOSE_EXCEPTION, []()->bool{return false;});
+        }
+
+        inline static std::string verbosify(const std::string& message, const char* file, unsigned line)
+        {
+            if (verbose()) {
                 std::ostringstream oss;
                 oss << '(' << file << ':' << line << ") " << message;
-                error_message = oss.str();
+                return oss.str();
             }
+            return message;
         }
+
+        inline exception(const std::string& message, const char* file, unsigned line)
+            : error_message(verbosify(message, file, line)), file_name(file), line_number(line)
+        {}
 
         inline exception(const exception&) = default;
         inline exception(exception&&) = default;

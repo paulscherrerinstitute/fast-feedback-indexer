@@ -69,6 +69,7 @@ Steer library behaviour with environment variables.
 * *INDEXER_LOG_LEVEL* (string): The log level for the indexer {"fatal", "error", "warn", "info", "debug"} (parsed on calling *logger::init_log_level()*)
 * *INDEXER_GPU_DEVICE* (int): The GPU cuda device number to use for indexing (parsed on indexer object creation)
 * *INDEXER_GPU_DEBUG* (string): Print gpu kernel debug output to stdout {"1", "true", "yes", "on", "0", "false", "no", "off"} (parsed on indexer object creation)
+* *INDEXER_VERBOSE_EXCEPTION* (string): Add (file:line) before exception message {"1", "true", "yes", "on", "0", "false", "no", "off"} (parsed on exception creation)
 
 ### Noteworthy Cmake Variables
 
