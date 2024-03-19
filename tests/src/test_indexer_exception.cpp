@@ -25,9 +25,12 @@ Author: hans-christian.stadler@psi.ch
 
 #include <iostream>
 #include <string>
+#include <cstdlib>
 #include "ffbidx/exception.h"
 
 namespace {
+    static constexpr unsigned lineno = 36;
+
     fast_feedback::exception create_copy()
     {
         return fast_feedback::exception(FF_EXCEPTION("12"));    // <-- this line number
@@ -39,7 +42,7 @@ namespace {
         fast_feedback::exception ex2 = FF_EXCEPTION_OBJ;
         ex1 = create_copy();
         ex2 = ex1;
-        if (ex2.line_number == 33)
+        if (ex2.line_number == lineno)
             throw ex2;
         return ex2;
     }
@@ -49,6 +52,9 @@ int main(int, char**)
 {
     std::string failed{"Test failed: "};
 
+    static char ENV_VAR_VAL[] = "INDEXER_VERBOSE_EXCEPTION=false";
+    putenv(ENV_VAR_VAL);
+
     try {
         try {
             fast_feedback::exception ex = move_assign_copy();
@@ -57,7 +63,7 @@ int main(int, char**)
             std::string msg{ex.what()};
             std::string fname{ex.file_name};
 
-            if (ex.line_number == 33) { // <-- put line number here
+            if (ex.line_number == lineno) {
                 if (fname.find("test_indexer_exception.cpp") != std::string::npos) {
                     if (msg == "1234") {
                         throw ex;
@@ -77,7 +83,7 @@ int main(int, char**)
             std::cout << "Test OK.\n";
             return ((EXIT_SUCCESS));
         } else {
-            std::cerr << failed << "wrong exception message for base class\n";
+            std::cerr << failed << "wrong exception message for base class: <" << msg << ">\n";
         }
     }
 

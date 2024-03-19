@@ -36,7 +36,8 @@ if (BUILD_FAST_INDEXER OR BUILD_FAST_INDEXER_STATIC)
                 ffbidx/indexer.h
                 ffbidx/refine.h
                 ffbidx/log.h
-                ffbidx/exception.h)
+                ffbidx/exception.h
+                ffbidx/envvar.h)
         cmake_path(ABSOLUTE_PATH CMAKE_INSTALL_LIBDIR
                 BASE_DIRECTORY ${CMAKE_INSTALL_PREFIX}
                 NORMALIZE

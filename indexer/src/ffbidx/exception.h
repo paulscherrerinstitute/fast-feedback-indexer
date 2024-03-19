@@ -28,8 +28,11 @@ Author: hans-christian.stadler@psi.ch
 
 #include <exception>
 #include <sstream>
+#include "envvar.h"
 
 namespace fast_feedback {
+
+    constexpr char INDEXER_VERBOSE_EXCEPTION[] = "INDEXER_VERBOSE_EXCEPTION";
 
     struct exception : public std::exception {
 
@@ -39,7 +42,14 @@ namespace fast_feedback {
 
         inline exception(const std::string& message, const char* file, unsigned line)
             : error_message(message), file_name(file), line_number(line)
-        {}
+        {
+            const bool verbose = envvar<bool>(INDEXER_VERBOSE_EXCEPTION, []()->bool{return false;});
+            if (verbose) {
+                std::ostringstream oss;
+                oss << '(' << file << ':' << line << ") " << message;
+                error_message = oss.str();
+            }
+        }
 
         inline exception(const exception&) = default;
         inline exception(exception&&) = default;

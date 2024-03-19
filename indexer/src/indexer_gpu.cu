@@ -36,6 +36,7 @@ Author: hans-christian.stadler@psi.ch
 #include <limits>
 #include <cassert>
 #include <cub/block/block_radix_sort.cuh>
+#include "ffbidx/envvar.h"
 #include "ffbidx/exception.h"
 #include "ffbidx/log.h"
 #include "ffbidx/indexer_gpu.h"
@@ -240,26 +241,8 @@ namespace {
     // Set GPU debug output if INDEXER_GPU_DEBUG is set to true
     void gpu_debug_init()
     {
-        char* debug_string = std::getenv(INDEXER_GPU_DEBUG);
-        if (debug_string != nullptr) {
-            const std::vector<std::string> accepted = {"1", "true", "yes", "on", "0", "false", "no", "off"}; // [4] == "0"
-            unsigned i;
-            for (i=0u; i<accepted.size(); i++) {
-                if (accepted[i] == debug_string) {
-                    gpu_debug_output.store(i < 4);                                                           // [4] == "0"
-                    break;
-                }
-            }
-            if (i >= accepted.size()) {
-                std::ostringstream oss;
-                oss << "illegal value for " << INDEXER_GPU_DEBUG << ": \"" << debug_string << "\" (use one of";
-                for (const auto& s : accepted)
-                    oss << " \"" << s << '\"';
-                oss << ')';
-                throw FF_EXCEPTION(oss.str());
-            }
-        } else
-            gpu_debug_output.store(false);
+        bool debug = fast_feedback::envvar<bool>(INDEXER_GPU_DEBUG, []()->bool{return false;});
+        gpu_debug_output.store(debug);
     }
 
     // Deleter for device smart pointers
@@ -1446,7 +1429,7 @@ namespace {
     }
 
     // Calculate combined score for single vector
-    // - pow(mul(s ∈ spots) trim[triml..trimh](dist2int(s 🞄 v / vlength)) + delta, 1/|spots|) - delta
+    // - pow(mul(s ∈ spots) trim[triml..trimh](dist2int(s 🞄 v * vlength)) + delta, 1/|spots|) - delta
     // - negative number of spots within distance crt.trimh of an integer - 1 (to prevent negative scores)
     // crt          runtime configuration with triml/h and delta
     // v            unit vector in sample vector direction, |v| == 1
