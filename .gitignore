@@ -2,3 +2,4 @@
 /build/
 /install/
 __pycache__/
+/doc/algorithm/*
