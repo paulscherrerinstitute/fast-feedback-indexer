@@ -395,6 +395,9 @@ namespace fast_feedback {
             inline unsigned num_candidate_vectors () const noexcept
             { return idx.cpers.num_candidate_vectors; }
 
+            inline bool redundant_computations () const noexcept
+            { return idx.cpers.redundant_computations; }
+
             inline const config_persistent<float_type>& conf_persistent () const noexcept
             { return idx.cpers; }
         }; // indexer
@@ -541,6 +544,12 @@ namespace fast_feedback {
                 cifss.min_spots = ms;
             }
 
+            inline float_type max_distance () const noexcept
+            { return cifss.max_distance; }
+            
+            inline void max_distance (float_type d) noexcept
+            { cifss.max_distance = d; }
+
             inline unsigned min_spots () const noexcept
             { return cifss.min_spots; }
 
@@ -554,7 +563,7 @@ namespace fast_feedback {
             { return cifss; }
 
         }; // indexer_ifss
-            
+
         // Iterative fit to selected errors refinement indexer extra config
         template <typename float_type=float>
         struct config_ifse final {
@@ -675,6 +684,12 @@ namespace fast_feedback {
             
             inline float_type threshold_contraction () const noexcept
             { return cifse.threshold_contraction; }
+
+            inline float_type max_distance () const noexcept
+            { return cifse.max_distance; }
+            
+            inline void max_distance (float_type d) noexcept
+            { cifse.max_distance = d; }
 
             inline void min_spots (unsigned ms)
             {
