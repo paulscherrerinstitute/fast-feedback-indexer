@@ -780,7 +780,7 @@ namespace fast_feedback {
 
         // Compute a cell similarity score based on cell vector length
         // It can be used for penalisation of cell scores for output cells dissimilar to an input cell
-        // max(0, m-t)**2, with m the maximum of the cell vector length differences
+        // max(0, m-t)**2, with m the maximum of the relative cell vector length differences plus the relative determinant difference
         template <typename CellMatA, typename CellMatB, typename float_type=typename CellMatA::Scalar>
         inline float_type cell_similarity (const Eigen::MatrixBase<CellMatA>& cellA, const Eigen::MatrixBase<CellMatB>& cellB, float_type threshold=.02f)
         {
@@ -789,12 +789,12 @@ namespace fast_feedback {
             std::sort(std::begin(vlen_a), std::end(vlen_a));
             std::sort(std::begin(vlen_b), std::end(vlen_b));
             const float_type detA = cellA.determinant();
-            const float_type f = std::abs((cellB.determinant() - detA) / detA);
-            float_type score = .0f;
+            const float_type dD = std::abs((cellB.determinant() - detA) / detA);
+            float_type dL = .0f;
             for (unsigned i=0; i<3u; i++)
-                score = std::max(score, std::abs(vlen_a[i] - vlen_b[i]));
-            score = (1.f + f) * std::max(float_type{.0f}, score - threshold);
-            return score * score;
+                dL = std::max(dL, std::abs(vlen_a[i] - vlen_b[i]) / vlen_a[i]);
+            const float_type score = dD + dL;
+            return std::max(float_type{.0f}, score * score - threshold);
         }
 
     } // namespace refine
