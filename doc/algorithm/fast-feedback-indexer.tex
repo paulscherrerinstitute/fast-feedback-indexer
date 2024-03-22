@@ -14,6 +14,10 @@
 
 \DeclareMathOperator*{\mirror}{\longrightarrow}
 \DeclareMathOperator*{\argmin}{argmin}
+\DeclareMathOperator{\trimop}{trim}
+\DeclareMathOperator{\trace}{trace}
+\DeclareMathOperator{\similar}{similarity}
+\DeclareMathOperator{\acos}{acos}
 
 \newcommand{\vect}[1]{\mathbf{#1}}
 \newcommand{\mat}[1]{\mathbf{#1}}
@@ -21,7 +25,7 @@
 \newcommand{\floor}[1]{\lfloor #1 \rfloor}
 \newcommand{\distZ}[1]{d_\mathbb{Z}(#1)}
 \newcommand{\distvecZ}[1]{\vect{d}_\mathbb{Z}(#1)}
-\newcommand{\trim}[3]{trim_{#1}^{#2}\left ( #3 \right )}
+\newcommand{\trim}[3]{\trimop_{#1}^{#2}\left ( #3 \right )}
 \newcommand{\filter}[1]{F^{#1}}
 
 %opening
@@ -38,25 +42,25 @@ This article gives a description of the fast feedback indexing algorithm, descri
 
 \section{Intro}\label{sec:intro}
 The indexing task consist of refining and reorienting or, in the more complicated case, finding one or more unit cells to match a spot pattern obtained by X-ray crystallography as well as possible. For fast indexing, we assume the basic unit cell is known and given as an input, so the simpler case of reorienting and refining an input unit cell shall be considered here. We assume the basic unit cell will be given as row vectors of a matrix $\mat{A} \in \mathbb{R}^{3 \times 3}$. The spots are an input to the indexer as well, and we assume they are given in reciprocal space through row vectors in a matrix $\mat{S} \in \mathbb{R}^{n \times 3}$. The algorithm tries to reorient and refine $\mat{A}$ to find a structurally similar matrix $\mat{B}$ satisfying
-
+%
 \begin{align}
  \label{eq:integer} \mat{S} \mat{B}^T &= \mat{Z}, \mat{Z} \in \mathbb{Z}^{n \times 3}\text{ (redefined to }\mathbb{R}^{n\times 3}\text{ later)} \\
  \label{eq:similar} \mat{B} &\simeq \mat{A}
 \end{align}
-
+%
 The row vectors in $\mat{A}$ shall be denoted as $\vect{a}_1,\vect{a}_2,\vect{a}_3$, the ones for $\mat{B}$ as $\vect{b}_1,\vect{b}_2,\vect{b}_3$, and finally the spot vectors as $\vect{s}_1, \vect{s}_2, ..., \vect{s}_n$. With that, the structural similarity (\ref{eq:similar}) shall be defined based on some small positive tolerance parameter $\varepsilon$ by
-
+%
 \begin{align}
   D_l &:= \max_{1 \leq i \leq 3} \left |\, \frac{\| \vect{a}_i \| - \| \vect{b}_i \|}{\| \vect{a}_i \|}\, \right | \notag \\
-  D_d &:= \left | \frac{det(\mat{B}) - det(\mat{A})}{det(\mat{A})} \right | \notag \\
- similarity(\mat{B}, \mat{A}) &:= ( D_d + D_l )^2 \\
-  \mat{B} \simeq \mat{A} &\Leftrightarrow similarity(\mat{B}, \mat{A}) < \varepsilon \notag
+  D_d &:= \left | \frac{\det(\mat{B}) - \det(\mat{A})}{\det(\mat{A})} \right | \notag \\
+ \similar(\mat{B}, \mat{A}) &:= ( D_d + D_l )^2 \\
+  \mat{B} \simeq \mat{A} &\Leftrightarrow \similar(\mat{B}, \mat{A}) < \varepsilon \notag
 \end{align}
-
-Structural similarity in (\ref{eq:similar}) thus means that $\|\vect{a}_i\| \approx \|\vect{b}_i\|$ for all row vectors and $det(\mat{A}) \approx det(\mat{B})$, or in other words $\mat{B}$ is almost $\mat{A}$ rotated in some way.
+%
+Structural similarity in (\ref{eq:similar}) thus means that $\|\vect{a}_i\| \approx \|\vect{b}_i\|$ for all row vectors and $\det(\mat{A}) \approx \det(\mat{B})$, or in other words $\mat{B}$ is almost $\mat{A}$ rotated in some way.
 
 In practise (\ref{eq:integer}) can never be achieved exactly. For once, the spots $\vect{s}_i$ are a result of measurements and transformations with errors and imperfections, and then there might be several crystals with differing orientations in the sample. To find a unit cell of a specific crystal that fits well to spots belonging to that crystal, the relevant spots have to be identified together with the matrix $\mat{B}$. We define a subset of indices $\mathcal{I} = \{i \mid \vect{s}_i\ belongs\ to\ the\ crystal \}$ containing the indices of inliers - points we deem to belong to the crystal with unit cell $\mat{B}$. The requirement $\mat{Z} \in \mathbb{Z}^{n \times 3}$ in (\ref{eq:integer}) is unrealistic, we just demand that the relevant coordinate vectors $\vect{z}_i, i \in \mathcal{I}$ of $\mat{Z}$ are close to integers, thus $\mat{Z} \in \mathbb{R}^{n \times 3}$. For that, we define
-
+%
 \[
  \begin{split}
   \distZ{x} &= |x - \round{x}| \\
@@ -64,9 +68,9 @@ In practise (\ref{eq:integer}) can never be achieved exactly. For once, the spot
   \distZ{[x_1\, ...\; x_n]} &= \|\distvecZ{[x_1\, ...\; x_n]}\|
  \end{split}
 \]
-
+%
 the distance to an integer, the vector of distances to integers, and the distance to an integer vector. We also define the element wise absolute value and element wise rounding operation on vectors and matrices
-
+%
 \[
  \begin{split}
   |\,[x_1\, ...\; x_n]\,| &= [\,|x_1|\, ...\; |x_3|\,] \in \mathbb{R}^n \\
@@ -74,23 +78,22 @@ the distance to an integer, the vector of distances to integers, and the distanc
   \round{\mat{X}} &= \begin{pmatrix} \round{x_{ij}} \end{pmatrix}
  \end{split}
 \]
-
+%
 So the vector of elementwise distances to integers of a vector $\vect{x}$ can also be expressed as
-
+%
 \[
   \distvecZ{\vect{x}} = |\, \vect{x} - \round{\vect{x}}\,|
 \]
-
+%
 For a matrix $\mat{X}\in \mathbb{R}^{m\times n}$, we compute the column vector of distances $\vect{d}_{\mathbb{Z}}(\mat{X})$ for the matrix row vectors $\vect{x}_1,\hdots ,\vect{x}_m$, where $\vect{x}_i\in \mathbb{R}^n$
-
+%
 \[
  \distvecZ{\mat{X}} = \begin{pmatrix} \distZ{\vect{x}_1} \\ \vdots \\ \distZ{\vect{x}_m} \end{pmatrix}\in \mathbb{R}^m,
  \text{ where }\mat{X} = \begin{pmatrix} \vect{x}_1 \\ \vdots \\ \vect{x}_m \end{pmatrix}\in \mathbb{R}^{m\times n}
 \]
-
-
+%
 With that, for a small error margin $\beta$ and a minimum number of spots $m$, we demand instead of (\ref{eq:integer})
-
+%
 \begin{equation}\label{eq:viable}
  \begin{split}
   \vect{s}_i \mat{B}^T &= \vect{z}_i,\ i \in \mathcal{I} \\
@@ -99,9 +102,9 @@ With that, for a small error margin $\beta$ and a minimum number of spots $m$, w
   &\text{and }\mat{B} \simeq \mat{A}
  \end{split}
 \end{equation}
-
+%
 The three conditions at the bottom have been worked out by Luis Felipe Barba Flores from SDSC. The conditions in (\ref{eq:viable}) can potentially be true for many (unit cell, index set) combinations, so we end up with a set of solutions, dependent on $\beta$ and $m$. In fact, for every possible index set $\mathcal{I}_k$ with $|\mathcal{I}_k| >= m$ we end up with a (possibly empty) set of unit cell matrices $\mathcal{B}_k$ that fulfill (\ref{eq:viable}). But interesting is only one of the unit cells, we call it $\mat{B}_k$, in $\mathcal{B}_k$ which minimizes the $\distZ{\vect{z}_i}$ in (\ref{eq:viable}) for nonempty $\mathcal{B}_k$ sets. The resulting set of $(\mat{B}_k, \mathcal{I}_k)$ tuples can further be reduced by demanding that $\mathcal{I}_k$ should encompass as many spots as possible, and thus $\mathcal{I}_k \setminus \mathcal{I}_l \neq \emptyset$ for all $\mathcal{I}_l$ in this set, except $\mathcal{I}_k$ itself. The set of relevant solutions is therefore defined as
-
+%
 \begin{equation}\label{eq:solution-set}
  \begin{split}
   \mathcal{S} = \{\, (\mat{B}_k, \mathcal{I}_k)\,\mid\ &\mat{B}_k, \mathcal{I}_k\text{ as in (\ref{eq:viable})} \\
@@ -109,7 +112,7 @@ The three conditions at the bottom have been worked out by Luis Felipe Barba Flo
   &\text{and }\mat{B}_k = \argmin_{\mat{B}} \sum_{i \in \mathcal{I}_k} \distZ{\vect{s}_i \mat{B}^T}^2\ \}
  \end{split}
 \end{equation}
-
+%
 The set of relevant solutions $\mathcal{S}$ may contain groups of almost equal unit cells $\mat{B}_k$ for which the spot index sets $\mathcal{I}_k$ only differ by very few spots. Such a group most likely belongs to the same crystal. The elements in such a group can be ordered by the distance $\distZ{\prescript{m}{}{\vect{z}}}$ where $\prescript{m}{}{\vect{z}}$ is the $m$th best approximated spot in (\ref{eq:viable}).
 
 Solutions for different crystals in $\mathcal{S}$ can be identified using the parameter $m$. If $|\mathcal{I}_k \cap \mathcal{I}_l | \leq m$, then $\mat{B}_k$ and $\mat{B}_l$ are the unit cells of different crystals in the sample.
@@ -118,7 +121,7 @@ Solutions for different crystals in $\mathcal{S}$ can be identified using the pa
 
 The fast feedback indexer algorithm tries to approximatively calculate the set $\mathcal{S}$ in (\ref{eq:solution-set}). To find $(\mat{B}_k,\mathcal{I}_k)$ pairs in (\ref{eq:solution-set}), the basic approach of the fast feedback indexer can be described as two step sampling with refinement, using the condition $\mat{B} \simeq \mat{A}$.
 
-\subsection{Vector Orientation Sampling}
+\subsection{Vector Orientation Sampling}\label{subsec:vecsampling}
 The initial sampling step tries the vectors $\vect{a}_i$ in $P^*$ different sampling orientations $\vect{a}_{i,p}, 1\leq p\leq P^*$, following a Fibonacci spiral method \cite{gonzales} on a half sphere to spread out the sampling points with relatively low computational cost. The number $P^*$ of all orientations to try is a parameter. Algorithm \ref{alg:samplepoint} could be replaced by any other sampling point generation method, but the less uniform the spacing of sample points, the more sampling points are needed to get meaningful results.
 
 \begin{algorithm}
@@ -148,11 +151,11 @@ Spots closer than $l$ are all treated equally \emph{good}, spots farther away th
 Whether this second fine-tuning part based on a mean distance makes sense, and with which parameters, is still experimental. It merely serves as a sub selection criterion for orientations with an equal amount of close spots.
 
 We then define the set of $P$ most promising orientations $\mathcal{P}_i$ amongst the orientation sampling points for the basis unit cell vector $\vect{a}_i$ as
-
+%
 \[
   \mathcal{P}_i = \{ p\mid \vect{a}_{i,p}\ is\ amongst\ the\ P\ orientations\ of\ \vect{a}_i\ with\ the\ highest\ scores \}
 \]
-
+%
 In other words, $\mathcal{P}_i$ with $|\mathcal{P}_i|=P$, is the set of indices for the orientations with the highest scores. The number of selected candidates $P$ is a parameter. This set is optained by sorting and merging results from thread blocks working in parallel on the $P^*$ orientation sampling points.
 
 \begin{algorithm}
@@ -171,13 +174,13 @@ In other words, $\mathcal{P}_i$ with $|\mathcal{P}_i|=P$, is the set of indices 
 \subsection{Vector Orientation Refinement}
 
 After collecting candidate orientations in the sets $\mathcal{P}_i$, a refinement step is performed to adjust the vectors $\vect{a}_{i,p}$ with $p\in \mathcal{P}_i$. This only makes sense if some $\vect{a}_{i,p}$ in some of the sets $\mathcal{P}_i$ is very close to a true unit cell vector for the spot pattern. We define this to be the case if, at least and as in (\ref{eq:viable}), for a minimal set of $m$ spots among the \emph{close spots} in Algorithm \ref{alg:pointscore}, the $c_j := \round{\vect{s}_j \vect{a}_{i,p}^T}$ integer lattice coordinates (aka. Miller indices) are correct. We define the induced integer lattice coordinate vector for all $n$ spots, \emph{close} or not, as
-
+%
 \[
 \vect{c}_{i,p} = \begin{pmatrix} c_1 \\ \vdots \\ c_n \end{pmatrix}, \vect{c}_{i,p}\in \mathbb{Z}^{n}
 \]
-
+%
 In \cite{toro-indexer} this vector is given by the so called oracle. In the end, we want to select spots and adapt a vector to these spots, akin to (\ref{eq:solution-set}). For the selection process, we introduce the following notation
-
+%
 \begin{align}
 \filter{\vect{v}\, op\, x} &:= \begin{bmatrix}
   f_{11} &        &        \\
@@ -191,7 +194,7 @@ In \cite{toro-indexer} this vector is given by the so called oracle. In the end,
 \end{cases}  \notag \\
 &\text{and }op\text{ a bolean operator like } <, >, ... \notag
 \end{align}
-
+%
 $\filter{\vect{v} \geq 1}\,\vect{v}$ would thus be the vector $\vect{v}$ where all elements satisfying $\vect{v}_i < 1$ have been set to zero.
 
 \begin{algorithm}
@@ -204,7 +207,7 @@ $\filter{\vect{v} \geq 1}\,\vect{v}$ would thus be the vector $\vect{v}$ where a
 \State $\vect{t} = \begin{pmatrix}0.3 \\ 0.15 \\ 0.075 \\ 0.0375\end{pmatrix}$\Comment{closeness thresholds}
 \For{$j=1\, ...\, 4$}
   \State $\mat{F}\gets \filter{\distvecZ{\mat{S}\vect{a}^T} < \vect{t}_j}$\Comment{filter for \emph{close spots}}
-  \If{$trace(\mat{F}) < m$}\label{alg:vecrefinement:nclose}\Comment{too few \emph{close spots}?}
+  \If{$\trace(\mat{F}) < m$}\label{alg:vecrefinement:nclose}\Comment{too few \emph{close spots}?}
     \State exit for loop
   \EndIf
   \State $\vect{a}\gets \argmin_{\vect{x}} \| \mat{F}(\mat{S}\vect{x}^T - \vect{c}_{i,p}) \|^2$\label{alg:vecrefinement:lsq}\Comment{least squares on \emph{close spots}}
@@ -218,35 +221,35 @@ $\filter{\vect{v} \geq 1}\,\vect{v}$ would thus be the vector $\vect{v}$ where a
 The orientation vector refinement Algorithm \ref{alg:vecrefinement} tries to iteratively adapt the orientation vector $\vect{a}_{i,p}$ to \emph{close spots}, progressively tightening the threshold for spots considered \emph{close}. The closeness thresholds in $\vect{t}$ are quite arbitrary and experimental at the moment.
 
 Applying refinement to all vectors $\vect{a}_{i,p}$ in the sets $\mathcal{P}_i$, we end up with the sets
-
+%
 \[
  \mathcal{P}_i^{refined} = \{ \vect{a}_{i,p}^{refined} \mid p \in \mathcal{P}_i \}
 \]
-
+%
 Some of these refined vectors can be bad, as in line \ref{alg:vecrefinement:nclose} of Algorithm \ref{alg:vecrefinement} the number of \emph{close spots} could have been too low, and their size could deviate too much from $\|\vect{a}_i\|$ due to the least squares optimization in line \ref{alg:vecrefinement:lsq}. However, since the integer coordinates $\vect{c}_{i,p}$ are computed with $\vect{a}_{i,p}$ and $\|\vect{a}_{i,p}\| = \|\vect{a}_i\|$, no significant deviation can be expected if $m$, the minimum number of \emph{close spots}, is set high enough.
 The set $\mathcal{P}_i^{refined}$ can be computed in parallel, working on all valid $(i,p)$ pairs with $p\in \mathcal{P}_i$.
 
-\subsection{Cell Orientation Sampling}
+\subsection{Cell Orientation Sampling}\label{subsec:cellsampling}
 
 First a piece of convenient notation:
-
+%
 \[
  i+ := i\:mod\:3 + 1
 \]
-
+%
 Hence, if $i$, $1\leq i\leq 3$, is the index of a vector in a cell, $i+$ is the index of the next vector, and ${i+}+$ the index of the next to the next.
 
-If we focus our attention on a specific $\vect{a}_{i,p}^{refined}$ vector, recall that it has been obtained by reorienting vector $\vect{a}_i$ of the original unit cell $\mat{A}$, and has been turned to the orientation sampling point with index $p$, plus undergone some minor adjustment in the refinement step. We can model this with a rotation matrix, $\mat{R}_p$ and a small length modification $\vect{d}_i$ accounting for the refinement:
-
+If we focus our attention on a specific $\vect{a}_{i,p}^{refined}$ vector, recall that it has been obtained by reorienting vector $\vect{a}_i$ of the original unit cell $\mat{A}$, and has been turned to the orientation sampling point with index $p$, plus undergone some minor adjustment in the refinement step. We can model this with a rotation matrix, $\mat{R}_p$ and a small length modification $\vect{d}$ accounting for the refinement:
+%
 \[
  \begin{split}
-  \vect{a}_{i,p}^{refined} &= \vect{a}_i \mat{R}_p^T + \vect{d}_i \\
-  \vect{d}_i &= (1 + \epsilon)\vect{a}_i \mat{R}_p^T \text{ for some small }\epsilon
+  \vect{a}_{i,p}^{refined} &= \vect{a}_i \mat{R}_p^T + \vect{d} \\
+  \vect{d} &= \epsilon\:\vect{a}_i \mat{R}_p^T \text{ for some small }\epsilon
  \end{split}
 \]
-
+%
 $\vect{a}_{i,p}^{refined}$ now serves as a candidate for the reoriented unit cell vector $\vect{b}_i$ of a potential solution unit cell $\mat{B}$. Because we strive to fulfill the conditions in (\ref{eq:viable}), especially $\mat{B}\simeq \mat{A}$, there is only one degree of freedom left, appart from minor refinements, to form $\mat{B}$ with reorientations of the other two original unit cell vectors $\vect{a}_{i+} \mat{R}_p^T$ and $\vect{a}_{{i+}+} \mat{R}_p^T$. This degree of freedom is a rotation angle $\alpha$ around $\vect{a}_{i,p}^{refined}$ common to both of these other two vectors. So if $\vect{a}_{i,p}^{refined}$ indeed is part of a solution $\mat{B}$, we can model this with a second rotation matrix $\mat{R}_\alpha$ and a small refinement matrix $\mat{D}$:
-
+%
 \[
  \begin{split}
   \mat{B} &= \mat{A} \mat{R}_p^T \mat{R}_\alpha^T + \mat{D} \\
@@ -259,13 +262,12 @@ There's a small catch - because our reorientation sampling points were only on a
 The idea is to produce a rotated copy, akin to $\mat{A}\mat{R}_p^T$, of $\mat{A}$, and then sample rotations thereof at $Q^*$ different angles $\alpha_q$, $1\leq q\leq Q^*$, uniformly distributed within the interval $[0\, ...\, 2\pi)$. In the following, we will, without loss of generality, ignore the negative version of $\vect{a}_{i,p}^{refined}$.
 
 Instead of finding a rotation matrix $\mat{R}_p$, we will equivalently find a mirroring axis, represented by a unified vector $\vect{r}_p$, that brings the original unit cell vector to the refined candidate.
-
+%
 \[
 \vect{a}_i\mirror^{\vect{r}_p} \vect{a}_{i,p}^{refined} \frac{\|\vect{a}_i\|}{\|\vect{a}_{i,p}^{refined}\|}
 \]
-
-
-This axis is unique, except if $\vect{a}_i$ and $\vect{a}_{i,p}^{refined}$ are colinear, in which case any axis perpendicular to $\vect{a}_i$ will serve the purpose. The collinearity check is done with a small parameter $\tau$, as shown in line \ref{alg:mirroraxis:collinear} of Algorithm \ref{alg:mirroraxis}. Algorithm \ref{alg:mirroraxis} uses an input vector $\vect{w}$ to construct a perpendicular mirror axis in the case of colinearity. Another original unit cell vector, like $\vect{a}_{i+}$, will do fine to construct this perpendicular mirror axis.
+%
+This axis is unique, except if $\vect{a}_i$ and $\vect{a}_{i,p}^{refined}$ are collinear, in which case any axis perpendicular to $\vect{a}_i$ will serve the purpose. The collinearity check is done with a small parameter $\tau$, as shown in line \ref{alg:mirroraxis:collinear} of Algorithm \ref{alg:mirroraxis}. Algorithm \ref{alg:mirroraxis} uses an input vector $\vect{w}$ to construct a perpendicular mirror axis in the case of collinearity. Another original unit cell vector, like $\vect{a}_{i+}$, will do fine to construct this perpendicular mirror axis.
 
 \begin{algorithm}
 \caption{Mirror axis calculation}
@@ -284,7 +286,7 @@ This axis is unique, except if $\vect{a}_i$ and $\vect{a}_{i,p}^{refined}$ are c
 \end{algorithm}
 
 The mirroring operation that brings row vector $\vect{x}$ to $\vect{y}$ by mirroring on row vector $\vect{r}_p$ is implemented in Algorithm \ref{alg:mirror} and used for mirroring the other two original unit cell vectors.
-
+%
 \[
 \begin{split}
 \vect{a}_{i+}\mirror^{\vect{r}_p}\vect{a}_{i+,p} \\
@@ -304,10 +306,11 @@ The mirroring operation that brings row vector $\vect{x}$ to $\vect{y}$ by mirro
 \end{algorithm}
 
 The last basic piece missing for cell sampling is the rotation of these vectors around $\vect{a}_{i,p}^{refined}$. For that, a unified basis, $\vect{u}_x,\vect{u}_y,\vect{u}_z$, is constructed with
+%
 \[
  \vect{u}_z=\frac{\vect{a}_{i,p}^{refined}}{\|\vect{a}_{i,p}^{refined}\|}
 \]
-
+%
 First $\vect{u}_x$ is constructed using $\vect{a}_{i+,p}$ projected to the plane normal to $\vect{u}_z$, yielding the vector $\vect{u}_x$ after normalization. The vector $\vect{u}_y$ is then simply calculated as $-\vect{u}_x\times \vect{u}_z$, see Algorithm \ref{alg:basis}.
 
 \begin{algorithm}
@@ -333,9 +336,9 @@ Using this normalized basis, rotation can be implemented as show in Algorithm \r
 \Function{rotate}{$\vect{x},\vect{u}_x,\vect{u}_y,\vect{u}_z,\alpha_q$}
 \State $z\gets \vect{x}\vect{u}_z^T$, $x\gets \vect{x}\vect{u}_x^T$, $y\gets \vect{x}\vect{u}_y^T$\Comment{all row vectors}
 \State $r\gets \sqrt{x^2 + y^2}$
-\State $\gamma\gets acos(\frac{x}{r_{xy}})$
-\State $x\gets r\,cos(\gamma +\alpha_q)$
-\State $y\gets r\,sin(\gamma +\alpha_q)$
+\State $\gamma\gets \acos(\frac{x}{r_{xy}})$
+\State $x\gets r\,\cos(\gamma +\alpha_q)$
+\State $y\gets r\,\sin(\gamma +\alpha_q)$
 \State \Return $x\vect{u}_x + y\vect{u}_y + z\vect{u}_z$
 \EndFunction
 \end{algorithmic}
@@ -378,24 +381,24 @@ Similar to the construction of $P$ candidate orientation vectors per unit cell v
 \end{algorithm}
 
 Again, the $Q$ most promising cell orientations are collected into the set of most promising cell orientation candidates $\mathcal{Q}$, with $|\mathcal{Q}|=Q$.
-
+%
 \[
 \begin{split}
 \mathcal{Q} = \{ (i,p,q) \mid \mat{B}_{i,p,q}\ &is\ amongst\ the\ Q\ cell\ orientations \\
                                                &with\ the\ highest\ scores \}
 \end{split}
 \]
-
+%
 Like $P$, $Q$ is a parameter. Similar to $\mathcal{P}_i$, this set is obtained by sorting and merging results from thread blocks working in parallel on all $6PQ^*$ valid orientation sampling triplets $(i,p,q)$ with $p\in \mathcal{P}_i$ and $1\leq q\leq Q^*$ (the factor 6 comes from the positive and negative versions of $\vect{a}_{i,p}^{refined}$).
 
 \subsection{Cell Orientation Refinement}
 
 After collecting candidate cell orientations in the set $\mathcal{Q}$, a refinement step is performed to adjust the candidate unit cell bases $\mat{B}_{i,p,q}$ with $(i,p,q)\in \mathcal{Q}$. Again, this only makes sense if some $\mat{B}_i,p,q$ is very close to a true unit cell for the spot pattern. In analogy to the vector orientation refinement, we define this to be the case if, at least, for a minimal set as in (\ref{eq:viable}) of $m$ spots among the \emph{close spots} in Algorithm \ref{alg:cellscore}, the $\vect{c}_j := \round{\vect{s}_j\mat{B}_{i,p,q}^T}$ integer lattice coordinate vectors (aka. Miller indices) are correct. We define the induced integer lattice coordinate matrix for all $n$ spots, $close$ or not, as
-
+%
 \[
  \mat{C}_{i,p,q} = \begin{pmatrix} \vect{c}_1 \\ \vdots \\ \vect{c}_n \end{pmatrix}, \mat{C}_{i,p,q}\in \mathbb{Z}^{n\times 3}
 \]
-
+%
 In analogy to vector orientation refinement, this vector is given in \cite{toro-indexer} by the so called oracle. Through iterative fits to selected spots, we want to adapt the candidate unit cell to these spots, akin to (\ref{eq:solution-set}).
 
 \begin{algorithm}
@@ -408,10 +411,10 @@ In analogy to vector orientation refinement, this vector is given in \cite{toro-
 \State $t = \floor{score_{i,p,q}} + 1 - score_{i,p,q}$\Comment{mean distance from \emph{score}}
 \For{$j=1\, ...\, maxiter$}
   \State $\mat{F}\gets \filter{\distvecZ{\mat{S}\vect{B}^T} < t}$\Comment{filter for \emph{close spots}}
-  \If{$trace(\mat{F}) < m$}\label{alg:vecrefinement:nclose}\Comment{too few \emph{close spots}?}
+  \If{$\trace(\mat{F}) < m$}\Comment{too few \emph{close spots}?}
     \State exit for loop
   \EndIf
-  \State $\mat{B}\gets \argmin_{\mat{X}} \| \mat{F}(\mat{S}\mat{X}^T - \mat{C}_{i,p,q}) \|^2$\label{alg:vecrefinement:lsq}\Comment{least squares on \emph{close spots}}
+  \State $\mat{B}\gets \argmin_{\mat{X}} \| \mat{F}(\mat{S}\mat{X}^T - \mat{C}_{i,p,q}) \|^2$\Comment{least squares on \emph{close spots}}
   \State $t\gets \lambda t$
 \EndFor
 \State $\mat{B}_{i,p,q}^{refined}\gets \vect{B}$
@@ -423,19 +426,19 @@ In analogy to vector orientation refinement, this vector is given in \cite{toro-
 Algorithm \ref{alg:cellrefinement} for the cell orientation refinement, in contrast to Algorithm \ref{alg:vecrefinement} for the orientation vector refinement, takes the $score_{i,p,q}$ for the cell orientation candidate from Algorithm \ref{alg:cellscore} as input and uses the \emph{mean distance} part of $score_{i,p,q}$ as the initial distance threshold for \emph{close spots}. In every iteration this distance threshold is contracted with a parameter $\lambda$ in the range $0 < \lambda < 1$, rather than having a fast but fixed distance threshold sequence. The parameter $maxiter$ is used to limit the number of iterations in Algorithm \ref{alg:cellrefinement}, so that a more predictable running time can be asserted.
 
 Applying the refinement in Algorithm \ref{alg:cellrefinement} to all $Q$ cell orientation candidate triplets $(i,p,q)$ in the set $\mathcal{Q}$ in parallel, we end up with the final set of unit cell candidates
-
+%
 \[
  \mathcal{Q}^{refined} = \{ \mat{B}_{i,p,q}^{refined} \mid (i,p,q)\in \mathcal{Q} \}
 \]
 
-\subsection{Approximative Solution}
+\subsection{Approximative Solution}\label{subsec:approxsol}
 
 Coming back to the original goal of approximating the set of relevant solutions $\mathcal{S}$, consisting of $(\mat{B}_k, \mathcal{I}_k)$ pairs, we need to look at [\ref{eq:solution-set}]. We can take $\mat{B}_k\in \mathcal{Q}^{refined}$ and calculate $\mathcal{I}_k$ as
-
+%
 \[
  \mathcal{I}_k = \{ j \mid \distZ{\vect{s}_j\mat{B}_k} < \beta \}
 \]
-
+%
 The resulting $(\mat{B}_k, \mathcal{I}_k)$ pairs should be a pretty decent approximation to $\mathcal{S}$ by construction.
 
 \begin{enumerate}
@@ -446,9 +449,82 @@ The resulting $(\mat{B}_k, \mathcal{I}_k)$ pairs should be a pretty decent appro
  \item $\mathcal{I}_k \setminus \mathcal{I}_l \neq \emptyset,\text{ except for }l=k$ in (\ref{eq:solution-set}) is not guaranteed. But the scoring mechanism in Algorithms \ref{alg:pointscore} and \ref{alg:cellscore} lead to a selection of candidates with large $|\mathcal{I}_k|$. For single crystal solutions, the unit cell candidate with the largest $|\mathcal{I}_k|$ should be in $\mathcal{S}$ as defined by (\ref{eq:solution-set}). For multiple crystals, if $P$ and $Q$ are large enough, the crystal selection procedure described in Section \ref{sec:intro} should yield very similar results.
 \end{enumerate}
 
+\subsection{Selecting Final Solutions}
+
+For sorting, we will introduce the notation $\mathbb{N}_{\leq n}^+$ for integers in the range $[1\:\hdots\:n]$, and look at sequences $seq(i) = item_i$, where $i\in \mathbb{N}_{\leq n}^+$. For items, we will look at functions $g(item_i)\in \mathbb{R}$ that assigns a value to every item. To sort the set in ascending order, we want to look at bijective mappings $sort(i)=j$, with both $i$ and $j\in \mathbb{N}_{\leq n}^+$, such that $g(seq\circ sort(i))\leq g(seq\circ sort(i+1)), \forall i\in \mathbb{N}_{\leq n-1}^+$. In other words, $seq\circ sort(i)=item_{sort(i)}$ is a sorted version of the sequence $seq(i)=item_i$. We will use the notation $\prescript{i:g(item_i)}{}{seq}$ for this sorted sequence.
+
+For selecting the last $k$ items in a sequence, we write $seq\uparrow k$, and similarly $seq\downarrow k$ for the first $k$ items in a sequence. As an example $\prescript{i:item_i}{}{seq}\uparrow k$ would select the biggest $k$ items in the sequence $seq$.
+
+For selecting last items in a sorted sequence based on a threshold $t$, we will use $\prescript{i:g(item_i)>t}{}{seq}$ or similar.
+
+Then we extend this to sets $\mathcal{X} = \{ item_i \}$ by defining $\mathcal{X}(i)=item_i$, vectors $\vect{x}$ by defining the sequence $\vect{x}(i)=x_i$, where $x_i$ is the $i$th element, and matrices $\mat{X}$ by defining the sequence $\mat{X}(i)=\vect{x}_i$ where $\vect{x}_i$ is the $i$th row vector.
+
+$\prescript{i:\|\vect{x}_i\|}{}{\mat{X}}$ would thus rearrange the row vectors in $\mat{X}$ such that $\|\vect{x}_i\|\leq\|\vect{x}_{i+1}\|$, and $\prescript{i:\|\vect{x}_i\|}{}{\mat{X}}\downarrow k$ would be a matrix with the $k$ row vectors of the lowest norm. Going wild, we can define the row vector with the $k$th lowest norm by selecting the last of the first $k$ as $\prescript{i:\|\vect{x}_i\|}{}{\mat{X}}\downarrow k\uparrow 1$, since selecting the first $k$ items of a sequence again yields a sequence, albeit a shorter one, of which we can select the last item. $\prescript{i:\|\vect{x}_i\|<t}{}{\mat{X}}$ would be the matrix containing all row vectors with norm less than $t$ in sorted order.
+
+To address some of the issues in Section \ref{subsec:approxsol}, we first define a score for the $m$th best approximated spot by a unit cell candidate $\mat{B}$ as shown in Algorithm \ref{alg:mthbest}.
+
+\begin{algorithm}
+\caption{Calculate $m$th best spot approximation score}
+\label{alg:mthbest}
+\begin{algorithmic}[1]
+\Function{mth-best}{$\mat{B},\mat{S},m$}\Comment{$\mat{S} = \in \mathbb{R}^{n\times 3}, \mat{S}=\begin{pmatrix} \vect{s}_1\\ \vdots \\ \vect{s}_n \end{pmatrix}$}
+\State $\prescript{m}{}{\vect{s}} = \prescript{j:\distZ{\vect{s}_j\mat{B}^T}}{}{\vect{S}}\downarrow m\uparrow 1$\Comment{$m$th best approximated spot}
+\State $\prescript{m}{}{\vect{z}} = \prescript{m}{}{\vect{s}}\mat{B}^T$\Comment{coordinates of $\prescript{m}{}{\vect{s}}$}
+\State \Return $\distZ{\prescript{m}{}{\vect{z}}}$\Comment{distance to integer coordinates}
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+For finding single crystals, the set $\mathcal{Q}^{refined}$ should be sorted and filtered as described in Section \ref{sec:intro} using the score for the $m$th best approximated spot and the threshold $\beta$:
+%
+\[
+\mathcal{Q}^{viable} = \prescript{i:\text{mth-best}(\mat{B}_i,\mat{S},m)<\beta}{}{\mathcal{Q}^{refined}}
+\]
+%
+The best solution approximation can now be found in the following way:
+%
+\[
+ \mat{B}^\bigstar = \mathcal{Q}^{viable}\downarrow 1
+\]
+%
+For multicrystals, we will accept new unit cells only if they cover a substantial amount of new spots. For this we'll compute the set of spots covered by a unit cell $\mat{B}_i\in\mathcal{Q}^{viable}$
+%
+\[
+ \mathcal{C}_i = \{ j \mid \vect{s}_j\mat{B}_i^T < \beta \}
+\]
+%
+We'll interpret $\mat{B}_i$ as the $i$th item in the sorted sequence $\mathcal{Q}^{viable}$, so $\mat{B}_1$ is the same as $\mat{B}^\bigstar$. Then we look at the series of sets of indices into sequence $\mathcal{Q}^{viable}$ for accepted unit cells $\mathcal{U}_i$ with $\mathcal{U}_1 = \{ 1 \}$ as the initial set. We'll put the index $i+1$ for a new unit cell $\mat{B}_{i+1} \in \mathcal{Q}^{viable}$ into the set $\mathcal{U}_{i+1}$ if
+%
+\[
+ \left| \mathcal{C}_{i+1} \setminus \bigcup_{k \in \mathcal{U}_i} \mathcal{C}_k \right| > m
+\]
+%
+In other words, we accept the new unit cell $\mat{B}_{i+1}$, if it covers at least $m$ new spots compared with the previously accepted unit cells combined. The best solution approximation set representing unit cells for multiple crystals is then
+%
+\[
+\mathcal{Q}^\bigstar = \{ \mat{B}_i \mid  i \in \mathcal{U}_{|\mathcal{Q}^{viable}|} \}
+\]
+
 \section{Discussion}
 
 As an alternative view to the additive way the set $\mathcal{Q}^{refined}$ is calculated, the problem can be approached by pruning possibilities in the sampling space over the $(i,p,q)$ triplets. Leaving refinement away, the $p$-dimension is first reduced to $P$ points using the best scores from Algorithm \ref{alg:pointscore}, and the resulting sampling space is then pruned to $Q$ points using the best scores from Algorithm \ref{alg:cellscore}.
+
+\section{Parameters}
+
+\begin{itemize}
+ \item $\varepsilon$ from Section \ref{sec:intro} is used to steer matrix similarity.
+ \item $\beta$ from Section \ref{sec:intro} is used as a distance to Miller indices threshold for solution unit cells.
+ \item $m$ from Section \ref{sec:intro} is used as a threshold for the minimum number of spots a solution unit cell musst approximate within distance $\beta$.
+ \item $P^*$ from Algorithm \ref{alg:samplepoint} gives the number of vector orientation sampling points.
+ \item $P$ from Section \ref{subsec:vecsampling} gives the number of kept vector orientation candidates.
+ \item $l$ from Algorithm \ref{alg:pointscore} and \ref{alg:cellsampling} gives a lower trim threshold for the distance region of interest used for calculating a mean distance.
+ \item $h$ is similar to $l$, but giving the higher trim threshold.
+ \item $\delta$ from Algorithm \ref{alg:pointscore} and \ref{alg:cellsampling} determines the influence less well approximated spots have on the mean distance.
+ \item $Q^*$ from Algorithm \ref{alg:cellsampling} gives the number of rotation angle sampling points.
+ \item $Q$ from Section \ref{subsec:cellsampling} gives the number of kept unit cell orientation candidates.
+ \item $\tau$ from Algorithm \ref{alg:mirroraxis} gives a threshold for the collinearity check.
+ \item $\lambda$ from Algorithm \ref{alg:cellrefinement} gives the contraction factor for the closeness threshold.
+\end{itemize}
 
 \printbibliography
 \end{document}
