@@ -50,7 +50,7 @@ The indexing task consist of refining and reorienting or, in the more complicate
 %
 The row vectors in $\mat{A}$ shall be denoted as $\vect{a}_1,\vect{a}_2,\vect{a}_3$, the ones for $\mat{B}$ as $\vect{b}_1,\vect{b}_2,\vect{b}_3$, and finally the spot vectors as $\vect{s}_1, \vect{s}_2, ..., \vect{s}_n$. With that, the structural similarity (\ref{eq:similar}) shall be defined based on some small positive tolerance parameter $\varepsilon$ by
 %
-\begin{align}
+\begin{align}\label{eq:similarity}
   D_l &:= \max_{1 \leq i \leq 3} \left |\, \frac{\| \vect{a}_i \| - \| \vect{b}_i \|}{\| \vect{a}_i \|}\, \right | \notag \\
   D_d &:= \left | \frac{\det(\mat{B}) - \det(\mat{A})}{\det(\mat{A})} \right | \notag \\
  \similar(\mat{B}, \mat{A}) &:= ( D_d + D_l )^2 \\
@@ -449,7 +449,7 @@ The resulting $(\mat{B}_k, \mathcal{I}_k)$ pairs should be a pretty decent appro
  \item $\mathcal{I}_k \setminus \mathcal{I}_l \neq \emptyset,\text{ except for }l=k$ in (\ref{eq:solution-set}) is not guaranteed. But the scoring mechanism in Algorithms \ref{alg:pointscore} and \ref{alg:cellscore} lead to a selection of candidates with large $|\mathcal{I}_k|$. For single crystal solutions, the unit cell candidate with the largest $|\mathcal{I}_k|$ should be in $\mathcal{S}$ as defined by (\ref{eq:solution-set}). For multiple crystals, if $P$ and $Q$ are large enough, the crystal selection procedure described in Section \ref{sec:intro} should yield very similar results.
 \end{enumerate}
 
-\subsection{Selecting Final Solutions}
+\subsection{Selecting Final Solutions}\label{subsec:selection}
 
 For sorting, we will introduce the notation $\mathbb{N}_{\leq n}^+$ for integers in the range $[1\:\hdots\:n]$, and look at sequences $seq(i) = item_i$, where $i\in \mathbb{N}_{\leq n}^+$. For items, we will look at functions $g(item_i)\in \mathbb{R}$ that assigns a value to every item. To sort the set in ascending order, we want to look at bijective mappings $sort(i)=j$, with both $i$ and $j\in \mathbb{N}_{\leq n}^+$, such that $g(seq\circ sort(i))\leq g(seq\circ sort(i+1)), \forall i\in \mathbb{N}_{\leq n-1}^+$. In other words, $seq\circ sort(i)=item_{sort(i)}$ is a sorted version of the sequence $seq(i)=item_i$. We will use the notation $\prescript{i:g(item_i)}{}{seq}$ for this sorted sequence.
 
@@ -461,7 +461,7 @@ Then we extend this to sets $\mathcal{X} = \{ item_i \}$ by defining $\mathcal{X
 
 $\prescript{i:\|\vect{x}_i\|}{}{\mat{X}}$ would thus rearrange the row vectors in $\mat{X}$ such that $\|\vect{x}_i\|\leq\|\vect{x}_{i+1}\|$, and $\prescript{i:\|\vect{x}_i\|}{}{\mat{X}}\downarrow k$ would be a matrix with the $k$ row vectors of the lowest norm. Going wild, we can define the row vector with the $k$th lowest norm by selecting the last of the first $k$ as $\prescript{i:\|\vect{x}_i\|}{}{\mat{X}}\downarrow k\uparrow 1$, since selecting the first $k$ items of a sequence again yields a sequence, albeit a shorter one, of which we can select the last item. $\prescript{i:\|\vect{x}_i\|<t}{}{\mat{X}}$ would be the matrix containing all row vectors with norm less than $t$ in sorted order.
 
-To address some of the issues in Section \ref{subsec:approxsol}, we first define a score for the $m$th best approximated spot by a unit cell candidate $\mat{B}$ as shown in Algorithm \ref{alg:mthbest}.
+To address some of the issues in Section \ref{subsec:approxsol}, we first define a score for the $m$th best approximated spot by a unit cell candidate $\mat{B}$ as shown in Algorithm \ref{alg:mthbest}. In \cite{toro-indexer}, a cell \emph{similarity score} like in (\ref{eq:similarity}) is added as a penalty function to the cell score described here.
 
 \begin{algorithm}
 \caption{Calculate $m$th best spot approximation score}
@@ -509,6 +509,12 @@ In other words, we accept the new unit cell $\mat{B}_{i+1}$, if it covers at lea
 
 As an alternative view to the additive way the set $\mathcal{Q}^{refined}$ is calculated, the problem can be approached by pruning possibilities in the sampling space over the $(i,p,q)$ triplets. Leaving refinement away, the $p$-dimension is first reduced to $P$ points using the best scores from Algorithm \ref{alg:pointscore}, and the resulting sampling space is then pruned to $Q$ points using the best scores from Algorithm \ref{alg:cellscore}.
 
+The greedy method of selecting crystals in Section \ref{subsec:selection} is experimental and based on the assumption that cells with high scores are the best representatives of crystals. Other methods, like a minimal cover of $\bigcup_i \mathcal{C}_i$ could maybe also have some physical meaning:
+%
+\[
+ \argmin_{\mathcal{U}^\bigstar} |\mathcal{U}^\bigstar|, \text{ with }\bigcup_{i\in \mathcal{U}^\bigstar} \mathcal{C}_i = \bigcup_i \mathcal{C}_i
+\]
+
 \section{Parameters}
 
 \begin{itemize}
@@ -525,6 +531,8 @@ As an alternative view to the additive way the set $\mathcal{Q}^{refined}$ is ca
  \item $\tau$ from Algorithm \ref{alg:mirroraxis} gives a threshold for the collinearity check.
  \item $\lambda$ from Algorithm \ref{alg:cellrefinement} gives the contraction factor for the closeness threshold.
 \end{itemize}
+
+The current implementation doesn't make such consistent use of parameters as described here. Parameters like $\beta$ and $m$ are separately given for different calculations. So there are different versions of $\beta$ for the candidate vector orientation scoring in Algorithm \ref{alg:pointscore}, the cell orientation scoring in Algorithm \ref{alg:cellscore}, and the final solution selection in Section \ref{subsec:selection}. If split versions of such parameters make sense or not is still experimental.
 
 \printbibliography
 \end{document}
