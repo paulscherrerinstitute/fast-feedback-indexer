@@ -311,6 +311,7 @@ namespace fast_feedback {
         }
     };
 
+    // Specialized array version
     template<typename T>
     struct pinned_deleter<T[]> final {
         inline void operator()(T ptr[]) const
