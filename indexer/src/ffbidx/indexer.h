@@ -208,7 +208,7 @@ namespace fast_feedback {
         void* ptr;
 
         // Nothing is pinned by default
-        inline memory_pin()
+        inline memory_pin() noexcept
             : ptr(nullptr)
         {}
 
@@ -308,6 +308,14 @@ namespace fast_feedback {
                 throw;
             }
             dealloc_pinned(ptr);
+        }
+    };
+
+    template<typename T>
+    struct pinned_deleter<T[]> final {
+        inline void operator()(T ptr[]) const
+        {
+            pinned_deleter<T>{}(ptr);
         }
     };
 
