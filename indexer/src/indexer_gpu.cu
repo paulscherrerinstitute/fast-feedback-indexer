@@ -655,6 +655,11 @@ namespace {
             const auto n_cand_vecs = n_cand_groups * cpers.num_candidate_vectors;
             const auto& gpu_state = ref(state_id);
 
+            auto pin_cand_len = memory_pin::on(cand_len);
+            auto pin_cand_idx = memory_pin::on(cand_idx);
+            auto pin_cell_cand = memory_pin::on(cell_cand);
+            auto pin_vec_cgrps = memory_pin::on(vec_cgrps);
+
             CU_CHECK(cudaMemcpyAsync(gpu_state.candidate_length.get(), cand_len.data(), n_cand_groups * sizeof(float_type), cudaMemcpyHostToDevice, stream));
             CU_CHECK(cudaMemsetAsync(gpu_state.candidate_value.get(), 0, n_cand_vecs * sizeof(float_type), stream));
             CU_CHECK(cudaMemcpyAsync(gpu_state.cellvec_to_cand.get(), cand_idx.data(), cand_idx.size() * sizeof(unsigned), cudaMemcpyHostToDevice, stream));
@@ -2046,6 +2051,7 @@ namespace gpu {
                               candidate_sample, cellvec_to_cand,
                               cell_to_cellvec, vec_cgrps,
                               sequentializers};
+            auto pin_data = memory_pin::on(_data);
             CU_CHECK(cudaMemcpyAsync(data, &_data, sizeof(_data), cudaMemcpyHostToDevice, gpu_state::stream(state_id)));
         }
     }
