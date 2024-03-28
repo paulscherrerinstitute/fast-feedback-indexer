@@ -668,6 +668,8 @@ namespace {
                                     work->state = index_end;
 
                                     indexer[idx]->index_start(work->in, work->out, crt, result_ready, work.get()); // launch indexer asynchronously
+
+                                    work->in.new_cells = false;
                                 }
                             } break;
 
