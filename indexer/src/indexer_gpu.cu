@@ -35,6 +35,7 @@ Author: hans-christian.stadler@psi.ch
 #include <algorithm>
 #include <limits>
 #include <cassert>
+#include <cstring>
 #include <cub/block/block_radix_sort.cuh>
 #include "ffbidx/envvar.h"
 #include "ffbidx/exception.h"
@@ -460,22 +461,23 @@ namespace {
         using key_type = fast_feedback::state_id::type;
         using map_type = std::map<key_type, indexer_gpu_state>;
         using config_persistent = fast_feedback::config_persistent<float_type>;
+        using config_runtime = fast_feedback::config_runtime<float_type>;
         using memory_pin = fast_feedback::memory_pin;
         using clock = std::chrono::high_resolution_clock;
         using time_point = std::chrono::time_point<clock>;
 
         gpu_pointer<content_type> data;                     // Indexer_device_data on GPU
         gpu_pointer<float_type> elements;                   // Input/output vector elements of data on GPU
-        gpu_pointer<float_type> candidate_length;           // Candidate vector groups length
+        gpu_pointer<float_type> candidate_length;           // Candidate vector groups length values on GPU
         gpu_pointer<float_type> candidate_value;            // Candidate vectors objective function values on GPU
         #if VCANDREF == VCR_ROPT
-            gpu_pointer<float_type> refined_candidates;     // Refined candidate coordinates in consecutive aligned tripples
+            gpu_pointer<float_type> refined_candidates;     // Refined candidate coordinates in consecutive aligned tripples on GPU
         #endif
-        gpu_pointer<unsigned> candidate_sample;             // Sample number of candidate vectors
-        gpu_pointer<unsigned> cellvec_to_cand;              // Input cell vector to candidate group mapping
-        gpu_pointer<unsigned> cell_to_cellvec;              // Input cell to cell representing vector mapping
-        gpu_pointer<unsigned> vec_cgrps;                    // Candidate vector groups of cell representing vectors
-        gpu_pointer<unsigned> seq_block;                    // Thread block sequentializers
+        gpu_pointer<unsigned> candidate_sample;             // Sample number of candidate vectors on GPU
+        gpu_pointer<unsigned> cellvec_to_cand;              // Input cell vector to candidate group mapping on GPU
+        gpu_pointer<unsigned> cell_to_cellvec;              // Input cell to cell representing vector mapping on GPU
+        gpu_pointer<unsigned> vec_cgrps;                    // Candidate vector groups of cell representing vectors on GPU
+        gpu_pointer<unsigned> seq_block;                    // Thread block sequentializers on GPU
         gpu_stream cuda_stream;                             // CUDA stream
 
         // Temporary pinned space to transfer n_input_cells, n_output_cells, n_spots
@@ -491,6 +493,19 @@ namespace {
         float_type* oy;
         float_type* oz;
         float_type* cell_score;
+
+        // Last runtime config ang candidate group mapping properties for overhead and copy omission
+        config_runtime last_crt;
+        unsigned n_cand_groups = 0u;
+        unsigned n_vec_cgrps = 0u;
+        std::vector<unsigned> cell_candidate_h;
+        std::vector<unsigned> vec_cgrps_h;
+        std::vector<unsigned> candidate_idx_h;
+        std::vector<float_type> candidate_length_h;
+        memory_pin pin_cell_cand;
+        memory_pin pin_vec_grp;
+        memory_pin pin_cand_idx;
+        memory_pin pin_cand_len;
 
         // Timings
         gpu_event<cudaEventDefault> start;
@@ -533,7 +548,7 @@ namespace {
                           gpu_pointer<unsigned>&& sb, gpu_stream&& stream,
                           float_type* xi, float_type* yi, float_type* zi,
                           float_type* xo, float_type* yo, float_type* zo,
-                          float_type* scores, int dev)
+                          float_type* scores, int dev, unsigned n_cells_in)
             : data{std::move(d)}, elements{std::move(e)},
               candidate_length{std::move(cl)}, candidate_value{std::move(cv)},
               #if VCANDREF == VCR_ROPT
@@ -544,9 +559,21 @@ namespace {
               seq_block{std::move(sb)}, cuda_stream{std::move(stream)},
               ix{xi}, iy{yi}, iz{zi},
               ox{xo}, oy{yo}, oz{zo},
-              cell_score{scores}, device{dev}
+              cell_score{scores},
+              cell_candidate_h(n_cells_in), vec_cgrps_h(n_cells_in),
+              candidate_idx_h(3u * n_cells_in), candidate_length_h(3u * n_cells_in),
+              pin_cell_cand{cell_candidate_h},
+              pin_vec_grp{vec_cgrps_h},
+              pin_cand_idx{candidate_idx_h},
+              pin_cand_len{candidate_length_h},
+              device{dev}
         {
             tmp = fast_feedback::alloc_pinned<config_persistent>();
+            // Invalidate objects to help with overhead and copy omission
+            tmp->max_output_cells = -1u;
+            tmp->max_input_cells = -1u;
+            tmp->max_spots = -1u;
+            std::memset(static_cast<void*>(&last_crt), 0, sizeof(last_crt));
         }
 
         indexer_gpu_state() = default;                                      // Default with some uninitialized pointers
@@ -589,10 +616,11 @@ namespace {
         }
 
         // Copy runtime configuration to GPU
-        static inline void copy_crt(const key_type& state_id, const fast_feedback::config_runtime<float_type>& crt, cudaStream_t stream=0)
+        static inline void copy_crt(const key_type& state_id, const config_runtime& crt, cudaStream_t stream=0)
         {
             const auto crt_dp = &ptr(state_id)->crt;
             CU_CHECK(cudaMemcpyAsync(crt_dp, &crt, sizeof(crt), cudaMemcpyHostToDevice, stream));
+            ref(state_id).last_crt = crt;
             LOG_START(logger::l_debug) {
                 logger::debug << stanza << "copy runtime config data: " << &crt << "-->" << crt_dp << '\n';
             } LOG_END;
@@ -604,46 +632,65 @@ namespace {
                                    fast_feedback::output<float_type>& output,
                                    cudaStream_t stream=0)
         {
+            if (!input.new_cells && !input.new_spots)
+                return;
+
             const auto& gpu_state = ref(state_id);
             auto& pinned_tmp = const_cast<config_persistent&>(*gpu_state.tmp);
             const auto& device_data = gpu_state.data;
-            const auto n_input_cells = std::min(input.n_cells, cpers.max_input_cells);
-            const auto n_spots = std::min(input.n_spots, cpers.max_spots);
+
             output.n_cells = std::min(output.n_cells, cpers.max_output_cells);
+            if (pinned_tmp.max_output_cells != output.n_cells) {
+                pinned_tmp.max_output_cells = output.n_cells;
+                CU_CHECK(cudaMemcpyAsync(&device_data->output.n_cells, &pinned_tmp.max_output_cells, sizeof(output.n_cells), cudaMemcpyHostToDevice, stream));
 
-            pinned_tmp.max_output_cells = output.n_cells;
-            pinned_tmp.max_input_cells = n_input_cells;
-            pinned_tmp.max_spots = n_spots;
-            CU_CHECK(cudaMemcpyAsync(&device_data->output.n_cells, &pinned_tmp.max_output_cells, sizeof(output.n_cells), cudaMemcpyHostToDevice, stream));
-            // NOTE: the following code assumes consecutive storage of two data members in pinned_tmp and in device_data->input
-            CU_CHECK(cudaMemcpyAsync(&device_data->input.n_cells, &pinned_tmp.max_input_cells, sizeof(n_input_cells) + sizeof(n_spots), cudaMemcpyHostToDevice, stream));
-
-            if (n_input_cells + n_spots > 0u) {
-                if (input.new_cells && n_input_cells > 0u) {
-                    const auto cell_sz = 3u * n_input_cells * sizeof(float_type);
-                    CU_CHECK(cudaMemcpyAsync(gpu_state.ix, input.cell.x, cell_sz, cudaMemcpyHostToDevice, stream));
-                    CU_CHECK(cudaMemcpyAsync(gpu_state.iy, input.cell.y, cell_sz, cudaMemcpyHostToDevice, stream));
-                    CU_CHECK(cudaMemcpyAsync(gpu_state.iz, input.cell.z, cell_sz, cudaMemcpyHostToDevice, stream));
-                }
-                if (input.new_spots && n_spots > 0) {
-                    const auto dst_offset = 3u * cpers.max_input_cells;
-                    const auto spot_sz = n_spots * sizeof(float_type);
-                    CU_CHECK(cudaMemcpyAsync(&gpu_state.ix[dst_offset], input.spot.x, spot_sz, cudaMemcpyHostToDevice, stream));
-                    CU_CHECK(cudaMemcpyAsync(&gpu_state.iy[dst_offset], input.spot.y, spot_sz, cudaMemcpyHostToDevice, stream));
-                    CU_CHECK(cudaMemcpyAsync(&gpu_state.iz[dst_offset], input.spot.z, spot_sz, cudaMemcpyHostToDevice, stream));
-                }
+                LOG_START(logger::l_debug) {
+                    logger::debug << stanza << "copy " << output.n_cells << " cells(out)\n";
+                } LOG_END;
             }
 
-            LOG_START(logger::l_debug) {
-                logger::debug << stanza << "copy in: " << n_input_cells << " cells(in), " << output.n_cells << " cells(out), "
-                            << n_spots << " spots, elements=" << gpu_state.elements.get() << ": (cells) "
-                            << input.cell.x << "-->" << gpu_state.ix << ", "
-                            << input.cell.y << "-->" << gpu_state.iy << ", "
-                            << input.cell.z << "-->" << gpu_state.iz << ", (spots) "
-                            << input.cell.x << "-->" << &gpu_state.ix[3u * cpers.max_input_cells] << ", "
-                            << input.cell.y << "-->" << &gpu_state.iy[3u * cpers.max_input_cells] << ", "
-                            << input.cell.z << "-->" << &gpu_state.iz[3u * cpers.max_input_cells] << '\n';
-            } LOG_END;
+            const auto n_input_cells = std::min(input.n_cells, cpers.max_input_cells);
+            const auto n_spots = std::min(input.n_spots, cpers.max_spots);
+            if ((pinned_tmp.max_input_cells != n_input_cells) ||
+                (pinned_tmp.max_spots != n_spots)) {
+                pinned_tmp.max_input_cells = n_input_cells;
+                pinned_tmp.max_spots = n_spots;
+                // NOTE: the following code assumes consecutive storage of two data members in pinned_tmp and in device_data->input
+                CU_CHECK(cudaMemcpyAsync(&device_data->input.n_cells, &pinned_tmp.max_input_cells, sizeof(n_input_cells) + sizeof(n_spots), cudaMemcpyHostToDevice, stream));
+
+                LOG_START(logger::l_debug) {
+                    logger::debug << stanza << "copy " << n_input_cells << " cells(in), " << n_spots << " spots\n";
+                } LOG_END;
+            }
+
+            if (input.new_cells && n_input_cells > 0u) {
+                const auto cell_sz = 3u * n_input_cells * sizeof(float_type);
+                CU_CHECK(cudaMemcpyAsync(gpu_state.ix, input.cell.x, cell_sz, cudaMemcpyHostToDevice, stream));
+                CU_CHECK(cudaMemcpyAsync(gpu_state.iy, input.cell.y, cell_sz, cudaMemcpyHostToDevice, stream));
+                CU_CHECK(cudaMemcpyAsync(gpu_state.iz, input.cell.z, cell_sz, cudaMemcpyHostToDevice, stream));
+                
+                LOG_START(logger::l_debug) {
+                    logger::debug << stanza << "copy (cells) "
+                                  << input.cell.x << "-->" << gpu_state.ix << ", "
+                                  << input.cell.y << "-->" << gpu_state.iy << ", "
+                                  << input.cell.z << "-->" << gpu_state.iz << '\n';
+                } LOG_END;
+            }
+
+            if (input.new_spots && n_spots > 0) {
+                const auto dst_offset = 3u * cpers.max_input_cells;
+                const auto spot_sz = n_spots * sizeof(float_type);
+                CU_CHECK(cudaMemcpyAsync(&gpu_state.ix[dst_offset], input.spot.x, spot_sz, cudaMemcpyHostToDevice, stream));
+                CU_CHECK(cudaMemcpyAsync(&gpu_state.iy[dst_offset], input.spot.y, spot_sz, cudaMemcpyHostToDevice, stream));
+                CU_CHECK(cudaMemcpyAsync(&gpu_state.iz[dst_offset], input.spot.z, spot_sz, cudaMemcpyHostToDevice, stream));
+
+                LOG_START(logger::l_debug) {
+                    logger::debug << stanza << "copy (spots) "
+                                  << input.cell.x << "-->" << &gpu_state.ix[3u * cpers.max_input_cells] << ", "
+                                  << input.cell.y << "-->" << &gpu_state.iy[3u * cpers.max_input_cells] << ", "
+                                  << input.cell.z << "-->" << &gpu_state.iz[3u * cpers.max_input_cells] << '\n';
+                } LOG_END;
+            }
         }
 
         static inline void init_cand(const key_type& state_id, const unsigned n_cand_groups, const unsigned n_vec_cgrps,
@@ -654,11 +701,6 @@ namespace {
         {
             const auto n_cand_vecs = n_cand_groups * cpers.num_candidate_vectors;
             const auto& gpu_state = ref(state_id);
-
-            auto pin_cand_len = memory_pin::on(cand_len);
-            auto pin_cand_idx = memory_pin::on(cand_idx);
-            auto pin_cell_cand = memory_pin::on(cell_cand);
-            auto pin_vec_cgrps = memory_pin::on(vec_cgrps);
 
             CU_CHECK(cudaMemcpyAsync(gpu_state.candidate_length.get(), cand_len.data(), n_cand_groups * sizeof(float_type), cudaMemcpyHostToDevice, stream));
             CU_CHECK(cudaMemsetAsync(gpu_state.candidate_value.get(), 0, n_cand_vecs * sizeof(float_type), stream));
@@ -679,22 +721,18 @@ namespace {
         // This is a blocking call that synchronizes on stream
         static inline void copy_out(const key_type& state_id, fast_feedback::output<float_type>& output, cudaStream_t stream=0)
         {
+            if (output.n_cells == 0u)
+                return;
+
             const auto& gpu_state = ref(state_id);
-            auto& pinned_tmp = const_cast<config_persistent&>(*gpu_state.tmp);
             const auto& device_data = gpu_state.data;
+            const auto cell_sz = 3u * output.n_cells * sizeof(float_type);
 
-            CU_CHECK(cudaMemcpyAsync(&pinned_tmp.max_output_cells, &device_data->output.n_cells, sizeof(output.n_cells), cudaMemcpyDeviceToHost, stream));
+            CU_CHECK(cudaMemcpyAsync(output.x, gpu_state.ox, cell_sz, cudaMemcpyDeviceToHost, stream));
+            CU_CHECK(cudaMemcpyAsync(output.y, gpu_state.oy, cell_sz, cudaMemcpyDeviceToHost, stream));
+            CU_CHECK(cudaMemcpyAsync(output.z, gpu_state.oz, cell_sz, cudaMemcpyDeviceToHost, stream));
+            CU_CHECK(cudaMemcpyAsync(output.score, gpu_state.cell_score, output.n_cells * sizeof(float_type), cudaMemcpyDeviceToHost, stream));
             CU_CHECK(cudaStreamSynchronize(stream));
-            output.n_cells = pinned_tmp.max_output_cells;
-
-            if (output.n_cells > 0u) {
-                const auto cell_sz = 3u * output.n_cells * sizeof(float_type);
-                CU_CHECK(cudaMemcpyAsync(output.x, gpu_state.ox, cell_sz, cudaMemcpyDeviceToHost, stream));
-                CU_CHECK(cudaMemcpyAsync(output.y, gpu_state.oy, cell_sz, cudaMemcpyDeviceToHost, stream));
-                CU_CHECK(cudaMemcpyAsync(output.z, gpu_state.oz, cell_sz, cudaMemcpyDeviceToHost, stream));
-                CU_CHECK(cudaMemcpyAsync(output.score, gpu_state.cell_score, output.n_cells * sizeof(float_type), cudaMemcpyDeviceToHost, stream));
-                CU_CHECK(cudaStreamSynchronize(stream));
-            }
 
             LOG_START(logger::l_debug) {
                 logger::debug << stanza << "copy out: " << output.n_cells << " cells, elements=" << gpu_state.elements.get() << ": "
@@ -1910,6 +1948,11 @@ namespace gpu {
 
         const auto& cpers = instance.cpers;
 
+        if (cpers.num_candidate_vectors < 1u)
+            throw FF_EXCEPTION("nonpositive number of candidate vectors");
+        if (instance.cpers.num_candidate_vectors > n_threads)
+            throw FF_EXCEPTION("fewer threads in a block than candidate vectors");
+
         device_data* data = nullptr;
         float_type* candidate_length = nullptr;
         float_type* candidate_value = nullptr;
@@ -2023,7 +2066,8 @@ namespace gpu {
                                                      std::move(sequentializers_ptr), std::move(stream),
                                                      ix, iy, iz,
                                                      ox, oy, oz,
-                                                     scores, dev};
+                                                     scores, dev,
+                                                     cpers.max_input_cells};
             }
 
             LOG_START(logger::l_debug) {
@@ -2087,6 +2131,9 @@ namespace gpu {
             state.end.init();
         }
 
+        const bool crt_changed = (std::memcmp(&conf_rt, &state.last_crt, sizeof(conf_rt)) != 0);
+        const bool lth_changed = (state.last_crt.length_threshold != conf_rt.length_threshold);
+
         // Check input/output
         const auto n_cells_in = std::min(in.n_cells, instance.cpers.max_input_cells);
         const auto n_cells_out = out.n_cells;
@@ -2096,8 +2143,6 @@ namespace gpu {
             throw FF_EXCEPTION("no output cells");
         if (in.n_spots <= 0u)
             throw FF_EXCEPTION("no spots");
-        if (instance.cpers.num_candidate_vectors < 1u)
-            throw FF_EXCEPTION("nonpositive number of candidate vectors");
         if (conf_rt.num_halfsphere_points < instance.cpers.num_candidate_vectors)
             throw FF_EXCEPTION("fewer halfsphere sample points than required candidate vectors");
         if ((conf_rt.num_angle_points > 0u) && (conf_rt.num_angle_points < instance.cpers.max_output_cells))
@@ -2112,43 +2157,48 @@ namespace gpu {
             throw FF_EXCEPTION("fewer threads in a block than output cells");
         if (instance.cpers.max_output_cells < out.n_cells)
             throw FF_EXCEPTION("more output cells requested than the configured maximum");
-        if (instance.cpers.num_candidate_vectors > n_threads)
-            throw FF_EXCEPTION("fewer threads in a block than candidate vectors");
         
-        // Calculate input vector candidate groups
-        std::vector<unsigned> cell_candidate(n_cells_in);                           // cell -> chosen vector idx
-        std::vector<unsigned> vec_cgrps(n_cells_in);                                // chosen vector candidate groups
-        std::vector<unsigned> candidate_idx(3u * n_cells_in);                       // vector -> cand group idx
-        std::vector<float_type> candidate_length(3u * n_cells_in, float_type{});    // cand group length (sorted !)
-        unsigned n_cand_groups = calc_cand_groups(candidate_idx, candidate_length, in, conf_rt, n_cells_in);
-        unsigned n_vec_cgrps = calc_cell_cand(cell_candidate, vec_cgrps, candidate_idx, n_cells_in);
+        gpu_stream& stream = gpu_state::stream(state_id);
+
         LOG_START(logger::l_debug) {
             logger::debug << stanza << "index on " << state.device << ", n_cells = " << n_cells_in << "(in:" << (in.new_cells?"new":"old") << ")/"
-                                    << n_cells_out << "(out), n_spots = " << in.n_spots << (in.new_spots?"new":"old") << '\n'
-                          << stanza << "  candidate_idx =";
-            for (const auto& e : candidate_idx)
-                logger::debug << ' ' << e;
-            logger::debug << ", n_cand_groups = " << n_cand_groups << '\n';
-            logger::debug << stanza << "cell_candidates =";
-            for (const auto& e : cell_candidate)
-                logger::debug << ' ' << e;
-            logger::debug << ", vec_cgrps =";
-            for (unsigned i=0u; i<n_vec_cgrps; i++)
-                logger::debug << ' ' << vec_cgrps[i];
-            logger::debug << ", n_vec_cgrps = " << n_vec_cgrps << '\n';
+                                    << n_cells_out << "(out), n_spots = " << in.n_spots << ':' << (in.new_spots?"new":"old") << '\n';
         } LOG_END;
 
+        if (crt_changed)
+            gpu_state::copy_crt(state_id, conf_rt, stream);
+            
+        if (in.new_cells || lth_changed) {
+            // Calculate input vector candidate groups
+            std::fill(std::begin(state.candidate_length_h), std::end(state.candidate_length_h), float_type{}); // need to sort
+            state.n_cand_groups = calc_cand_groups(state.candidate_idx_h, state.candidate_length_h, in, conf_rt, n_cells_in);
+            state.n_vec_cgrps = calc_cell_cand(state.cell_candidate_h, state.vec_cgrps_h, state.candidate_idx_h, n_cells_in);
+            gpu_state::init_cand(state_id, state.n_cand_groups, state.n_vec_cgrps, instance.cpers,
+                                 state.candidate_length_h, state.candidate_idx_h, state.cell_candidate_h, state.vec_cgrps_h, stream);
+
+            LOG_START(logger::l_debug) {
+                logger::debug << stanza << "  candidate_idx =";
+                for (const auto& e : state.candidate_idx_h)
+                    logger::debug << ' ' << e;
+                logger::debug << ", n_cand_groups = " << state.n_cand_groups << '\n';
+                logger::debug << stanza << "cell_candidates =";
+                for (const auto& e : state.cell_candidate_h)
+                    logger::debug << ' ' << e;
+                logger::debug << ", vec_cgrps =";
+                for (unsigned i=0u; i<state.n_vec_cgrps; i++)
+                    logger::debug << ' ' << state.vec_cgrps_h[i];
+                logger::debug << ", n_vec_cgrps = " << state.n_vec_cgrps << '\n';
+            } LOG_END;
+        }
+
         bool dbg_flag = gpu_debug_output.load();
-        gpu_stream& stream = gpu_state::stream(state_id);
         {   // find vector candidates
             const unsigned n_samples = conf_rt.num_halfsphere_points;
-            const dim3 n_blocks((n_samples + n_threads - 1) / n_threads,                                // samples
-                                instance.cpers.redundant_computations ? n_cand_groups : n_vec_cgrps);   // number of (cell representing vector) candidate groups
+            const dim3 n_blocks((n_samples + n_threads - 1) / n_threads,                                            // samples
+                                instance.cpers.redundant_computations ? state.n_cand_groups : state.n_vec_cgrps);   // number of (cell representing vector) candidate groups
             const unsigned shared_sz = std::max(instance.cpers.num_candidate_vectors * sizeof(vec_cand_t<float_type>),
                                                 sizeof(typename BlockRadixSort<float_type>::TempStorage));
-            gpu_state::copy_crt(state_id, conf_rt, stream);
             gpu_state::copy_in(state_id, instance.cpers, in, out, stream);
-            gpu_state::init_cand(state_id, n_cand_groups, n_vec_cgrps, instance.cpers, candidate_length, candidate_idx, cell_candidate, vec_cgrps, stream);
             if (timing)
                 state.start.record(stream);
             gpu_find_candidates<float_type><<<n_blocks, n_threads, shared_sz, stream>>>(gpu_state::ptr(state_id).get());
@@ -2159,8 +2209,8 @@ namespace gpu {
         #if VCANDREF == VCR_ROPT
         {
             const dim3 n_blocks{
-                instance.cpers.num_candidate_vectors,                                   // x: number of canditate vectors (per candidate group)
-                instance.cpers.redundant_computations ? n_cand_groups : n_vec_cgrps     // y: number of (cell representing vector) candidate groups
+                instance.cpers.num_candidate_vectors,                                               // x: number of canditate vectors (per candidate group)
+                instance.cpers.redundant_computations ? state.n_cand_groups : state.n_vec_cgrps     // y: number of (cell representing vector) candidate groups
             };
             gpu_refine_cand<float_type><<<n_blocks, warp_size, 0, stream>>>(gpu_state::ptr(state_id).get());
             CU_CHECK(cudaPeekAtLastError());
