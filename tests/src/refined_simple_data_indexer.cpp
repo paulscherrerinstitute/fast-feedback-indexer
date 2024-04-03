@@ -101,9 +101,9 @@ int main (int argc, char *argv[])
 
     try {
         if (argc <= 11)
-            throw std::runtime_error("missing arguments, use\n<file name> <max number of spots> <max number of output cells> "
-                                     "<number of kept candidate vectors> <number of half sphere sample points> <redundant computations?> "
-                                     "(ifss|ifse) <threshold contraction> <max dist> <min spots> <max iterations>");
+            throw std::runtime_error("missing arguments, use\n<1:file name> <2:max number of spots> <3:max number of output cells> "
+                                     "<4:number of kept candidate vectors> <5:number of half sphere sample points> <6:redundant computations?> "
+                                     "7:(ifss|ifse) <8:threshold contraction> <9:max dist> <10:min spots> <11:max iterations>");
 
         fast_feedback::config_runtime<float> crt{};         // default runtime config
         {
@@ -154,14 +154,20 @@ int main (int argc, char *argv[])
 
         auto t0 = clock::now();
 
+        float max_dist;
+        unsigned min_spots;
         if (method == "ifss") {
             fast_feedback::refine::config_ifss cifss{};   // default ifss refinement config
             parse_conf(cifss, argv);
             indexer_p = new fast_feedback::refine::indexer_ifss{cpers, crt, cifss};
+            min_spots = cifss.min_spots;
+            max_dist = cifss.max_distance;
         } else if (method == "ifse") {
             fast_feedback::refine::config_ifse cifse{}; // default ifse refinement config
             parse_conf(cifse, argv);
             indexer_p = new fast_feedback::refine::indexer_ifse{cpers, crt, cifse};
+            min_spots = cifse.min_spots;
+            max_dist = cifse.max_distance;
         } else {
             throw std::runtime_error("indexer method must be one of 'ifss', 'ifse'");
         }
@@ -200,8 +206,8 @@ int main (int argc, char *argv[])
         }
         std::cout << "scores:\n" << indexer.oScoreV() << "\n\n";
         unsigned best_cell = fast_feedback::refine::best_cell(indexer.oScoreV());
-        bool indexable = fast_feedback::refine::is_viable_cell(indexer.oCell(best_cell), indexer.Spots());
-        std::vector<unsigned> crystalls = fast_feedback::refine::compute_crystalls(indexer.oCellM(), indexer.Spots(), indexer.oScoreV());
+        bool indexable = fast_feedback::refine::is_viable_cell(indexer.oCell(best_cell), indexer.Spots(), max_dist, min_spots);
+        std::vector<unsigned> crystalls = fast_feedback::refine::select_crystals(indexer.oCellM(), indexer.Spots(), indexer.oScoreV(), max_dist, min_spots);
         std::cout << "best cell: " << best_cell << ", is viable: " << (indexable ? "true " : "false") << '\n';
         std::cout << "crystalls:\n" << Eigen::Map<Eigen::VectorX<unsigned>>(crystalls.data(), crystalls.size()) << "\n\n";
         std::cout << "timings:\n"

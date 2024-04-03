@@ -483,8 +483,8 @@ namespace fast_feedback {
                     float_type threshold = indexer<float_type>::score_parts(scores[j]).second;
                     resid = spots * cell;       // coordinates in system <cell>
                     miller = round(resid.array());
-                    if (threshold>cifss.max_distance) {
-                        resid -= miller;
+                    resid -= miller;
+                    if (threshold > cifss.max_distance) {
                         below = (resid.rowwise().norm().array() < threshold);
                         if (below.count() < cifss.min_spots)
                             goto calc_score;
@@ -505,13 +505,13 @@ namespace fast_feedback {
                     }
                     calc_score: {
                         ArrayX<float_type> dist = resid.rowwise().norm();
-                        const auto front = std::begin(dist);
-                        auto back = std::end(dist);
-                        const std::greater<float> greater{};
-                        std::make_heap(front, back, greater);
-                        for (unsigned i=0u; i<=cifss.min_spots; i++)
-                            std::pop_heap(front, back, greater), --back;
-                        scores(j) = *back;
+                        if (dist.size() < cifss.min_spots) {
+                            scores(j) = float_type{1.};
+                        } else {
+                            auto nth = std::begin(dist) + (cifss.min_spots - 1);
+                            std::nth_element(std::begin(dist), nth, std::end(dist));
+                            scores(j) = *nth;
+                        }
                     }
                     cells.block(3u * j, 0u, 3u, 3u) = cell.transpose();
                 }
@@ -638,11 +638,11 @@ namespace fast_feedback {
                 const unsigned endcell = std::min(startcell + blocksize, ncells);
                 for (unsigned j=startcell; j<endcell; j++) {
                     cell = cells.block(3u * j, 0u, 3u, 3u).transpose();  // cell: col vectors
+                    resid = spots * cell;   // coordinates in system <cell>
+                    miller = round(resid.array());
+                    resid -= miller;
                     float_type threshold = indexer<float_type>::score_parts(scores[j]).second;
                     for (unsigned niter=0; niter<cifse.max_iter && threshold>cifse.max_distance; niter++) {
-                        resid = spots * cell;   // coordinates in system <cell>
-                        miller = round(resid.array());
-                        resid -= miller;
                         below = (resid.rowwise().norm().array() < threshold);
                         if (below.count() < cifse.min_spots)
                             break;
@@ -650,16 +650,19 @@ namespace fast_feedback {
                         sel.colwise() = below;
                         HouseholderQR<Mx3> qr{sel.select(spots, .0f)};
                         cell -= qr.solve(sel.select(resid, .0f));
+                        resid = spots * cell;   // coordinates in system <cell>
+                        miller = round(resid.array());
+                        resid -= miller;
                     }
                     {
                         ArrayX<float_type> dist = resid.rowwise().norm();
-                        const auto front = std::begin(dist);
-                        auto back = std::end(dist);
-                        const std::greater<float> greater{};
-                        std::make_heap(front, back, greater);
-                        for (unsigned i=0u; i<=cifse.min_spots; i++)
-                            std::pop_heap(front, back, greater), --back;
-                        scores(j) = *back;
+                        if (dist.size() < cifse.min_spots) {
+                            scores(j) = float_type{1.};
+                        } else {
+                            auto nth = std::begin(dist) + (cifse.min_spots - 1);
+                            std::nth_element(std::begin(dist), nth, std::end(dist));
+                            scores(j) = *nth;
+                        }
                     }
                     cells.block(3u * j, 0u, 3u, 3u) = cell.transpose();
                 }
@@ -737,18 +740,28 @@ namespace fast_feedback {
             return (resid.rowwise().norm().array() < threshold).count() >= min_spots;
         }
 
-        // Return indices of cells representing crystalls
-        // Cell is considered a new crystall, if it differs by more than good n_spots
+        // Return indices of cells representing crystals
+        // Cell is considered a new crystal, if it differs by more than good n_spots
         // to other crystalls
-        template <typename CellMat, typename SpotMat, typename ScoreVec, typename float_type=typename CellMat::Scalar>
-        inline std::vector<unsigned> compute_crystalls (const Eigen::MatrixBase<CellMat>& cells,
-                                                        const Eigen::MatrixBase<SpotMat>& spots,
-                                                        const Eigen::DenseBase<ScoreVec>& scores,
-                                                        float_type threshold=.02f, unsigned min_spots=9u)
+        template <typename CellMat, typename SpotMat, typename VecX, typename float_type=typename CellMat::Scalar>
+        inline std::vector<unsigned> select_crystals (const Eigen::MatrixBase<CellMat>& cells,
+                                                      const Eigen::MatrixBase<SpotMat>& spots,
+                                                      const Eigen::DenseBase<VecX>& scores,
+                                                      float_type threshold=.02f, unsigned min_spots=9u)
         {
             using namespace Eigen;
             using Mx3 = MatrixX3<float_type>;
             using Vx = VectorX<bool>;
+
+            std::vector<unsigned> crystals;
+            const unsigned n_spots = spots.rows();
+            const unsigned n_cells = scores.size();
+            std::vector<unsigned> sorted(n_cells);
+
+            std::iota(std::begin(sorted), std::end(sorted), 0u);
+            std::sort(std::begin(sorted), std::end(sorted), [&scores](const unsigned& a, const unsigned&b) {
+                return scores[a] < scores[b];
+            });
 
             auto spots_covered = [&cells, &spots, threshold](unsigned i) -> Vx {
                 Mx3 resid = spots * cells.block(3u * i, 0u, 3u, 3u).transpose();
@@ -757,32 +770,31 @@ namespace fast_feedback {
                 return (resid.rowwise().norm().array() < threshold);
             };
 
-            unsigned n_spots = spots.rows();
-            std::vector<unsigned> crystalls;
-            std::vector<Vx> covered;
-            unsigned n_cells = cells.rows() / 3;
-            for (unsigned int i=0u; i<n_cells; i++) {
-                Vx cover = spots_covered(i);
-                unsigned cnt = cover.count();
+            Vx allcover = spots_covered(sorted[0]);
+            if (allcover.count() < min_spots)
+                return crystals;
+            crystals.push_back(sorted[0]);
+
+            auto new_spots_filt = [&allcover, n_spots](auto& cellcover) -> unsigned {
+                unsigned cnt = 0u;
+                for (unsigned i=0; i<n_spots; i++) {
+                    if (allcover[i])
+                        cellcover[i] = false;   // set spots already covered to false in cellcover
+                    else if (cellcover[i])
+                        cnt++;
+                }
+                return cnt; // number of spots covered by cellcover, but not by allcover
+            };
+
+            for (unsigned i=1u; i<n_cells; i++) {
+                Vx cellcover = spots_covered(sorted[i]);
+                const unsigned cnt = new_spots_filt(cellcover);    // modifies cellcover
                 if (cnt < min_spots)
                     continue;
-                for (unsigned k=0u; k<crystalls.size(); k++) {
-                    const unsigned j = crystalls[k];
-                    Vx common = cover.array() * covered[k].array();
-                    unsigned cocnt = common.count();
-                    if (cnt - cocnt < n_spots) {
-                        if (scores[i] < scores[j]) {
-                            crystalls[k] = i;
-                            covered[k] = std::move(cover);
-                        }
-                        goto skip;
-                    }
-                }
-                crystalls.push_back(i);
-                covered.emplace_back(std::move(cover));
-              skip: ;
+                allcover += cellcover;
+                crystals.push_back(sorted[i]);
             }
-            return crystalls;
+            return crystals;
         }
 
         // Make a lattice basis right handed
