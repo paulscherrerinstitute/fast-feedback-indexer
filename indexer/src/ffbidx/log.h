@@ -29,7 +29,6 @@ Author: hans-christian.stadler@psi.ch
 #include <iostream>
 #include <atomic>
 #include <mutex>
-#include <thread>
 #include <string>
 
 namespace fast_feedback {
@@ -53,7 +52,7 @@ namespace fast_feedback {
         // If the variable is undefined, l_undef is returned.
         unsigned get_init_log_level();
 
-        // Initalize log level using read_init_log_level()
+        // Initalize log level using get_init_log_level()
         // If the variable is undefined, the log level is not changed.
         inline void init_log_level()
         {
