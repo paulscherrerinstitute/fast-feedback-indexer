@@ -135,8 +135,18 @@ namespace fast_feedback {
             // - if callback is given, it will be called with data as the argument as soon as  index_end can be called
             inline void index_start (unsigned n_input_cells, unsigned n_spots, void(*callback)(void*)=nullptr, void* data=nullptr)
             {
-                input.n_cells = n_input_cells;
-                input.n_spots = n_spots;
+                if (n_input_cells == 0u) {
+                    input.new_cells = false;
+                } else {
+                    input.n_cells = n_input_cells;
+                    input.new_cells = true;
+                }
+                if (n_spots == 0u) {
+                    input.new_spots = false;
+                } else {
+                    input.n_spots = n_spots;
+                    input.new_spots = true;
+                }
                 idx.index_start(input, output, crt, callback, data);
             }
 
@@ -212,14 +222,14 @@ namespace fast_feedback {
             { return icells.block(3u * i, 0u, 3u, 3u); }
 
             // Coords area designated for real space input cells, fill cellwise bottom up
-            inline auto iCellM () noexcept
-            { return icells.topRows(3u * idx.cpers.max_input_cells); }
+            inline auto& iCellM () noexcept
+            { return icells; }
 
             // Input size access
-            inline unsigned n_input_cells () noexcept
+            inline unsigned n_input_cells () const noexcept
             { return input.n_cells; }
 
-            inline unsigned n_spots () noexcept
+            inline unsigned n_spots () const noexcept
             { return input.n_spots; }
 
             // Real space output cell access: cell i, vector j
@@ -266,7 +276,7 @@ namespace fast_feedback {
             // Dissect the base indexer score into two parts:
             // - main score: number of spots within a distance of trimh to closest lattice point
             // - sub score: exp2(sum[spots](log2(trim[triml..trimh](dist2int(dot(v,spot))) + delta)) / #spots) - delta
-            inline static std::pair<float_type, float_type> score_parts (float_type score)
+            inline static std::pair<float_type, float_type> score_parts (float_type score) noexcept
             {
                 float_type nsp = -std::floor(score);
                 float_type s = score + nsp;
@@ -274,7 +284,7 @@ namespace fast_feedback {
             }
 
             // Output size access
-            inline unsigned n_output_cells ()
+            inline unsigned n_output_cells () const noexcept
             { return output.n_cells; }
 
             // Runtime configuration access
@@ -544,15 +554,15 @@ namespace fast_feedback {
                 cifss.min_spots = ms;
             }
 
-            inline float_type max_distance () const noexcept
-            { return cifss.max_distance; }
-            
-            inline void max_distance (float_type d) noexcept
-            { cifss.max_distance = d; }
-
             inline unsigned min_spots () const noexcept
             { return cifss.min_spots; }
 
+            inline void max_distance (float_type d) noexcept
+            { cifss.max_distance = d; }
+
+            inline float_type max_distance () const noexcept
+            { return cifss.max_distance; }
+            
             inline void max_iter (unsigned n) noexcept
             { cifss.max_iter = n; }
 
