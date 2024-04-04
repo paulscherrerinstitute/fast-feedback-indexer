@@ -26,13 +26,10 @@ Author: hans-christian.stadler@psi.ch
 #ifndef INDEXER_REFINE_H
 #define INDEXER_REFINE_H
 
-//#include <Eigen/Core>
 #include <Eigen/Dense>
 #include <Eigen/LU>
 #include <numeric>
-#include <functional>
 #include <algorithm>
-#include <chrono>
 #include <ffbidx/exception.h>
 #include "ffbidx/indexer.h"
 #include "ffbidx/log.h"

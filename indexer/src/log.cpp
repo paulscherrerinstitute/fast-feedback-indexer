@@ -26,11 +26,7 @@ Author: hans-christian.stadler@psi.ch
 #define _INDEXER_LOG_IMPL_
 
 #include <map>
-#include <string>
-#include <iostream>
 #include <sstream>
-#include <atomic>
-#include <mutex>
 #include "ffbidx/log.h"
 #include "ffbidx/exception.h"
 

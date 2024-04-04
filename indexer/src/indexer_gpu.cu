@@ -23,9 +23,6 @@ DAMAGE.
 Author: hans-christian.stadler@psi.ch
 */
 
-#include <iostream>
-#include <atomic>
-#include <mutex>
 #include <vector>
 #include <cstdlib>
 #include <sstream>
