@@ -3,3 +3,4 @@
 /install/
 __pycache__/
 /doc/algorithm/*
+/doc/api/*
