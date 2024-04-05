@@ -30,7 +30,7 @@ Author: hans-christian.stadler@psi.ch
 #include <Eigen/LU>
 #include <numeric>
 #include <algorithm>
-#include <ffbidx/exception.h>
+#include "ffbidx/exception.h"
 #include "ffbidx/indexer.h"
 #include "ffbidx/log.h"
 

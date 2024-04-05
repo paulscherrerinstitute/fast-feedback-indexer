@@ -45,7 +45,7 @@ help:
 	@echo "  - CUDA runtime"
 	@echo "  - Eigen3 header only library"
 	@echo "  - Fast feedback indexer library"
-	@echo "taregts:"
+	@echo "targets:"
 	@echo "  - $(TARGET): produces the executable (default)"
 	@echo "  - clean: remove the executable"
 	@echo "env vars:"
