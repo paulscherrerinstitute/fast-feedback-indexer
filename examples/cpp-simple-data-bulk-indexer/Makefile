@@ -1,6 +1,8 @@
 FFBIDX_PKG = fast_indexer
 EIGEN_PKG = eigen3
 
+ifneq ($(MAKECMDGOALS), help)
+
 ifndef CUDART_PKG
   $(error please define CUDART_PKG as the pkg-config name to use for finding the cuda runtime)
 endif
@@ -25,13 +27,18 @@ LIBRARY_FLAGS := $(LDFLAGS) $(shell pkg-config --libs $(CUDART_PKG)) $(shell pkg
 
 TARGET := simple-data-bulk-indexer
 
+.PHONY: clean
+
 $(TARGET): $(TARGET).cpp
 	$(CXX) $(COMPILER_FLAGS) $< -o $@ $(LIBRARY_FLAGS)
 
 clean:
 	rm $(TARGET)
 
-# Sorry if this help is not super useful, as the package vars need to be set correctly even for this target
+endif
+
+.PHONY: help
+
 help:
 	@echo "Makefile using pkg-config"
 	@echo "requirements:"
@@ -46,5 +53,3 @@ help:
 	@echo "  - CXXFLAGS"
 	@echo "  - LDFLAGS"
 	@echo "  - CUDART_PKG    pkg-config package name for cuda runtime (mandatory)"
-
-.PHONY: clean help
