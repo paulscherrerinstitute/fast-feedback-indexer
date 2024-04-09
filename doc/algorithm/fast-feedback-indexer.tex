@@ -179,7 +179,7 @@ After collecting candidate orientations in the sets $\mathcal{P}_i$, a refinemen
 \vect{c}_{i,p} = \begin{pmatrix} c_1 \\ \vdots \\ c_n \end{pmatrix}, \vect{c}_{i,p}\in \mathbb{Z}^{n}
 \]
 %
-In \cite{toro-indexer} this vector is given by the so called oracle. In the end, we want to select spots and adapt a vector to these spots, akin to (\ref{eq:solution-set}). For the selection process, we introduce the following notation
+In \cite{toro-indexer} this vector is given by the so called oracle. The idea to keep this vector fixed during refinement is due to Luis Felipe Barba Flores from SDSC. In the end, we want to select spots and adapt a vector to these spots, akin to (\ref{eq:solution-set}). For the selection process, we introduce the following notation
 %
 \begin{align}
 \filter{\vect{v}\, op\, x} &:= \begin{bmatrix}
@@ -399,7 +399,7 @@ After collecting candidate cell orientations in the set $\mathcal{Q}$, a refinem
  \mat{C}_{i,p,q} = \begin{pmatrix} \vect{c}_1 \\ \vdots \\ \vect{c}_n \end{pmatrix}, \mat{C}_{i,p,q}\in \mathbb{Z}^{n\times 3}
 \]
 %
-In analogy to vector orientation refinement, this vector is given in \cite{toro-indexer} by the so called oracle. Through iterative fits to selected spots, we want to adapt the candidate unit cell to these spots, akin to (\ref{eq:solution-set}).
+In analogy to vector orientation refinement, this matrix is given in \cite{toro-indexer} by the so called oracle. The idea to keep this matrix fixed during refinement is from Luis Felipe Barba Flores from SDSC. Through iterative fits to selected spots, we want to adapt the candidate unit cell to these spots, akin to (\ref{eq:solution-set}).
 
 \begin{algorithm}
 \caption{Cell orientation refinement}
