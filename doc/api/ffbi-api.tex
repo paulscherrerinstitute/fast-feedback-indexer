@@ -774,20 +774,31 @@ The following code first creates a toy setup by hardcoding some Miller indices i
 #include <Eigen/LU>
 #include <iostream>
 #include <cmath>
+#include <atomic>
+#include <thread>
+#include <chrono>
 #include <ffbidx/refine.h>
 
 using std::cout;
+using std::flush;
+using std::atomic_bool;
 using Mx3 = Eigen::MatrixX3f;
 using M3 = Eigen::Matrix3f;
 using Vx = Eigen::VectorXf;
 using Eigen::Map;
 using LU = Eigen::FullPivLU<M3>;
+using namespace std::chrono_literals;
 using namespace fast_feedback;
 using ifss = refine::indexer_ifss<>;
 using refine::best_cell;
 using refine::is_viable_cell;
 constexpr float PI = 3.14159265358979323846;
 constexpr float _60 = PI/3.0f;
+
+void callback(void *data) {
+  cout << '!' << flush;
+  ((atomic_bool*)data)->store(true);
+};
 
 int main(int argc, char* argv[]) {
   float coords[3][10] = {
@@ -841,28 +852,225 @@ int main(int argc, char* argv[]) {
   memory_pin pin_spots{Spots};
   memory_pin pin_cand{Cand};
   memory_pin pin_score{Score};
+  memory_pin pin_cr = memory_pin::on(cr);
 
   indexer<> indexer(cp);
 
-  indexer.index(in, out, cr);
-  ifss::refine(Spots, Cand, Score, ci);
+  atomic_bool finished{false};
+  indexer.index_start(
+    in, out, cr,
+    callback, (void*)&finished
+  );
+  while (! finished.load()) {
+    cout << '.';
+    std::this_thread::sleep_for(100us);
+  }
+  cout << '\n';
+  indexer.index_end(out);
+  ifss::refine(Spots, Cand, Score, ci, 0, 2);
+  ifss::refine(Spots, Cand, Score, ci, 1, 2);
   unsigned best = best_cell(Score);
 
   cout << "Cand:\n" << Cand
        << "\nScore:\n" << Score
        << "\nBest: " << best << '\n';
 
+  float sf = Score(best);
   M3 Bf = Cand.block(3*best, 0, 3, 3);
-  bool viable = is_viable_cell(Bf, Spots, .01f, 6u);
+  bool viable = (sf < .001f);
 
   cout << "B found:\n" << Bf
-       << "\nScore: " << Score(best)
+       << "\nScore: " << sf
        << ", Viable: " << (viable?"yes":"no")
        << "\nComputed Coords:\n"
        << (Spots * Bf.transpose()) << '\n';
 }
 \end{lstlisting}
 %
-Notice how the program sets up space for 32 candidate unit cells and their score. Also note how these Eigen matrices and vectors are pinned. Since they are C++ containers, they can be used as the argument for the \emph{memory\_pin} contructors directly. The coordinate $\vect{x},\vect{y},\vect{z}$ vectors can easily be extracted from Eigen matrices, since they have a column major memory layout.
+Notice how the program sets up space for 32 candidate unit cells and their score. Also note how these Eigen matrices and vectors are pinned. Since they are C++ containers, they can be used as the argument for the \emph{memory\_pin} contructors directly. The coordinate $\vect{x},\vect{y},\vect{z}$ vectors can easily be extracted from Eigen matrices, since they have a column major memory layout. Note how the runtime configuration \emph{cr} is pinned.
+
+The code launches the indexing on the GPU asynchronously, giving the \emph{callback} function an argument to the boolean \emph{finished}. This allows to execiute other code while the first part of the indexing operation is running on the GPU. For synchronous operation, the \emph{index\_start} and \emph{index\_end} pair can be replaced with the simpler \emph{index} variant.
+
+For illustration purposes, the final refinement step on CPU is split into two blocks. These are handled consecutively here - real code should handle them concurrently.
+
+Because scores have not been tampered with, the viability check can be done by comparing the score directly to a threshold. The minimal number of spots is taken from the \emph{ifss} refinement configuration, the default of which is stored as a member of \emph{ci} here. Otherwise, for example if \emph{cell\_similarity} was used as a penalty term to enhance the score, the \emph{is\_viable\_cell} function would have to be called to achieve the same.
+
+\subsection{\emph{Convenience} API}
+
+The \emph{convenience} API indexer wrappers provide space for storing data and also handle pinning. It is still the programmers responsibility to make sure underlying memory of the data is not moved. The following provides the same as before, with the exception that refinement is done in one block. Splitting refinement up into several blocks is not possible with the convenience indexer wrappers.
+%
+\begin{lstlisting}
+#include <Eigen/LU>
+#include <iostream>
+#include <cmath>
+#include <atomic>
+#include <thread>
+#include <chrono>
+#include <ffbidx/refine.h>
+
+using std::cout;
+using std::flush;
+using std::atomic_bool;
+using Mx3 = Eigen::MatrixX3f;
+using M3 = Eigen::Matrix3f;
+using Vx = Eigen::VectorXf;
+using Eigen::Map;
+using LU = Eigen::FullPivLU<M3>;
+using namespace std::chrono_literals;
+using namespace fast_feedback;
+using ifss = refine::indexer_ifss<>;
+using refine::best_cell;
+constexpr float PI = 3.14159265358979323846;
+constexpr float _60 = PI/3.0f;
+
+void callback(void *data) {
+    cout << '!' << flush;
+    ((atomic_bool*)data)->store(true);
+};
+
+int main(int argc, char* argv[]) {
+  float coords[3][10] = {
+    {1.0, 4.0, 1.0, 2.0, 6.0, 4.0, 7.0, 8.0, 5.0, 9.0},
+    {2.0, 5.0, 1.0, 1.0, 3.0, 5.0, 1.0, 2.0, 7.0, 8.0},
+    {3.0, 6.0, 7.0, 4.0, 1.0, 2.0, 3.0, 6.0, 5.0, 8.0}
+  };
+  float base[3][3] = {
+    {2.0, 0.0, 0.0},
+    {0.0, 1.0, 0.0},
+    {0.0, 0.0, 1.0}
+  };
+  float rot60z[3][3] = {
+    {  cosf(_60), sinf(_60), 0 },
+    { -sinf(_60), cosf(_60), 0 },
+    {          0,         0, 1 }
+  };
+  Mx3 Coords = Map<Mx3>((float*)coords, 10, 3);
+  M3 B0 = Map<M3>((float*)base, 3, 3);
+  M3 R60z = Map<M3>((float*)rot60z, 3, 3);
+  M3 B = B0 * R60z.transpose();
+  LU lu(B);
+  M3 Binv = lu.inverse();
+  Mx3 Spots = Coords * Binv.transpose();
+
+  cout << "True Coords:\n" << Coords
+       << "\nB0:\n" << B0
+       << "\nR60z:\n" << R60z
+       << "\nB:\n" << B
+       << "\nBinv:\n" << Binv
+       << "\nSpots:\n" << Spots << '\n';
+
+  config_persistent<> cp{
+    32, 1, 10, 32, true
+  };
+  config_runtime<> cr{};
+  refine::config_ifss<> ci{};
+
+  ifss indexer(cp, cr, ci);
+  indexer.spotM() = Spots;
+  indexer.iCellM() = B0;
+
+  atomic_bool finished{false};
+  indexer.index_start(1, 10, callback, &finished);
+  while (! finished.load()) {
+    cout << '.';
+    std::this_thread::sleep_for(100us);
+  }
+  cout << '\n';
+  indexer.index_end();
+  unsigned best = best_cell(indexer.oScoreV());
+
+  cout << "Cand:\n" << indexer.oCellM()
+       << "\nScore:\n" << indexer.oScoreV()
+       << "\nBest: " << best << '\n';
+
+  float sf = indexer.oScore(best);
+  M3 Bf = indexer.oCell(best);
+  bool viable = (sf < .001f);
+
+  cout << "B found:\n" << Bf
+       << "\nScore: " << sf
+       << ", Viable: " << (viable?"yes":"no")
+       << "\nComputed Coords:\n"
+       << (Spots * Bf.transpose()) << '\n';
+}
+\end{lstlisting}
+%
+Note the absence of explicit memory pinning. The consequence is that data needs to copied to pinned memory. Here, since we know the capacities set up by the persistent configuration \emph{cp} fit exactly, the internal spot matrix is assigned to directly, using the \emph{spotM} function to get its reference. In a more realistic scenario, spots would have to be assigned one by one using the \emph{spotX}, \emph{spotY}, and \emph{spotZ} methods, or the Eigen \emph{block} or \emph{row} methods on the internal spot matrix. A similar issue exists with the input cell, where we could have used the \emph{iCell} method instead for getting a reference in order to assign the single input cell. Or we could have used the \emph{iCellX}, \emph{iCellY}, and \emph{iCellZ} methods to assign input cell vector elements one by one.
+
+\subsection{Python API}
+\lstset{language=Python}
+
+The Python API aimed at experimenting with the algorithm. The equivalent of the above two calculations is listed below.
+%
+\begin{lstlisting}
+import numpy as np
+import ffbidx
+
+_60 = np.pi/3.0
+
+Coords = np.reshape(
+  np.array(
+    [1.0, 4.0, 1.0, 2.0, 6.0, 4.0, 7.0, 8.0, 5.0, 9.0,
+     2.0, 5.0, 1.0, 1.0, 3.0, 5.0, 1.0, 2.0, 7.0, 8.0,
+     3.0, 6.0, 7.0, 4.0, 1.0, 2.0, 3.0, 6.0, 5.0, 8.0],
+    dtype='float32'
+  ),
+  (10,3), order='F'
+)
+
+B0 = np.reshape(
+  np.array(
+    [2.0, 0.0, 0.0,
+     0.0, 1.0, 0.0,
+     0.0, 0.0, 1.0],
+    dtype='float32'
+  ),
+  (3,3), order='F'
+)
+
+R60z = np.reshape(
+  np.array(
+    [np.cos(_60), np.sin(_60), 0,
+     -np.sin(_60), np.cos(_60), 0,
+     0, 0, 1],
+    dtype='float32'
+  ),
+  (3,3), order='F'
+)
+
+B = np.matmul(B0, R60z.T, order='F')
+Binv = np.asfortranarray(np.linalg.inv(B))
+Spots = np.matmul(Coords, Binv.T, order='F')
+
+print("True Coords:\n", Coords)
+print("B0:\n", B0)
+print("R60z:\n", R60z)
+print("B:\n", B)
+print("Binv:\n", Binv)
+print("Spots:\n", Spots)
+
+handle = ffbidx.indexer(32, 1, 10, 32, True)
+Cand, Score = ffbidx.index(handle, Spots, B0,
+                           method='ifss',
+                           n_output_cells=32)
+ffbidx.release(handle)
+best = np.argmin(Score)
+Cand = np.reshape(Cand.ravel(), (3*32,3), order='F')
+
+print("Cand\n", Cand)
+print("Score\n", Score)
+print("Best:", best)
+
+sf = Score[best]
+Bf = Cand[3*best:3*best+3, 0:3]
+viable = (sf < .001)
+
+print("B found:\n", Bf)
+print(f"Score: {sf}, Viable: {viable}")
+print("Computed Coords:\n", Spots@Bf.T)
+\end{lstlisting}
+%
+Unfortunately, the column major memory ordering is a bit awkward to keep up. Instead of \emph{F\_CONTIGUOUS} arrays, it would also be possible to work with \emph{C\_CONTIGUOUS} arrays in their transposed versions. The Python API currently lacks the means to achieve the best performance.
+
 %\printbibliography
 \end{document}

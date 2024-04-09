@@ -49,8 +49,6 @@ int main(int argc, char* argv[]) {
     LU lu(B);
     M3 Binv = lu.inverse();
     Mx3 Spots = Coords * Binv.transpose();
-    Mx3 Cand(3*32, 3);
-    Vx Score(32);
 
     cout << "True Coords:\n" << Coords
          << "\nB0:\n" << B0
@@ -59,47 +57,32 @@ int main(int argc, char* argv[]) {
          << "\nBinv:\n" << Binv
          << "\nSpots:\n" << Spots << '\n';
 
-    input<> in{
-        {&B0(0,0), &B0(0,1), &B0(0,2)},
-        {&Spots(0,0), &Spots(0,1), &Spots(0,2)},
-        1, 10, true, true
-    };
-    output<> out{
-        &Cand(0,0), &Cand(0,1), &Cand(0,2),
-        &Score(0), 32
-    };
     config_persistent<> cp{
         32, 1, 10, 32, true
     };
     config_runtime<> cr{};
     refine::config_ifss<> ci{};
 
-    memory_pin pin_b0{B0};
-    memory_pin pin_spots{Spots};
-    memory_pin pin_cand{Cand};
-    memory_pin pin_score{Score};
-    memory_pin pin_cr = memory_pin::on(cr);
-
-    indexer<> indexer(cp);
+    ifss indexer(cp, cr, ci);
+    indexer.spotM() = Spots;
+    indexer.iCellM() = B0;
 
     atomic_bool finished{false};
-    indexer.index_start(in, out, cr, callback, (void*)&finished);
+    indexer.index_start(1, 10, callback, &finished);
     while (! finished.load()) {
         cout << '.';
         std::this_thread::sleep_for(100us);
     }
     cout << '\n';
-    indexer.index_end(out);
-    ifss::refine(Spots, Cand, Score, ci, 0, 2);
-    ifss::refine(Spots, Cand, Score, ci, 1, 2);
-    unsigned best = best_cell(Score);
+    indexer.index_end();
+    unsigned best = best_cell(indexer.oScoreV());
 
-    cout << "Cand:\n" << Cand
-         << "\nScore:\n" << Score
+    cout << "Cand:\n" << indexer.oCellM()
+         << "\nScore:\n" << indexer.oScoreV()
          << "\nBest: " << best << '\n';
 
-    float sf = Score(best);
-    M3 Bf = Cand.block(3*best, 0, 3, 3);
+    float sf = indexer.oScore(best);
+    M3 Bf = indexer.oCell(best);
     bool viable = (sf < .001f);
 
     cout << "B found:\n" << Bf
