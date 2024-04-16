@@ -20,6 +20,11 @@ else()
 endif()
 
 if (BUILD_FAST_INDEXER OR BUILD_FAST_INDEXER_STATIC)
+        add_custom_target(version_txt
+                ${CMAKE_COMMAND} -D SRC=${CMAKE_SOURCE_DIR}/indexer/src/version.h.in
+                                 -D DST=${CMAKE_SOURCE_DIR}/indexer/src/ffbidx/version.h
+                                 -P ${CMAKE_SOURCE_DIR}/indexer/src/GenerateVersionH.cmake
+        )
         set(THREADS_PREFER_PTHREAD_FLAG ON)
         find_package(Threads REQUIRED)
         find_package(Eigen3 3.4 NO_MODULE)
@@ -53,6 +58,7 @@ if(BUILD_FAST_INDEXER)
                 indexer.cpp
                 log.cpp
                 ${fast_indexer_PUB_HEADER_LIST})
+        add_dependencies(fast_indexer version_txt)
         set_target_properties(fast_indexer PROPERTIES
                 CUDA_RUNTIME_LIBRARY Shared
                 SOVERSION 0
@@ -88,6 +94,7 @@ if(BUILD_FAST_INDEXER_STATIC)
                 indexer.cpp
                 log.cpp
                 ${fast_indexer_PUB_HEADER_LIST})
+        add_dependencies(fast_indexer_static version_txt)
         set_target_properties(fast_indexer_static PROPERTIES
                 CUDA_RUNTIME_LIBRARY Static
                 VERSION 0.1.0)

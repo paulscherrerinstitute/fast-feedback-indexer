@@ -1,0 +1,6 @@
+#ifndef VERSION_H
+#define VERSION_H
+
+constexpr static auto version_string = @VERSION_TXT@;
+
+#endif

@@ -32,6 +32,8 @@ Author: hans-christian.stadler@psi.ch
 
 namespace {
 
+    #include "ffbidx/version.h"
+
     using namespace fast_feedback::logger;
 
     const std::map<std::string, unsigned> string_to_level = {
@@ -47,13 +49,21 @@ namespace {
 
     constexpr char INDEXER_LOG_LEVEL[] = "INDEXER_LOG_LEVEL";
 
+    inline bool initialized = false;
+
 } // namespace
 
 namespace fast_feedback {
     namespace logger {
 
+        const char* get_version()
+        {
+            return version_string;
+        }
+
         unsigned get_init_log_level()
         {
+            unsigned level = l_undef;
             char* l_string = std::getenv(INDEXER_LOG_LEVEL);
             if (l_string != nullptr) {
                 auto entry = string_to_level.find(l_string);
@@ -65,9 +75,14 @@ namespace fast_feedback {
                     levels_list.erase(levels_list.size() - 2);
                     throw FF_EXCEPTION_OBJ << "illegal value for " << INDEXER_LOG_LEVEL << ": " << l_string << " (should be in [" << levels_list << "])\n";
                 }
-                return entry->second;
+                level = entry->second;
             }
-            return l_undef;
+            if (!initialized && (level >= l_info)) {
+                initialized = true;
+                std::lock_guard logger_output_lock{lock()};
+                std::clog << "(version) " << get_version() << '\n';
+            }
+            return level;
         }
 
         const char* level_to_string(unsigned log_level)

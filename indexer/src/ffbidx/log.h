@@ -33,7 +33,6 @@ Author: hans-christian.stadler@psi.ch
 
 namespace fast_feedback {
     namespace logger {
-
         // Log levels
         constexpr unsigned l_fatal = 0u;    // Log fatal errors
         constexpr unsigned l_error = 1u;    // Log errors
@@ -45,6 +44,22 @@ namespace fast_feedback {
         // Current log level, default is l_error
         // Logging will react to changes dynamically
         inline std::atomic<unsigned> level{l_error};
+
+        // Get string representation for log level
+        const char* level_to_string(unsigned log_level);
+
+        // Check if log level is active
+        template<unsigned log_level>
+        inline bool level_active() noexcept
+        {
+            return log_level <= level.load();
+        }
+
+        // Get common log output lock
+        std::mutex& lock() noexcept;
+
+        // Get version string
+        const char* get_version();
 
         // Get log level from environment, if given
         // Parses the environment variable INDEXER_LOG_LEVEL
@@ -60,19 +75,6 @@ namespace fast_feedback {
             if (new_level != l_undef)
                 level.store(new_level);
         }
-
-        // Get string representation for log level
-        const char* level_to_string(unsigned log_level);
-
-        // Check if log level is active
-        template<unsigned log_level>
-        inline bool level_active() noexcept
-        {
-            return log_level <= level.load();
-        }
-
-        // Get common log output lock
-        std::mutex& lock() noexcept;
 
         // Logger writes to clog
         // Flushes only if log_level is l_fatal
