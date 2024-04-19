@@ -56,7 +56,8 @@ A tuple of numpy arrays *(output_cells, scores)*
 - **delta**: > 0 - triml, $\log_2$ curve position, lower values will be more selective in choosing close spots
 - **dist1**: spots within this distance are contributing to the score in the vector sampling step (set to *trimh* if <=0)
 - **dist3**: spots within this distance are contributing to the score in the cell sampling step (set to *trimh* if <=0)
-- **num_sample_points** is the number of sampling points per sample vector length on the half sphere
+- **num_halfsphere_points** is the number of sampling points per sample vector length on the half sphere for vector sampling
+- **num_angle_points** is the number of angular sampling points for cell rotation sampling
 - **n_output_cells** is the number of desired output cells
 - **contraction** threshold contraction parameter for methods *'ifss'* and *'ifse'*
 - **max_dist** maximum distance parameter for methods *'ifss'* and *'ifse'*

@@ -1,7 +1,6 @@
 find_package(Git)
 
 if(GIT_EXECUTABLE)
-    # cmake_path(GET SRC ROOT_PATH WORKING_DIR)
     execute_process(
         COMMAND ${GIT_EXECUTABLE} log --pretty=format:"%H: %aD" -1
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}

@@ -722,6 +722,160 @@ namespace fast_feedback {
 
         }; // indexer_ifse
 
+        // Iterative fit to selected spots reciprocal refinement indexer extra config
+        template <typename float_type=float>
+        struct config_ifssr final {
+            float_type threshold_contraction=.8;    // contract error threshold by this value in every iteration
+            float_type max_distance=.002;           // max distance to reciprocal spots for inliers
+            unsigned min_spots=6;                   // minimum number of spots to fit against
+            unsigned max_iter=15;                   // max number of iterations
+        };
+
+        // Iterative fit to selected spots refinement indexer
+        template <typename float_type=float>
+        class indexer_ifssr : public indexer<float_type> {
+            config_ifssr<float_type> cifssr;
+          public:
+            inline static void check_config (const config_ifssr<float_type>& c)
+            {
+                if (c.threshold_contraction <= float_type{.0})
+                    throw FF_EXCEPTION("nonpositive threshold contraction");
+                if (c.threshold_contraction >= float_type{1.})
+                    throw FF_EXCEPTION("threshold contraction >= 1");
+                if (c.min_spots <= 3)
+                    throw FF_EXCEPTION("min spots <= 3");
+            }
+
+            inline indexer_ifssr (const fast_feedback::config_persistent<float_type>& cp,
+                                  const fast_feedback::config_runtime<float_type>& cr,
+                                  const config_ifssr<float_type>& c)
+                : indexer<float_type>{cp, cr}, cifssr{c}
+            {
+                check_config(c);
+            }
+
+            inline indexer_ifssr (indexer_ifssr&&) = default;
+            inline indexer_ifssr& operator= (indexer_ifssr&&) = default;
+            inline ~indexer_ifssr () override = default;
+
+            indexer_ifssr () = delete;
+            indexer_ifssr (const indexer_ifssr&) = delete;
+            indexer_ifssr& operator= (const indexer_ifssr&) = delete;
+
+            // Refine cells
+            //
+            // This call splits cells into nblocks cell blocks to allow multithreaded cell refinement.
+            // All threads must use a common nblocks parameter and each thread an individual block parameter.
+            //
+            // input:
+            // - spots      spot reciprocal coordinates matrix
+            // - cells      output cells real space coordinates matrix like the one in the base indexer
+            // - scores     output cell scores matrix with scores coming from the base indexer
+            // - cpers      persistent config for the matrices
+            // - cifssr     ifssr config
+            // - block      which of the N cell blocks
+            // - nblocks    use N cell blocks
+            // output:
+            // - cells      the refined cells
+            // - scores     refined cell scores: largest distance of the min_spots closest to their approximated lattice points
+            template<typename MatX3, typename VecX>
+            inline static void refine (const Eigen::Ref<Eigen::MatrixX3<float_type>>& spots,
+                                       Eigen::DenseBase<MatX3>& cells,
+                                       Eigen::DenseBase<VecX>& scores,
+                                       const config_ifssr<float_type>& cifssr,
+                                       unsigned block=0, unsigned nblocks=1)
+            {
+                using namespace Eigen;
+                using Mx3 = MatrixX3<float_type>;
+                using M3 = Matrix3<float_type>;
+                const unsigned nspots = spots.rows();
+                const unsigned ncells = scores.rows();
+                VectorX<bool> below{nspots};
+                MatrixX3<bool> sel{nspots, 3u};
+                Mx3 resid{nspots, 3u};
+                Mx3 miller{nspots, 3u};
+                M3 cell;
+                const unsigned blocksize = (ncells + nblocks - 1u) / nblocks;
+                const unsigned startcell = block * blocksize;
+                const unsigned endcell = std::min(startcell + blocksize, ncells);
+                for (unsigned j=startcell; j<endcell; j++) {
+                    if (nspots < cifssr.min_spots) {
+                        scores(j) = float_type{1.};
+                        continue;
+                    }
+                    cell = cells.block(3u * j, 0u, 3u, 3u).transpose(); // cell: col vectors
+                    float_type threshold = indexer<float_type>::score_parts(scores[j]).second;
+                    for (unsigned niter=1; niter<cifssr.max_iter && threshold>cifssr.max_distance; niter++) {
+                        miller = round((spots * cell).array());
+                        resid = miller * cell.inverse();    // reciprocal spots induced by <cell>
+                        resid -= spots;                     // distance between induced and given spots
+                        below = (resid.rowwise().norm().array() < threshold);
+                        if (below.count() < cifssr.min_spots)
+                            break;
+                        threshold *= cifssr.threshold_contraction;
+                        sel.colwise() = below;
+                        HouseholderQR<Mx3> qr{sel.select(spots, .0f)};
+                        cell = qr.solve(sel.select(miller, .0f));
+                    }
+                    {   // calc score
+                        miller = round((spots * cell).array());
+                        resid = miller * cell.inverse();    // reciprocal spots induced by <cell>
+                        resid -= spots;                     // distance between induced and given spots
+                        ArrayX<float_type> dist = resid.rowwise().norm();
+                        auto nth = std::begin(dist) + (cifssr.min_spots - 1);
+                        std::nth_element(std::begin(dist), nth, std::end(dist));
+                        scores(j) = *nth;
+                    }
+                    cells.block(3u * j, 0u, 3u, 3u) = cell.transpose();
+                }
+            }
+
+            // Refined result
+            inline void index_end () override
+            {
+                indexer<float_type>::index_end();
+                refine(this->Spots(), this->ocells, this->scores, cifssr);
+            }
+
+            // ifss configuration access
+            inline void threshold_contraction (float_type tc)
+            {
+                if (tc <= float_type{.0})
+                    throw FF_EXCEPTION("nonpositive threshold contraction");
+                if (tc >= float_type{1.})
+                    throw FF_EXCEPTION("threshold contraction >= 1");
+                cifssr.threshold_contraction = tc;
+            }
+
+            inline float_type threshold_contraction () const noexcept
+            { return cifssr.threshold_contraction; }
+
+            inline void min_spots (unsigned ms)
+            {
+                if (ms <= 3)
+                    throw FF_EXCEPTION("min spots <= 3");
+                cifssr.min_spots = ms;
+            }
+
+            inline unsigned min_spots () const noexcept
+            { return cifssr.min_spots; }
+
+            inline void max_distance (float_type d) noexcept
+            { cifssr.max_distance = d; }
+
+            inline float_type max_distance () const noexcept
+            { return cifssr.max_distance; }
+
+            inline void max_iter (unsigned n) noexcept
+            { cifssr.max_iter = n; }
+
+            inline unsigned max_iter () const noexcept
+            { return cifssr.max_iter; }
+
+            inline const config_ifssr<float_type>& conf_ifssr () const noexcept
+            { return cifssr; }
+        }; // indexer_ifssr
+
         // Return index for the best cell
         template <typename VecX>
         inline unsigned best_cell (const Eigen::DenseBase<VecX>& scores)

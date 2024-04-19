@@ -1377,24 +1377,17 @@ namespace {
     template<typename float_type>
     __device__ __forceinline__ void sample_point(const unsigned sample_idx, const unsigned n_samples, float_type v[3]) noexcept
     {
-        // Python equivalent:
-        // N = n_samples
-        // dl = (3. - np.sqrt(5.)) # ~2.39996323 / pi
-        // dz = 1. / N
-        // z = (1. - .5 * dz) - np.arange(0, N, dtype=float) * dz
-        // r = np.sqrt(1. - z * z)
-        // l = np.arange(0, N, dtype=float) * dl
-        // x = np.cos(np.pi * l) * r
-        // y = np.sin(np.pi * l) * r
+        // Version 2: Julia
+        // i = collect(0:np-1)
+        // dl = 3. - sqrt(5.)
+        // z = 1. .- i./(np-1)
+        // r = sqrt.(1. .- z .* z)
+        // l = i * dl
+        // x = cos.(l .* pi) .* r
+        // y = sin.(l .* pi) .* r
 
-        float_type z = 1.;
-        {
-            float_type rest = .0;
-            const float_type dz = float_type{1.} / static_cast<float_type>(n_samples);
-            const float_type si = static_cast<float_type>(sample_idx);
-            ksum(z, rest, -float_type{.5} * dz);
-            ksum(z, rest, -si * dz);
-        }
+        const float_type z = float_type{1.} - static_cast<float_type>(sample_idx) / (n_samples - 1);
+        const float_type r = util<float_type>::sqrt(float_type{1.} - z * z);
 
         float_type l = .0;
         {
@@ -1409,11 +1402,8 @@ namespace {
         float_type x, y;
         util<float_type>::sincos(l, &y, &x);
 
-        const float_type r_xy = util<float_type>::sqrt(float_type{1.} - z * z);
-        x *= r_xy;
-        y *= r_xy;
-        v[0] = x;
-        v[1] = y;
+        v[0] = x * r;
+        v[1] = y * r;
         v[2] = z;
     }
 
@@ -1719,7 +1709,7 @@ namespace {
             //             b = np.linalg.lstsq(self.spots[self.select,:], miller[self.select],rcond=-1)[0] # use least squares fit to selected spots for a better approximation vector
             //         return b
             static constexpr unsigned n_rounds = 4;
-            static constexpr float_type beta[n_rounds] = {.3, .15, .075, 0.0375};       // beta values per round
+            static constexpr float_type beta[n_rounds] = {.1, .05, .025, 0.01};         // beta values per round
             const unsigned n_cand = gridDim.x;                                          // number of candidates per candidate group
             const unsigned cand = blockIdx.x;                                           // candidate vector index (within candidate group)
             const unsigned cand_grp = blockIdx.y;                                       // candidate group index

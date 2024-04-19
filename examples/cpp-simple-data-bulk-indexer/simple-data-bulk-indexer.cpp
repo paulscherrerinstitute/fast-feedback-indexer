@@ -133,7 +133,7 @@ namespace {
     {
         if (method.empty())
             method = "ifss";
-        else if ((method != "ifss") && (method != "ifse") && (method != "raw"))
+        else if ((method != "ifss") && (method != "ifse") && (method != "ifssr") && (method != "raw"))
             error(std::string("unsupported method: ") + method);
     }
 
@@ -322,7 +322,8 @@ namespace {
     void setconf(config_persistent<float>& cpers,
                  config_runtime<float>& crt,
                  refine::config_ifss<float>& cifss,
-                 refine::config_ifse<float>& cifse)
+                 refine::config_ifse<float>& cifse,
+                 refine::config_ifssr<float>& cifssr)
     {
         cpers.max_spots = maxspot;
         cpers.max_output_cells = ncells;
@@ -336,13 +337,13 @@ namespace {
         crt.dist1 = dist1;
         crt.dist3 = dist3;
         if (contr >= .0f)
-            cifss.threshold_contraction = cifse.threshold_contraction = contr;
+            cifss.threshold_contraction = cifse.threshold_contraction = cifssr.threshold_contraction = contr;
         if (maxdist >= .0f)
-            cifss.max_distance = cifse.max_distance = maxdist;
+            cifss.max_distance = cifse.max_distance = cifssr.max_distance = maxdist;
         if (minpts > 0u)
-            cifss.min_spots = cifse.min_spots = minpts;
+            cifss.min_spots = cifse.min_spots = cifssr.min_spots = minpts;
         if (iter == 0u)
-            cifss.max_iter = cifse.max_iter = iter;
+            cifss.max_iter = cifse.max_iter = cifssr.max_iter = iter;
     }
 
     // cyclic nonnegative integer queue
@@ -431,8 +432,10 @@ namespace {
     using cfgps_t = config_persistent<float>;
     using indexer_ifss = refine::indexer_ifss<float>;
     using indexer_ifse = refine::indexer_ifse<float>;
+    using indexer_ifssr = refine::indexer_ifssr<float>;
     using cifss_t = refine::config_ifss<float>;
     using cifse_t = refine::config_ifse<float>;
+    using cifssr_t = refine::config_ifssr<float>;
     using mempin_t = memory_pin;
     using SimpleData = simple_data::SimpleData<float, simple_data::raise>;
     using Mx3 = Eigen::Matrix<float, Eigen::Dynamic, 3u>;
@@ -484,6 +487,7 @@ namespace {
         unsigned repetition = 0u;               // repetition counter
 
         unsigned rblock;                        // output cell block number to be refined next
+        std::atomic_uint blkcnt;                // output cell block refined counter
         int id;                                 // index into work item list
 
         time_point tp;                          // start time of a work item step
@@ -495,7 +499,7 @@ namespace {
               cells{3u * ncells, 3u}, scores{ncells},
               in{{&coords(0,0), &coords(0,1), &coords(0,2)}, {&coords(3,0), &coords(3,1), &coords(3,2)}, 1u, maxspot, true, true},
               out{&cells(0,0), &cells(0,1), &cells(0,2), scores.data(), ncells},
-              pin_coords{coords}, pin_cells{cells}, pin_scores(scores), rblock{0u}, id{wid}
+              pin_coords{coords}, pin_cells{cells}, pin_scores(scores), rblock{0u}, blkcnt{0}, id{wid}
         {}
     };
 
@@ -614,7 +618,7 @@ namespace {
     }
 
     // worker thread
-    void worker (const cfgrt_t& crt, const cifss_t& cifss, const cifse_t& cifse, unsigned id)
+    void worker (const cfgrt_t& crt, const cifss_t& cifss, const cifse_t& cifse, const cifssr_t& cifssr, unsigned id)
     {
         try {
             double read_time_priv = .0;     // thread private accumulator for simple data reading time
@@ -715,12 +719,18 @@ namespace {
                                     indexer_ifss::refine(work->coords.bottomRows(work->in.n_spots), work->cells, work->scores, cifss, block, refinement_blocks);
                                 else if (method == "ifse")
                                     indexer_ifse::refine(work->coords.bottomRows(work->in.n_spots), work->cells, work->scores, cifse, block, refinement_blocks);
+                                else if (method == "ifssr")
+                                    indexer_ifssr::refine(work->coords.bottomRows(work->in.n_spots), work->cells, work->scores, cifssr, block, refinement_blocks);
 
                                 refine_time_priv += duration{clock::now() - t}.count();
 
+                                block = work->blkcnt.fetch_add(1u); // finished block
                                 if (block + 1u >= refinement_blocks) {
                                     work->repetition++;
                                     if (work->repetition < repetitions) {
+                                        // init work item
+                                        work->rblock = 0u;
+                                        work->blkcnt = 0u;
                                         work->state = index_start;
                                         work_queue.push_back(witem_id);
                                     } else {
@@ -749,10 +759,10 @@ namespace {
     }
 
     // initialize thread pool
-    void init_pool (const cfgrt_t& crt, const cifss_t& cifss, const cifse_t& cifse)
+    void init_pool (const cfgrt_t& crt, const cifss_t& cifss, const cifse_t& cifse, const cifssr_t& cifssr)
     {
         for (unsigned i=1u; i<worker_threads; i++) // don't put the main thread into the list
-            thread_pool.push_back(std::thread(worker, crt, cifss, cifse, i));
+            thread_pool.push_back(std::thread(worker, crt, cifss, cifse, cifssr, i));
     }
 
     // join all threads in the thread pool (except main thread)
@@ -776,12 +786,13 @@ int main (int argc, char *argv[])
         cfgrt_t crt{};
         cifss_t cifss{};
         cifse_t cifse{};
+        cifssr_t cifssr{};
         mempin_t pin_crt{mempin_t::on(crt)};
 
         initargs(cpers, crt);
         argparse(argc, argv);
         checkargs();
-        setconf(cpers, crt, cifss, cifse);
+        setconf(cpers, crt, cifss, cifse, cifssr);
 
         debug << stanza << "cpers: cells=" << cpers.max_output_cells << ", maxspots=" << cpers.max_spots
                         << ", cands=" << cpers.num_candidate_vectors << ", reducalc=" << cpers.redundant_computations << '\n'
@@ -790,18 +801,20 @@ int main (int argc, char *argv[])
                         << ", dist1=" << crt.dist1 << ", dist3=" << crt.dist3 << '\n';
         if (method == "ifss") {
             debug << stanza << "cifss: contr=" << cifss.threshold_contraction << ", minpts=" << cifss.min_spots << ", iter=" << cifss.max_iter << '\n';
-        } else {
+        } else if (method == "ifse") {
             debug << stanza << "cifse: contr=" << cifse.threshold_contraction << ", minpts=" << cifss.min_spots << ", iter=" << cifse.max_iter << '\n';
+        } else { // ifssr
+            debug << stanza << "cifssr: contr=" << cifssr.threshold_contraction << ", minpts=" << cifssr.min_spots << ", iter=" << cifssr.max_iter << '\n';
         }
 
         init_indexers(cpers);
         init_work();
-        init_pool(crt, cifss, cifse);
+        init_pool(crt, cifss, cifse, cifssr);
 
         auto t0 = clock::now();
 
         pool_start.store(true);                 // activate start switch
-        worker(crt, cifss, cifse, 0);           // become part of the thread pool
+        worker(crt, cifss, cifse, cifssr, 0);   // become part of the thread pool
         join_workers();
 
         auto t1 = clock::now();

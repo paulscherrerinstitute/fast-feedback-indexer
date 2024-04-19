@@ -77,7 +77,7 @@ namespace {
                                       "spots", "input_cells",
                                       "method",
                                       "length_threshold", "triml", "trimh", "delta", "dist1", "dist3",
-                                      "num_sample_points", "n_output_cells",
+                                      "num_halfsphere_points", "num_angle_points", "n_output_cells",
                                       "contraction", "max_dist",
                                       "min_spots", "n_iter",
                                       nullptr};
@@ -86,12 +86,13 @@ namespace {
         PyArrayObject* input_cells_ndarray = nullptr;
         const char* method = "ifss";
         double length_threshold=1e-9, triml=.05, trimh=.15, delta=.1, dist1=.0, dist3=.0;
-        long num_sample_points=32*1024, n_output_cells=1;
+        long num_halfsphere_points=32*1024, num_angle_points=0, n_output_cells=1;
         double contraction=.8, max_dist=.001;
         long min_spots=6, n_iter=15;
-        if (PyArg_ParseTupleAndKeywords(args, kwds, "lO!O!|sddddddllddll", (char**)kw,
+        if (PyArg_ParseTupleAndKeywords(args, kwds, "lO!O!|sddddddlllddll", (char**)kw,
                                         &handle, &PyArray_Type, &spots_ndarray, &PyArray_Type, &input_cells_ndarray,
-                                        &method, &length_threshold, &triml, &trimh, &delta, &dist1, &dist3, &num_sample_points, &n_output_cells,
+                                        &method, &length_threshold, &triml, &trimh, &delta, &dist1, &dist3,
+                                        &num_halfsphere_points, &num_angle_points, &n_output_cells,
                                         &contraction, &max_dist, &min_spots, &n_iter) == 0)
             return nullptr;
 
@@ -101,8 +102,8 @@ namespace {
         }
 
         const std::string smethod{method};
-        if ((smethod != "raw") && (smethod != "ifss") && (smethod != "ifse")) {
-            PyErr_SetString(PyExc_ValueError, "method must be either raw, ifss, or ifse");
+        if ((smethod != "raw") && (smethod != "ifss") && (smethod != "ifse") && (smethod != "ifssr")) {
+            PyErr_SetString(PyExc_ValueError, "method must be either raw, ifss, ifse, od ifssr");
             return nullptr;
         }
 
@@ -132,11 +133,15 @@ namespace {
         if (dist3 <= .0)
             dist3 = trimh;
 
-        if (num_sample_points < 0 || num_sample_points > numeric_limits<unsigned>::max()) {
-            PyErr_SetString(PyExc_ValueError, "num_sample_points out of bounds for an unsigned integer");
+        if (num_halfsphere_points < 0 || num_halfsphere_points > numeric_limits<unsigned>::max()) {
+            PyErr_SetString(PyExc_ValueError, "num_halfsphere_points out of bounds for an unsigned integer");
             return nullptr;
         }
 
+        if (num_angle_points < 0 || num_angle_points > numeric_limits<unsigned>::max()) {
+            PyErr_SetString(PyExc_ValueError, "num_angle_points out of bounds for an unsigned integer");
+            return nullptr;
+        }
         if (n_output_cells < 0 || n_output_cells > numeric_limits<unsigned>::max()) {
             PyErr_SetString(PyExc_ValueError, "n_output_cells out of bounds for an unsigned integer");
             return nullptr;
@@ -297,7 +302,7 @@ namespace {
             npy_intp score_bytes = PyArray_NBYTES(score);
 
             fast_feedback::config_runtime<float> crt{(float)length_threshold, (float)triml, (float)trimh, (float)delta, (float)dist1, (float)dist3,
-                                                     (unsigned)num_sample_points, 0u};
+                                                     (unsigned)num_halfsphere_points, (unsigned)num_angle_points};
 
             fast_feedback::memory_pin pin_crt{fast_feedback::memory_pin::on(crt)};
             fast_feedback::memory_pin pin_score{score_data, (std::size_t)score_bytes};
@@ -328,9 +333,12 @@ namespace {
                 if (smethod == "ifss") {
                     config_ifss<float> cifss{(float)contraction, (float)max_dist, (unsigned)min_spots, (unsigned)n_iter};
                     indexer_ifss<float>::refine(spots, cells, scores, cifss);
-                } else { // ifse
+                } else if (smethod == "ifse") {
                     config_ifse<float> cifse{(float)contraction, (float)max_dist, (unsigned)min_spots, (unsigned)n_iter};
                     indexer_ifse<float>::refine(spots, cells, scores, cifse);
+                } else { // ifssr
+                    config_ifssr<float> cifssr{(float)contraction, (float)max_dist, (unsigned)min_spots, (unsigned)n_iter};
+                    indexer_ifssr<float>::refine(spots, cells, scores, cifssr);
                 }
             }
         } catch (std::exception& ex) {

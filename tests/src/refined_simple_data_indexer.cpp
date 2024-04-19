@@ -103,7 +103,7 @@ int main (int argc, char *argv[])
         if (argc <= 11)
             throw std::runtime_error("missing arguments, use\n<1:file name> <2:max number of spots> <3:max number of output cells> "
                                      "<4:number of kept candidate vectors> <5:number of half sphere sample points> <6:redundant computations?> "
-                                     "7:(ifss|ifse) <8:threshold contraction> <9:max dist> <10:min spots> <11:max iterations>");
+                                     "7:(ifss|ifse|ifssr) <8:threshold contraction> <9:max dist> <10:min spots> <11:max iterations>");
 
         fast_feedback::config_runtime<float> crt{};         // default runtime config
         {
@@ -168,6 +168,12 @@ int main (int argc, char *argv[])
             indexer_p = new fast_feedback::refine::indexer_ifse{cpers, crt, cifse};
             min_spots = cifse.min_spots;
             max_dist = cifse.max_distance;
+        } else if (method == "ifssr") {
+            fast_feedback::refine::config_ifssr cifssr{}; // default ifssr refinement config
+            parse_conf(cifssr, argv);
+            indexer_p = new fast_feedback::refine::indexer_ifssr{cpers, crt, cifssr};
+            min_spots = cifssr.min_spots;
+            max_dist = cifssr.max_distance;
         } else {
             throw std::runtime_error("indexer method must be one of 'ifss', 'ifse'");
         }
