@@ -26,7 +26,7 @@ namespace {
 
     fast_feedback::config_persistent<float> cpers{};
     fast_feedback::config_runtime<float> crt{};
-    fast_feedback::refine::config_ifss<float> cifss{};
+    fast_feedback::refine::config_ifssr<float> cifssr{};
     viable_cell_config cvc{};
     cell_similarity_config ccs{};
     unsigned refine = true;
@@ -64,7 +64,7 @@ namespace {
         {"cpers_redundant_computations", make_value(redundant_computations)},
         {"crt_num_halfsphere_points", make_value(32u*1024u)},
         {"crt_num_angle_points", make_value(0u)},
-        {"cifss_min_spots", make_value(6u)},
+        {"cifssr_min_spots", make_value(6u)},
         {"cvc_threshold", make_value(.02f)},
         {"ccs_threshold", make_value(.02f)},
         {"idx_refine", make_value(refine)},
@@ -90,7 +90,7 @@ namespace {
         param["cpers_redundant_computations"].u = redundant_computations;
         param["crt_num_halfsphere_points"].u = settings->crt_num_sample_points;
         param["crt_num_angle_points"].u = 0u;
-        param["cifss_min_spots"].u = settings->cifss_min_spots;
+        param["cifssr_min_spots"].u = settings->cifssr_min_spots;
         param["cvc_threshold"].f = settings->cvc_threshold;
         param["ccs_threshold"].f = ccs.threshold;
         param["idx_refine"].u = refine;
@@ -145,8 +145,8 @@ namespace {
                 crt.num_halfsphere_points = entry.second.u;
             } else if (entry.first == "crt_num_angle_points") {
                 crt.num_angle_points = entry.second.u;
-            } else if (entry.first == "cifss_min_spots") {
-                cifss.min_spots = entry.second.u;
+            } else if (entry.first == "cifssr_min_spots") {
+                cifssr.min_spots = entry.second.u;
             } else if (entry.first == "cvc_threshold") {
                 cvc.threshold = entry.second.f;
             } else if (entry.first == "ccs_threshold") {
@@ -276,7 +276,7 @@ extern "C" {
     int index_refined(ffbidx_indexer ptr, float cell[9], float *x, float *y, float *z, unsigned nspots)
     {
         using indexer = fast_feedback::refine::indexer<float>;
-        using ifss = fast_feedback::refine::indexer_ifss<float>;
+        using ifssr = fast_feedback::refine::indexer_ifssr<float>;
 
         if (index_step(ptr, cell, x, y, z, nspots) != 0)
             return -1;
@@ -284,7 +284,7 @@ extern "C" {
         try {
             indexer* idx = (indexer*)ptr.ptr;
 
-            ifss::refine(idx->Spots(), idx->oCellM(), idx->oScoreV(), cifss);
+            ifssr::refine(idx->Spots(), idx->oCellM(), idx->oScoreV(), cifssr);
         } catch (std::exception& ex) {
             std::cerr << "Error: " << ex.what() << '\n';
             return -1;

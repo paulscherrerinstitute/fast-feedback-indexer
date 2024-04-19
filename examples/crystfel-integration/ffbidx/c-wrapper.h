@@ -16,7 +16,7 @@ struct ffbidx_settings {
     unsigned cpers_max_output_cells;        // max output cells
     unsigned cpers_num_candidate_vectors;   // number of candidate sampling vectors kept
     unsigned crt_num_sample_points;         // half sphere sampling points
-    unsigned cifss_min_spots;               // ifss refinement min spots to fit
+    unsigned cifssr_min_spots;              // ifssr refinement min spots to fit
     float cvc_threshold;                    // viable cell threshold
 };
 
