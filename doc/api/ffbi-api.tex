@@ -215,7 +215,7 @@ Compared to the algorithm description, the scores have the opposite sign. So the
 For the CUDA asynchronous memory transfers used in the \emph{raw} API to move memory back and forth between host and GPU memory, memory pinning is required. This basically fixes the physical host memory adresses of the underlying memory.
 
 There are two smart pointer like abstractions to hold pinned memory. The \textbf{memory\_pin} object is designed for pinning existing unpinned memory. The \textbf{pinned\_ptr} is a specialized standard \emph{unique\_ptr}, designed to hold pinned memory allocated with the pinned memory allocation function \textbf{alloc\_pinned}. It's possible to just mix and match different types for handling pinned memory, only the most typical usage will be described here.
-
+%
 \begin{lstlisting}
 struct memory_pin {
     void* ptr;
@@ -258,7 +258,7 @@ The pointer to pinned memory returned by the \emph{alloc\_pinned}(size in bytes)
 The templated version of \emph{alloc\_pinned}$<$T$>$ combines pinned memory allocation of sizeof(T) bytes with the initialization of a \emph{pinned\_ptr}$<$T$>$.
 
 The following example allocates a pinned float array and a pinned struct with cell data, providing access through \emph{pinned\_ptr} in both cases:
-
+%
 \begin{lstlisting}
 pinned_ptr<float[]> spots(
     static_cast<float*>(
@@ -318,7 +318,7 @@ As basic functionality, the \emph{convenience} API provides functions for cell c
 \subsubsection{Unit Cell Candidates Refinement}
 
 The \emph{convenience} API declares a static member function of the class \emph{ifss} (iterative fit to selected spots) to refine unit cell candidates and recalculate their scores. The method is described in the algorithm description.
-
+%
 \begin{lstlisting}
 template <typename float_type=float>
 struct indexer_ifss : public indexer<float_type> {
@@ -368,7 +368,7 @@ The \textbf{max\_distance} parameter is used as an experimental extra stop crite
 \subsubsection{Cell Similarity}
 
 The cell similarity function computes a similarity score for two matrices based on the vector length differences and matrix determinant differences. It can be used to modify final scores, e.g. in the sense of a penalty function.
-
+%
 \begin{lstlisting}
 template <typename CellMatA,
           typename CellMatB,
@@ -379,7 +379,7 @@ float_type cell_similarity (
     float_type threshold=.02f
 );
 \end{lstlisting}
-
+%
 The \textbf{cellA} and \textbf{cellB} matrices are to be compared for similarity. The similarity score differs in two ways from the algorithm describtion.
 %
 \begin{enumerate}
@@ -390,16 +390,16 @@ The \textbf{cellA} and \textbf{cellB} matrices are to be compared for similarity
 \subsubsection{Candidate Selection}
 
 For selecting the best candidate the \emph{convenience} API provides a function that returns the index of the best candidate cell score.
-
+%
 \begin{lstlisting}
 template <typename VecX>
 unsigned best_cell (const DenseBase<VecX>& scores);
 \end{lstlisting}
 
-Given the candidate cell \textbf{scores} vector, the function simply returns $i = \argmin_j \vect{scores}_j$, corresponding to the most promising candidate cell index. Compared with the algorithm description, the scores have the opposite sign.
+Given the candidate cell \textbf{scores} vector, the function simply returns the index to the most promising candidate cell $i = \argmin_j \vect{scores}_j$.
 
 The \emph{convenience} API provides a function for selecting multiple candidate cells that are supposedly representing multiple crystals. This functions returns a vector of indices for the selected cells.
-
+%
 \begin{lstlisting}
 template <typename CellMat,
           typename SpotMat,
@@ -429,7 +429,7 @@ Before calling these functions, it is possible to influence the result by adding
 \subsubsection{Unit Cell Viability}
 
 The \emph{convenience} API provides a function to check unit cell viability explicitly. A unit cell passes the check, if at least \emph{min\_spots} have spot coordinates that approximate integer coordinates within \emph{threshold}. If refinement has been done with the same \emph{min\_spots} parameter, and cell scores have not been fiddled with, this check can, for a unit cell candidate with index $i$, simply be replaced by a simple and more performant $scores[i] < threshold$ check. However, if cell scores have been altered, or scores from the \emph{raw} API are used, this check is necessary.
-
+%
 \begin{lstlisting}
 template <typename Mat3, typename MatX3,
           typename float_type=typename Mat3::Scalar>
@@ -454,7 +454,7 @@ The \emph{convenience} API provides convenience wrappers for the \emph{raw} API 
 \subsubsection{Raw Indexer Wrapper}
 
 The \emph{convenience} API \emph{indexer} object is a wrapper for the \emph{raw} API indexer object and delivers the same results as the indexer object would. It keeps all the input and output data for indexing, as well as configuration data with parameters. The necessary data will be pinned on construction of the object. Spot and cell vectors are all stored in the rows of dense Eigen matrices, stored in column major order.
-
+%
 \begin{lstlisting}
 template<typename float_type=float>
 struct indexer {
@@ -469,9 +469,9 @@ struct indexer {
     ...
 }
 \end{lstlisting}
-
+%
 Due to the extensive state in main and GPU memory, copying this \emph{indexer} object is expensive, that is why only move operations are allowed. Copying has to be explicit by constructing a new object with the same parameters. The input spots and cells are left uninitalized on construction and it is the users responsibility to fill in this data with functions described below, and also set the number of input cells and spots in a consistent way.
-
+%
 \begin{lstlisting}
 ...
 void index_start (unsigned n_input_cells,
@@ -483,9 +483,9 @@ void index (unsigned n_input_cells,
             unsigned n_spots);
 ...
 \end{lstlisting}
-
+%
 Indexing operations are similar to the indexing functions in the \emph{raw} API, with the exception that the input, output, and runtime configuration parameters are replaced with \textbf{n\_input\_cells} and \textbf{n\_spots} parameters. The first three of those are part of the \emph{indexer} object, the latter two must match the number of input cells and spots, respectively. They correspond to the \emph{in.n\_cells} and \emph{in.n\_spots} parameters of the \emph{raw} API. A value of zero for \emph{n\_input\_cells} means that there are no new input cells, corresponding to \emph{in.new\_cells=false} in the \emph{raw} API. Likewise for a zero value of \emph{n\_spots} and \emph{in.new\_spots=false}.
-
+%
 \begin{lstlisting}
 ...
 float_type& spotX (unsigned i=0u);
@@ -499,9 +499,9 @@ auto Spots ();
 unsigned n_spots ()
 ...
 \end{lstlisting}
-
+%
 Spot X coordinates can be retrieved and set with the \textbf{spotX}$(i)$ functions, where $i$ denotes the zero based spot index. Likewise for Y and Z coordinates and the \textbf{spotY}$(i)$ and \textbf{spotZ}$(i)$ functions, respectively. The \textbf{spotM} function returns a reference object to the entirety of the writeable Eigen matrix for the spots. It is the users responsibility to make sure underlying memory is not moved and that the limits of this matrix, given through the \emph{cp.max\_spots} parameter while constructing the \emph{indexer} object, are not violated. The \textbf{Spots} function returns an Eigen reference object to the last used top rows of the Eigen matrix for the spots and the \textbf{n\_spots} function returns the last used number of rows.
-
+%
 \begin{lstlisting}
 ...
 float_type& iCellX (unsigned i=0u, unsigned j=0u);
@@ -519,9 +519,9 @@ auto& iCellM ();
 unsigned n_input_cells ();
 ...
 \end{lstlisting}
-
+%
 Input cell vector X coordinates can be retrieved and set with the \textbf{iCellX}$(i,j)$ functions, where $i$ is the zero based input cell index, and $0\leq j<3$ the zero based input cell vector index. Likewise for Y and Z coordinates and the \textbf{iCellY}$(i,j)$ and \textbf{iCellZ}$(i,j)$ functions, respectively. The \textbf{iCell}$(i)$ functions return reference objects to a block of the Eigen matrix holding the cell vectors for the input cell with zero based index $i$. The \textbf{iCellM} function returns a reference object to the entirety of the writeable Eigen matrix for input cells. It is the users responsibility to make sure underlying memory is not moved and that the limits of this matrix, given through the \emph{cp.max\_input\_cells} parameter while contructing the \emph{indexer} object, are not violated. The \textbf{n\_input\_cells} function returns the last used number of input cells.
-
+%
 \begin{lstlisting}
 ...
 float_type& oCellX (unsigned i=0u, unsigned j=0u);
@@ -539,9 +539,9 @@ auto& oCellM ();
 unsigned n_output_cells ();
 ...
 \end{lstlisting}
-
+%
 Unit cell candidates are produced as output of the indexing functions. Output cell vector X coordinates can be retrieved and set with the \textbf{oCellX}$(i,j)$ functions, where $i$ is the zero based output cell index, and $0\leq j<3$ the zero based output cell vector index. Likewise for Y and Z coordinates and the \textbf{oCellY}$(i,j)$ and \textbf{oCellZ}$(i,j)$ functions, respectively. The \textbf{oCell}$(i)$ functions return reference objects to a block of the Eigen matrix holding the cell vectors for the output cell with zero based index $i$. The \textbf{oCellM} function returns a reference object to the entirety of the writeable Eigen matrix for output cells. It is the users responsibility to make sure underlying memory is not moved and that the limits of this matrix, given through the \emph{cp.max\_output\_cells} parameter while contructing the \emph{indexer} object, are not violated. The \textbf{n\_output\_cells} function returns the number of output cells.
-
+%
 \begin{lstlisting}
 ...
 float_type& oScore (unsigned i=0u);
@@ -549,9 +549,9 @@ const float_type& oScore (unsigned i=0u) const;
 auto& oScoreV ();
 ...
 \end{lstlisting}
-
+%
 Unit cell candidate scores are produced as output of the indexing functions for every output cell. The output cell score can be retrieved and modified with the \textbf{oScore}$(i)$ functions, where $i$ is the zero based output cell index. The \textbf{oScoreV} function returns a reference object to the entirety of the writeable Eigen vector for output cell scores. It is the users responsibility to make sure underlying memory is not moved and that the limits of this vector, given through the \emph{cp.max\_output\_cells} parameter while contructing the \emph{indexer} object, are not violated.
-
+%
 \begin{lstlisting}
 ...
 void length_threshold (float_type lt);
@@ -574,9 +574,9 @@ const config_runtime<float_type>&
     conf_runtime () const;
 ...
 \end{lstlisting}
-
+%
 The \textbf{length\_threshold}, \textbf{triml}, \textbf{trimh}, \textbf{delta}, \textbf{dist1}, \textbf{dist3}, \textbf{num\_half\-sphe\-re\_points}, and \textbf{num\_angle\_points} functions provide access to the corresponding members of the \emph{runtime configuration} object. The \textbf{config\_runtime} function retrieves an immutable reference to this object. Initial values are given when constructing the \emph{indexer} object. Changing these values will have an effect on the next indexing operation.
-
+%
 \begin{lstlisting}
     ...
     unsigned max_output_cells () const;
@@ -588,13 +588,13 @@ The \textbf{length\_threshold}, \textbf{triml}, \textbf{trimh}, \textbf{delta}, 
         conf_persistent () const;
 }
 \end{lstlisting}
-
-The \textbf{max\_output\_cells}, \textbf{max\_input\_cells}, \textbf{max\_spots}, \textbf{num\_can\-di\-da\-te\_vec\-tors}, and \textbf{redundant\_computations} functions provide read only access to the corresponding members of \emph{persistent configuration} object. The \textbf{conf\_persistent} function retrieves an immutable reference to this object. The values are given when constructing the \emph{indexer} object and influence the memory allocations in main and GPU memory for the \emph{indexer} object. Due to the associated cost, changing these values is not possible - instead discard the old and create a new \emph{indexer} object.
+%
+The functions \textbf{max\_output\_cells}, \textbf{max\_input\_cells}, \textbf{max\_spots}, \textbf{num\_can\-di\-da\-te\_vec\-tors}, and \textbf{redundant\_computations} provide read only access to the corresponding members of the \emph{persistent configuration} object. The function \textbf{conf\_persistent} retrieves an immutable reference to this object. The values are given when constructing the \emph{indexer} object and influence the memory allocations in main and GPU memory for the \emph{indexer} object. Due to the associated cost, changing these values is not possible - instead discard the old and create a new \emph{indexer} object.
 
 \subsection{Cell Refining Indexer}
 
 To combine indexing on GPU and the final refinement in one go, the \emph{convenience} API provides the \textbf{indexer\_ifss} object. It applies the \emph{refine} function described earlier to the output cells after indexing. The refinement method, iterative fit to selected spots (\emph{ifss}) is described in the algorithm description, and the refinement configuration \emph{config\_ifss} was described earlier.
-
+%
 \begin{lstlisting}
 template <typename float_type=float>
 struct indexer_ifss : public indexer<float_type> {
@@ -625,9 +625,9 @@ struct indexer_ifss : public indexer<float_type> {
     void index_end () override;
     ...
 \end{lstlisting}
-
+%
 Apart from a specialized \textbf{index\_end} method calling the \textbf{refine} method after obtaining results from the \emph{indexer} object, this object needs an extra refinement configuration in the constructor. Otherwise it behaves the same as the \emph{indexer} object from which it inherits all members and methods publicly. Only for accessing configuration parameters it features extra functionality.
-
+%
 \begin{lstlisting}
     ...
     void threshold_contraction (float_type tc)
@@ -641,28 +641,37 @@ Apart from a specialized \textbf{index\_end} method calling the \textbf{refine} 
     const config_ifss<float_type>& conf_ifss () const
 }
 \end{lstlisting}
-
-The \textbf{threshold\_contraction}, \textbf{min\_spots}, \textbf{max\_distance}, and \textbf{max\_iter} methods are for retrieving and setting the corresponding parameters in the refinement configuration. An immutable reference to the refinement configuration object can be obtained with the \textbf{conf\_ifss} method.
+%
+The accessor methods \textbf{threshold\_contraction}, \textbf{min\_spots}, \textbf{max\_distance}, and \textbf{max\_iter} are for retrieving and setting the corresponding parameters in the refinement configuration. An immutable reference to the refinement configuration object can be obtained with the \textbf{conf\_ifss} method.
 
 \subsection{Miscellaneous}
 
 The \emph{indexer} object in the \emph{convenience} API provides a function to split apart the scores obtained from the \emph{raw} API.
-
+%
 \begin{lstlisting}
 static std::pair<float_type, float_type>
 score_parts (float_type score);
 \end{lstlisting}
-
+%
 The \textbf{score\_parts} function returns a tuple $(n,d)$ with the number of close points $n$ and the average distance to integer coordinates for all spots $d$.
 
 In addition to the \emph{indexer\_ifss} object that uses the refinement method described in the algorithm description, the \emph{convenience} API provides an experimental \textbf{indexer\_ifse} object that uses an iterative fit to selected errors method for refinement. This method is not described in the algorithm description, but it is very similar to the \emph{ifss} method in the algorithm description. Instead of fitting the cell candidate $\mat{B}$ to the spots $\mat{S}$ directly, it fits a delta $\mat{\Delta}$ to the residuals $\mat{R} = \mat{S}\mat{B}^T - \round{\mat{S}\mat{B}^T}$ in order to minimize $\mat{F}(\mat{S}\mat{\Delta}^T - \mat{R})$ through a least squares fit. The candidate cell is then updated with $\mat{B}:=\mat{B}+\mat{\Delta}$ for the next iteration.
-
+%
 \begin{lstlisting}
 template<typename float_type=float> struct config_ifse;
 template<typename float_type=float> struct indexer_ifse;
 \end{lstlisting}
-
+%
 The refinement configuration is the same as for the \emph{ifss} method, and all methods and members are similar. The idea behind this experimental refinement is to bring the method closer to something resembling the steepest descent method and allow algorithm developers to try modifications of the $\mat{\Delta}$ delta matrix and its calculation.
+
+Additionally, the \emph{convenience} API offers the experimental \textbf{indexer\_ifssr} object that uses an iterative fit to selected spots refinement method with another spot selection method. Instead of measuring the distance to induced integer spot coordinates, it measures the distance spots and induced spot in reciprocal space:
+%
+\[
+d_i = \| \round{\vect{s}_i\mat{B}^T}\mat{B}^{-T} - \vect{s}_i \|.
+\]
+%
+The spot is considered \emph{close}, if $d_i < t$, where $t$ is the current closeness threshold. The configuration and methods are the same as for the \emph{ifss} method.
+
 
 \subsection{Thread Safety}
 
@@ -745,7 +754,8 @@ The \textbf{ffbidx.index} function runs the fast feedback indexer and returns \e
  \item \textbf{delta} - $\log_2$ curve position, lower values will increase selectiveness for close spots
  \item \textbf{dist1} - spots within this distance are contributing to the score in the vector sampling step. Will be set to \emph{trimh} if zero.
  \item \textbf{dist3} - spots within this distance are contributing to the score in the cell sampling step. Will be set to \emph{trimh} if zero.
- \item \textbf{num\_sample\_points} - the number of sampling points on the half sphere
+ \item \textbf{num\_halfsphere\_points} - the number of sampling points on the half sphere for vector sampling
+ \item \textbf{num\_angle\_points} - the number of angular sampling points for cell sampling
  \item \textbf{n\_output\_cells} - the number of desired output cells
  \item \textbf{contraction} - threshold contraction parameter for methods \emph{ifss} and \emph{ifse}
  \item \textbf{max\_dist} - maximum distance parameter for methods \emph{ifss} and \emph{ifse}
