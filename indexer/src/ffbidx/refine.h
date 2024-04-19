@@ -818,9 +818,6 @@ namespace fast_feedback {
                         cell = qr.solve(sel.select(miller, .0f));
                     }
                     {   // calc score
-                        miller = round((spots * cell).array());
-                        resid = miller * cell.inverse();    // reciprocal spots induced by <cell>
-                        resid -= spots;                     // distance between induced and given spots
                         ArrayX<float_type> dist = resid.rowwise().norm();
                         auto nth = std::begin(dist) + (cifssr.min_spots - 1);
                         std::nth_element(std::begin(dist), nth, std::end(dist));
