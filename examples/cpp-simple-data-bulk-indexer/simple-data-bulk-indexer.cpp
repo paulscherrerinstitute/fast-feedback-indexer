@@ -78,6 +78,7 @@ namespace {
                      "output options:\n"
                      "  --help         show this help\n"
                      "  --quiet        no indexing result output\n"
+                     "  --allcells     output all cells instead of only the best\n"
                      "indexer options:\n"
                      "  --method       output cell refinement method, one of raw, ifss(default), ifse\n"
                      "  --reducalc     calculate candidate vectors for all cell vectors instead of one\n"
@@ -127,6 +128,7 @@ namespace {
     unsigned repetitions = 1u;          // number of times each file is indexed
     bool quiet = false;                 // don't produce indexing result output
     bool reducalc = false;              // calculate candidates for all 3 cell vectors instead of one
+    bool best_only = true;              // output best cell only
     std::string method{};               // refinement method
 
     void check_method()
@@ -204,7 +206,8 @@ namespace {
             { "quiet",    0, nullptr, 19},
             { "method",   1, nullptr, 20},
             { "reducalc", 0, nullptr, 21},
-            { "help",     0, nullptr, 22},
+            { "allcells", 0, nullptr, 22},
+            { "help",     0, nullptr, 23},
             { nullptr,    0, nullptr, -1}
         };
 
@@ -277,6 +280,9 @@ namespace {
                     reducalc = true;
                     break;
                 case 22:
+                    best_only = false;
+                    break;
+                case 23:
                     usage();
                 default:
                     error("internal: unknown option id");
@@ -483,6 +489,7 @@ namespace {
         mempin_t pin_coords;                    // pin object for coords matrix
         mempin_t pin_cells;                     // pin object for cells matrix
         mempin_t pin_scores;                    // pin object for scores vector
+        unsigned best_cell;                     // best cell output
 
         unsigned repetition = 0u;               // repetition counter
 
@@ -726,6 +733,7 @@ namespace {
 
                                 block = work->blkcnt.fetch_add(1u); // finished block
                                 if (block + 1u >= refinement_blocks) {
+                                    work->best_cell = refine::best_cell(work->scores);
                                     work->repetition++;
                                     if (work->repetition < repetitions) {
                                         // init work item
@@ -823,9 +831,17 @@ int main (int argc, char *argv[])
         if (! quiet) {
             std::cout.precision(12);
             for (const auto& res : witem_list) {
-                std::cout << res->filename <<":\n";
-                for (unsigned j=0u; j<cpers.max_output_cells; j++) {
-                    std::cout << res->cells.block(3u * j, 0u, 3u, 3u) << "\n\n";
+                if (best_only) {
+                    std::cout << res->filename <<": cell score " << res->scores[res->best_cell] << '\n';
+                    std::cout << res->cells.block(3u * res->best_cell, 0u, 3u, 3u) << "\n\n";
+                } else {
+                    std::cout << res->filename <<":\n";
+                    for (unsigned j=0u; j<cpers.max_output_cells; j++) {
+                        if (res->best_cell == j)
+                            std::cout << "(best) ";                    
+                        std::cout << "cell " << j << ": score " << res->scores[j] << '\n';
+                        std::cout << res->cells.block(3u * j, 0u, 3u, 3u) << "\n\n";
+                    }
                 }
             }
         }
