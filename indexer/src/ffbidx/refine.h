@@ -726,9 +726,9 @@ namespace fast_feedback {
         template <typename float_type=float>
         struct config_ifssr final {
             float_type threshold_contraction=.8;    // contract error threshold by this value in every iteration
-            float_type max_distance=.002;           // max distance to reciprocal spots for inliers
-            unsigned min_spots=6;                   // minimum number of spots to fit against
-            unsigned max_iter=15;                   // max number of iterations
+            float_type max_distance=.00075;         // max distance to reciprocal spots for inliers
+            unsigned min_spots=8;                   // minimum number of spots to fit against
+            unsigned max_iter=32;                   // max number of iterations
         };
 
         // Iterative fit to selected spots refinement indexer

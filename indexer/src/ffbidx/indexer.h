@@ -85,8 +85,8 @@ namespace fast_feedback {
         float_type triml=0.001;                 // lower trim value for distance to nearest integer objective value - 0 < triml < trimh
         float_type trimh=0.3;                   // higher trim value for distance to nearest integer objective value - triml < trimh < 0.5
         float_type delta=0.1;                   // log2 curve position: score = log2(trim(dist(x)) + delta)
-        float_type dist1=0.3;                   // maximum distance to int for single coordinate
-        float_type dist3=0.2;                   // maximum distance to int for tripple coordinates
+        float_type dist1=0.2;                   // maximum distance to int for single coordinate
+        float_type dist3=0.15;                  // maximum distance to int for tripple coordinates
         unsigned num_halfsphere_points=32*1024; // number of sample points on half sphere for finding vector candidates
         unsigned num_angle_points=0;            // number of sample points in rotation space for finding cell candidates (0: auto)
     };
