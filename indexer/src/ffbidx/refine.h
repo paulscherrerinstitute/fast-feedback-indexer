@@ -804,7 +804,8 @@ namespace fast_feedback {
                         continue;
                     }
                     cell = cells.block(3u * j, 0u, 3u, 3u).transpose(); // cell: col vectors
-                    float_type threshold = indexer<float_type>::score_parts(scores[j]).second;
+                    const float_type scale = cell.colwise().norm().minCoeff();
+                    float_type threshold = indexer<float_type>::score_parts(scores[j]).second / scale;
                     for (unsigned niter=1; niter<cifssr.max_iter && threshold>cifssr.max_distance; niter++) {
                         miller = round((spots * cell).array());
                         resid = miller * cell.inverse();    // reciprocal spots induced by <cell>
