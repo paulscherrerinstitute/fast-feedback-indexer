@@ -33,6 +33,7 @@ Author: hans-christian.stadler@psi.ch
 #include <stdexcept>
 #include <chrono>
 #include <cerrno>
+#include <string>
 #include <sys/cdefs.h>
 #include <sys/types.h>
 #include <vector>
@@ -599,7 +600,7 @@ namespace {
             std::istringstream iss(buffer.data());
             while ((bool)(iss >> x[n])) {
                 if (!(iss >> y[n] >> z[n]))
-                    throw std::invalid_argument(std::string{"wrong file format for file "} + work->filename);
+                    throw std::invalid_argument(std::string{"wrong file format for file "} + work->filename + ", line " + std::to_string(line));
                 n++;
                 if (n >= maxspot + 3u)
                     goto stop_reading;
