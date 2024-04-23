@@ -7,6 +7,7 @@ project(fast_indexer
 
 option(BUILD_FAST_INDEXER "Build fast indexer library" ON)
 option(BUILD_FAST_INDEXER_STATIC "Build fast indexer static library" ON)
+option(C_API "Provide the C API" ON)
 
 set(VECTOR_CANDIDATE_REFINEMENT "ropt" CACHE STRING "Vector candidate refinement method")
 set_property(CACHE VECTOR_CANDIDATE_REFINEMENT PROPERTY STRINGS none ropt)
@@ -17,6 +18,13 @@ elseif(VECTOR_CANDIDATE_REFINEMENT STREQUAL "ropt")
         set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -DVECTOR_CANDIDATE_REFINEMENT=1")
 else()
         message(FATAL_ERROR "VECTOR_CANDIDATE_REFINEMENT is '${VECTOR_CANDIDATE_REFINEMENT}', must be one of none,ropt")
+endif()
+
+set(fast_indexer_EXTRA_HEADERS "")
+set(fast_indexer_EXTRA_SOURCES "")
+if (C_API)
+        list(APPEND fast_indexer_EXTRA_HEADERS ffbidx/c_api.h)
+        list(APPEND fast_indexer_EXTRA_SOURCES c_api.cpp)
 endif()
 
 if (BUILD_FAST_INDEXER OR BUILD_FAST_INDEXER_STATIC)
@@ -42,7 +50,8 @@ if (BUILD_FAST_INDEXER OR BUILD_FAST_INDEXER_STATIC)
                 ffbidx/refine.h
                 ffbidx/log.h
                 ffbidx/exception.h
-                ffbidx/envvar.h)
+                ffbidx/envvar.h
+                ${fast_indexer_EXTRA_HEADERS})
         cmake_path(ABSOLUTE_PATH CMAKE_INSTALL_LIBDIR
                 BASE_DIRECTORY ${CMAKE_INSTALL_PREFIX}
                 NORMALIZE
@@ -57,6 +66,7 @@ if(BUILD_FAST_INDEXER)
                 indexer_gpu.cu ffbidx/indexer_gpu.h
                 indexer.cpp
                 log.cpp
+                ${fast_indexer_EXTRA_SOURCES}
                 ${fast_indexer_PUB_HEADER_LIST})
         add_dependencies(fast_indexer version_txt)
         set_target_properties(fast_indexer PROPERTIES
@@ -69,7 +79,7 @@ if(BUILD_FAST_INDEXER)
         target_link_libraries(fast_indexer
                 PRIVATE CUDA::cudart
                 PRIVATE Threads::Threads
-                INTERFACE Eigen3::Eigen)
+                PUBLIC Eigen3::Eigen)
         install(TARGETS fast_indexer
                 LIBRARY
                 DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -93,6 +103,7 @@ if(BUILD_FAST_INDEXER_STATIC)
                 indexer_gpu.cu ffbidx/indexer_gpu.h
                 indexer.cpp
                 log.cpp
+                ${fast_indexer_EXTRA_SOURCES}
                 ${fast_indexer_PUB_HEADER_LIST})
         add_dependencies(fast_indexer_static version_txt)
         set_target_properties(fast_indexer_static PROPERTIES
@@ -103,7 +114,7 @@ if(BUILD_FAST_INDEXER_STATIC)
         target_link_libraries(fast_indexer_static
                 PRIVATE CUDA::cudart_static
                 PRIVATE Threads::Threads
-                INTERFACE Eigen3::Eigen)
+                PUBLIC Eigen3::Eigen)
         install(TARGETS fast_indexer_static
                 LIBRARY
                 DESTINATION ${CMAKE_INSTALL_LIBDIR}
