@@ -885,17 +885,23 @@ namespace fast_feedback {
         // Check if a cell looks like a viable unit cell for the spots
         // - cell       cell in real space
         // - spots      spots in reciprocal space
-        // - threshold  radius around approximated miller indices
+        // - threshold  radius around approximated miller indices in primal space
+        //              or radius around spots in reciprocal space
         // - min_spots  minimum number of spots within threshold
+        // - reciprocal take radius in reciprocal or primal space
         template <typename Mat3, typename MatX3, typename float_type=typename Mat3::Scalar>
         inline bool is_viable_cell (const Eigen::MatrixBase<Mat3>& cell,
                                     const Eigen::MatrixBase<MatX3>& spots,
-                                    float_type threshold=.02f, unsigned min_spots=9u)
+                                    float_type threshold=.00075, unsigned min_spots=8u, bool reciprocal=true)
         {
             using M3x = Eigen::MatrixX3<float_type>;
             M3x resid = spots * cell.transpose();
             const M3x miller = round(resid.array());
-            resid -= miller;
+            if (reciprocal) {
+                resid = spots - miller * cell.transpose().inverse();
+            } else {
+                resid -= miller;
+            }
             return (resid.rowwise().norm().array() < threshold).count() >= min_spots;
         }
 
