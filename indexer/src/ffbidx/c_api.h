@@ -53,25 +53,12 @@ struct config_persistent {
     bool redundant_computations=false;      // compute candidates for all three cell vectors instead of just one
 };
 
-struct config_ifss {
-    float_type threshold_contraction=.8;    // contract error threshold by this value in every iteration
-    float_type max_distance=.01;            // max distance to integer for inliers
-    unsigned min_spots=6;                   // minimum number of spots to fit against
-    unsigned max_iter=15;                   // max number of iterations
-};
-
 struct config_ifssr {
     float_type threshold_contraction=.8;    // contract error threshold by this value in every iteration
     float_type max_distance=.00075;         // max distance to reciprocal spots for inliers
     unsigned min_spots=8;                   // minimum number of spots to fit against
     unsigned max_iter=32;                   // max number of iterations
 };
-
-typedef enum {
-    raw = 0,    // no cell refinement
-    ifss = 1,   // iterative fit to selected spots, distance measured in coordinate space
-    ifssr = 2   // iterative fit to selected spots, distance measured in reciprocal space
-} refinement_type;
 
 struct error {
     char* message = NULL;   // initialized pointer to a char array of length at least msg_len
@@ -98,16 +85,14 @@ int index_end(int handle,
 int refine(int handle,
            const input* in,
            output* out,
-           refinement_type refinement,
-           const void* cfg_refinement,
+           const config_ifssr* cfg_ifssr,       // noop if NULL
            unsigned block, unsigned nblocks);   // handle one block out of nblocks output cells, threadsafe
                                                 // (set to 0,1 for all cells)
 int index(int handle,   // just do it all
           const input* in,
           output* out,
           const config_runtime* cfg_runtime,
-          refinement_type refinement,
-          const void* cfg_refinement);
+          const config_ifssr* cfg_ifssr);   // no refinement if NULL
 int best_cell(int handle,
               const output* out);
 int crystals(int handle,

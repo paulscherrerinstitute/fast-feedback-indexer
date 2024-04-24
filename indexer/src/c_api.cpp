@@ -134,18 +134,19 @@ namespace {
     int refine_impl(int handle,
                     const input* in,
                     output* out,
-                    refinement_type refinement,
-                    const void* cfg_refinement,
+                    const config_ifssr* cfg_ifssr,
                     unsigned block, unsigned nblocks)
     {
         namespace refine = fast_feedback::refine;
         using Mx3 = Eigen::MatrixX3<float_type>;
         using Vx = Eigen::VectorXf;
         using Eigen::Map;
+
+        if (! cfg_ifssr)
+            return 0;
+
         try {
             handler& hdl = handler_map.at(handle);
-            if (refinement == raw)
-                return 0;
             try {
                 Mx3 spots(in->n_spots, 3);
                 spots.col(0) = Map<Vx>(in->spot.x, in->n_spots);
@@ -156,26 +157,12 @@ namespace {
                 cells.col(1) = Map<Vx>(out->y, 3*out->n_cells);
                 cells.col(2) = Map<Vx>(out->z, 3*out->n_cells);
                 Vx scores{Map<Vx>{out->score, out->n_cells}};
-                switch (refinement) {
-                    case ifss:
-                        static_assert(sizeof(refine::config_ifss<float_type>) == sizeof(config_ifss));
-                        refine::indexer_ifss<float_type>::refine(
-                            spots, cells, scores,
-                            *reinterpret_cast<const refine::config_ifss<float_type>*>(cfg_refinement),
-                            block, nblocks
-                        );
-                        break;
-                    case ifssr:
-                        static_assert(sizeof(refine::config_ifssr<float_type>) == sizeof(config_ifssr));
-                        refine::indexer_ifssr<float_type>::refine(
-                            spots, cells, scores,
-                            *reinterpret_cast<const refine::config_ifssr<float_type>*>(cfg_refinement),
-                            block, nblocks
-                        );
-                        break;
-                    default:
-                        return error_from_msg(hdl, "unsupported refinement");
-                }
+                static_assert(sizeof(refine::config_ifssr<float_type>) == sizeof(config_ifssr));
+                refine::indexer_ifssr<float_type>::refine(
+                    spots, cells, scores,
+                    *reinterpret_cast<const refine::config_ifssr<float_type>*>(cfg_ifssr),
+                    block, nblocks
+                );
             } catch (std::exception& ex) {
                 return error_from_exception(hdl, ex);
             }
@@ -189,14 +176,13 @@ namespace {
                    const input* in,
                    output* out,
                    const config_runtime* cr,
-                   refinement_type refinement,
-                   const void* cfg_refinement)
+                   const config_ifssr* cfg_ifssr)
     {
         if (index_start_impl(handle, in, out, cr, nullptr, nullptr))
             return -1;
         if (index_end_impl(handle, out))
             return -1;
-        if (refine_impl(handle, in, out, refinement, cfg_refinement, 0, 1))
+        if (refine_impl(handle, in, out, cfg_ifssr, 0, 1))
             return -1;
         int res;
         if ((res = best_cell(handle, out)) < 0)
@@ -306,21 +292,19 @@ extern "C" {
     int refine(int handle,
                const input* in,
                output* out,
-               refinement_type refinement,
-               const void* cfg_refinement,
+               const config_ifssr* cfg_ifssr,
                unsigned block, unsigned nblocks)
     {
-        return refine_impl(handle, in, out, refinement, cfg_refinement, block, nblocks);
+        return refine_impl(handle, in, out, cfg_ifssr, block, nblocks);
     }
 
     int index(int handle,
               const input* in,
               output* out,
               const config_runtime* cfg_runtime,
-              refinement_type refinement,
-              const void* cfg_refinement)
+              const config_ifssr* cfg_ifssr)
     {
-        return index_impl(handle, in, out, cfg_runtime, refinement, cfg_refinement);
+        return index_impl(handle, in, out, cfg_runtime, cfg_ifssr);
     }
 
     int best_cell(int handle,
