@@ -32,7 +32,7 @@ namespace {
         using std::numeric_limits;
 
         constexpr const char* kw[] = {"max_output_cells", "max_input_cells", "max_spots", "num_candidate_vectors", "redundant_computations", nullptr};
-        long max_output_cells, max_input_cells, max_spots, num_candidate_vectors;
+        long max_output_cells=1, max_input_cells=1, max_spots=200, num_candidate_vectors=32;
         int redundant_computations=false;
         if (PyArg_ParseTupleAndKeywords(args, kwds, "llll|p", (char**)kw, &max_output_cells, &max_input_cells, &max_spots, &num_candidate_vectors, &redundant_computations) == 0)
             return nullptr;
@@ -84,11 +84,11 @@ namespace {
         long handle;
         PyArrayObject* spots_ndarray = nullptr;
         PyArrayObject* input_cells_ndarray = nullptr;
-        const char* method = "ifss";
-        double length_threshold=1e-9, triml=.05, trimh=.15, delta=.1, dist1=.0, dist3=.0;
+        const char* method = "ifssr";
+        double length_threshold=1e-9, triml=.001, trimh=.3, delta=.1, dist1=.1, dist3=.15;
         long num_halfsphere_points=32*1024, num_angle_points=0, n_output_cells=1;
-        double contraction=.8, max_dist=.001;
-        long min_spots=6, n_iter=15;
+        double contraction=.8, max_dist=.00075;
+        long min_spots=8, n_iter=32;
         if (PyArg_ParseTupleAndKeywords(args, kwds, "lO!O!|sddddddlllddll", (char**)kw,
                                         &handle, &PyArray_Type, &spots_ndarray, &PyArray_Type, &input_cells_ndarray,
                                         &method, &length_threshold, &triml, &trimh, &delta, &dist1, &dist3,
