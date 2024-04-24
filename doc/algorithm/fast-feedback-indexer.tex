@@ -24,7 +24,9 @@
 \newcommand{\round}[1]{\lfloor #1 \rceil}
 \newcommand{\floor}[1]{\lfloor #1 \rfloor}
 \newcommand{\distZ}[1]{d_\mathbb{Z}(#1)}
+\newcommand{\diffZ}[1]{\Delta_\mathbb{Z}(#1)}
 \newcommand{\distvecZ}[1]{\vect{d}_\mathbb{Z}(#1)}
+\newcommand{\diffvecZ}[1]{\vect{\Delta}_\mathbb{Z}(#1)}
 \newcommand{\trim}[3]{\trimop_{#1}^{#2}\left ( #3 \right )}
 \newcommand{\filter}[1]{F^{#1}}
 
@@ -63,13 +65,15 @@ In practise (\ref{eq:integer}) can never be achieved exactly. For once, the spot
 %
 \[
  \begin{split}
-  \distZ{x} &= |x - \round{x}| \\
+  \diffZ{x} &= x - \round{x}\\
+  \distZ{x} &= |\diffZ{x}| = |x - \round{x}|\\
+  \diffvecZ{[x_1\, ...\; x_n]} &= [\diffZ{x_1}\ ...\ \diffZ{x_3}] \in \mathbb{R}^n\\
   \distvecZ{[x_1\, ...\; x_n]} &= [\distZ{x_1}\ ...\ \distZ{x_3}] \in \mathbb{R}^n\\
-  \distZ{[x_1\, ...\; x_n]} &= \|\distvecZ{[x_1\, ...\; x_n]}\|
+  \distZ{[x_1\, ...\; x_n]} &= \|\diffvecZ{[x_1\, ...\; x_n]}\| = \|\distvecZ{[x_1\, ...\; x_n]}\|
  \end{split}
 \]
 %
-the distance to an integer, the vector of distances to integers, and the distance to an integer vector. We also define the element wise absolute value and element wise rounding operation on vectors and matrices
+the difference and distance to an integer, the vector of differences and distances to integers, and the distance to an integer vector. We also define the element wise absolute value and element wise rounding operation on vectors and matrices
 %
 \[
  \begin{split}
@@ -85,11 +89,20 @@ So the vector of elementwise distances to integers of a vector $\vect{x}$ can al
   \distvecZ{\vect{x}} = |\, \vect{x} - \round{\vect{x}}\,|
 \]
 %
-For a matrix $\mat{X}\in \mathbb{R}^{m\times n}$, we compute the column vector of distances $\vect{d}_{\mathbb{Z}}(\mat{X})$ for the matrix row vectors $\vect{x}_1,\hdots ,\vect{x}_m$, where $\vect{x}_i\in \mathbb{R}^n$
+For a matrix $\mat{X}\in \mathbb{R}^{m\times n}$, we compute the matrix of differences $\diffvecZ{\mat{X}}$ and column vector of distances $\distvecZ{\mat{X}}$ to integers for the matrix row vectors $\vect{x}_1,\hdots ,\vect{x}_m$, where $\vect{x}_i\in \mathbb{R}^n$
 %
 \[
- \distvecZ{\mat{X}} = \begin{pmatrix} \distZ{\vect{x}_1} \\ \vdots \\ \distZ{\vect{x}_m} \end{pmatrix}\in \mathbb{R}^m,
- \text{ where }\mat{X} = \begin{pmatrix} \vect{x}_1 \\ \vdots \\ \vect{x}_m \end{pmatrix}\in \mathbb{R}^{m\times n}
+ \begin{split}
+  \diffvecZ{\mat{X}} &= \begin{pmatrix} \diffvecZ{\vect{x}_1} \\ \vdots \\ \diffvecZ{\vect{x}_m} \end{pmatrix}\in \mathbb{R}^{m\times n} \\
+  \distvecZ{\mat{X}} &= \begin{pmatrix} \distZ{\vect{x}_1} \\ \vdots \\ \distZ{\vect{x}_m} \end{pmatrix}\in \mathbb{R}^m,
+     \text{ where }\mat{X} = \begin{pmatrix} \vect{x}_1 \\ \vdots \\ \vect{x}_m \end{pmatrix}\in \mathbb{R}^{m\times n}
+ \end{split}
+\]
+%
+The column vector of rowwise norms $\|\mat{X}\|_{row}$ of a matrix $\mat{X}$, we express by
+%
+\[
+ \|\mat{X}\|_{row} = \begin{pmatrix} \|\vect{x}_1\| \\ \vdots \\ \|\vect{x}_m\| \end{pmatrix}\in \mathbb{R}^m
 \]
 %
 With that, for a small error margin $\beta$ and a minimum number of spots $m$, we demand instead of (\ref{eq:integer})
@@ -103,17 +116,28 @@ With that, for a small error margin $\beta$ and a minimum number of spots $m$, w
  \end{split}
 \end{equation}
 %
-The three conditions at the bottom have been worked out by Luis Felipe Barba Flores from SDSC. The conditions in (\ref{eq:viable}) can potentially be true for many (unit cell, index set) combinations, so we end up with a set of solutions, dependent on $\beta$ and $m$. In fact, for every possible index set $\mathcal{I}_k$ with $|\mathcal{I}_k| >= m$ we end up with a (possibly empty) set of unit cell matrices $\mathcal{B}_k$ that fulfill (\ref{eq:viable}). But interesting is only one of the unit cells, we call it $\mat{B}_k$, in $\mathcal{B}_k$ which minimizes the $\distZ{\vect{z}_i}$ in (\ref{eq:viable}) for nonempty $\mathcal{B}_k$ sets. The resulting set of $(\mat{B}_k, \mathcal{I}_k)$ tuples can further be reduced by demanding that $\mathcal{I}_k$ should encompass as many spots as possible, and thus $\mathcal{I}_k \setminus \mathcal{I}_l \neq \emptyset$ for all $\mathcal{I}_l$ in this set, except $\mathcal{I}_k$ itself. The set of relevant solutions is therefore defined as
+The three conditions at the bottom have been worked out by Luis Felipe Barba Flores from SDSC. The matrix $\mat{B}$ induces the integer coordinates $\round{\vect{z}_i}$ and the spot $\round{\vect{z}_i}\mat{B}^{-T}$ for spot $\vect{s}_i$. For crystalographers it is important that the spot pattern induced by a unit cell $\mat{B}$ reproduces the spots actually measured. The distance of induced to measured spot $\vect{s}_i$ is $\|\diffvecZ{\vect{z}_i}\mat{B}^{-T}\|$. This leads to an alternative formulation of (\ref{eq:viable}):
+%
+\begin{equation}\label{eq:viable-reciprocal}
+ \begin{split}
+  \vect{s}_i \mat{B}^T &= \vect{z}_i,\ i \in \mathcal{I} \\
+  &\text{with }\|\diffvecZ{\vect{z}_i}\mat{B}^{-T}\| < \beta \\
+  &\text{and }|\mathcal{I}| >= m \\
+  &\text{and }\mat{B} \simeq \mat{A}
+ \end{split}
+\end{equation}
+%
+The conditions in (\ref{eq:viable},\ref{eq:viable-reciprocal}) can potentially be true for many (unit cell, index set) combinations, so we end up with a set of solutions, dependent on $\beta$ and $m$. In fact, for every possible index set $\mathcal{I}_k$ with $|\mathcal{I}_k| >= m$ we end up with a (possibly empty) set of unit cell matrices $\mathcal{B}_k$ that fulfill (\ref{eq:viable},\ref{eq:viable-reciprocal}). But interesting is only one of the unit cells, we call it $\mat{B}_k$, in $\mathcal{B}_k$ which minimizes the $\distZ{\vect{z}_i}$ in (\ref{eq:viable},\ref{eq:viable-reciprocal}) for nonempty $\mathcal{B}_k$ sets. The resulting set of $(\mat{B}_k, \mathcal{I}_k)$ tuples can further be reduced by demanding that $\mathcal{I}_k$ should encompass as many spots as possible, and thus $\mathcal{I}_k \setminus \mathcal{I}_l \neq \emptyset$ for all $\mathcal{I}_l$ in this set, except $\mathcal{I}_k$ itself. The set of relevant solutions is therefore defined as
 %
 \begin{equation}\label{eq:solution-set}
  \begin{split}
-  \mathcal{S} = \{\, (\mat{B}_k, \mathcal{I}_k)\,\mid\ &\mat{B}_k, \mathcal{I}_k\text{ as in (\ref{eq:viable})} \\
+  \mathcal{S} = \{\, (\mat{B}_k, \mathcal{I}_k)\,\mid\ &\mat{B}_k, \mathcal{I}_k\text{ as in (\ref{eq:viable}) or (\ref{eq:viable-reciprocal})} \\
   &\text{and }\mathcal{I}_k \setminus \mathcal{I}_l \neq \emptyset,\text{ except for }l=k \\
   &\text{and }\mat{B}_k = \argmin_{\mat{B}} \sum_{i \in \mathcal{I}_k} \distZ{\vect{s}_i \mat{B}^T}^2\ \}
  \end{split}
 \end{equation}
 %
-The set of relevant solutions $\mathcal{S}$ may contain groups of almost equal unit cells $\mat{B}_k$ for which the spot index sets $\mathcal{I}_k$ only differ by very few spots. Such a group most likely belongs to the same crystal. The elements in such a group can be ordered by the distance $\distZ{\prescript{m}{}{\vect{z}}}$ where $\prescript{m}{}{\vect{z}}$ is the $m$th best approximated spot in (\ref{eq:viable}).
+The set of relevant solutions $\mathcal{S}$ may contain groups of almost equal unit cells $\mat{B}_k$ for which the spot index sets $\mathcal{I}_k$ only differ by very few spots. Such a group most likely belongs to the same crystal. The elements in such a group can be ordered by the distance $\distZ{\prescript{m}{}{\vect{z}}}$ where $\prescript{m}{}{\vect{z}}$ is the $m$th best approximated spot in (\ref{eq:viable},\ref{eq:viable-reciprocal}).
 
 Solutions for different crystals in $\mathcal{S}$ can be identified using the parameter $m$. If the cardinality of the symmetric difference $|\mathcal{I}_k \triangle \mathcal{I}_l | \geq m$, then $\mat{B}_k$ and $\mat{B}_l$ are the unit cells of different crystals in the sample.
 
@@ -440,7 +464,7 @@ Coming back to the original goal of approximating the set of relevant solutions 
 \]
 %
 The resulting $(\mat{B}_k, \mathcal{I}_k)$ pairs should be a pretty decent approximation to $\mathcal{S}$ by construction.
-
+%
 \begin{enumerate}
  \item $\distZ{\vect{z}_i} < \beta$ in (\ref{eq:viable}) follows from the construction of $\mathcal{I}_k$.
  \item $\mat{B} \simeq \mat{A}$ in (\ref{eq:viable}) follows almost from the construction of the cell orientation candidates. The only violation could come from the refinement Algorithms \ref{alg:vecrefinement} and \ref{alg:cellrefinement}. However, if $m$ is big enough and because the induced integer lattice coordinates stay fixed, the least squares fit steps are unlikely to change the $\vect{a}$ vector and $\mat{B}$ matrix significantly.
@@ -448,6 +472,30 @@ The resulting $(\mat{B}_k, \mathcal{I}_k)$ pairs should be a pretty decent appro
  \item $|\mathcal{I}_k| >= m$ in (\ref{eq:viable}) is only guaranteed if the final applied distance thresholds in Algorithms \ref{alg:vecrefinement} and \ref{alg:cellrefinement} are below $\beta$. This should be checked separately.
  \item $\mathcal{I}_k \setminus \mathcal{I}_l \neq \emptyset,\text{ except for }l=k$ in (\ref{eq:solution-set}) is not guaranteed. But the scoring mechanism in Algorithms \ref{alg:pointscore} and \ref{alg:cellscore} lead to a selection of candidates with large $|\mathcal{I}_k|$. For single crystal solutions, the unit cell candidate with the largest $|\mathcal{I}_k|$ should be in $\mathcal{S}$ as defined by (\ref{eq:solution-set}). For multiple crystals, if $P$ and $Q$ are large enough, the crystal selection procedure described in Section \ref{sec:intro} should yield very similar results.
 \end{enumerate}
+%
+To have a ˘better match between measured spots and induced spots, (\ref{eq:viable-reciprocal}) leads to an alternative to Algorithm \ref{alg:cellrefinement} with weaker properties, but a better correspondence to the measurement.
+
+\begin{algorithm}
+\caption{Cell orientation refinement}
+\label{alg:cellrefinement-reciprocal}
+\begin{algorithmic}[1]
+\Function{cell-refinement}{$\mat{B}_{i,p,q},\mat{S},score_{i,p,q},maxiter,m,\lambda$}
+\State $\mat{C}_{i,p,q}\gets \round{\mat{S} \mat{B}_{i,p,q}^T}$\Comment{integer spot lattice coordinates}
+\State $\mat{B}\gets \mat{B}_{i,p,q}$
+\State $t = \floor{score_{i,p,q}} + 1 - score_{i,p,q}$\Comment{mean distance from \emph{score}}
+\For{$j=1\, ...\, maxiter$}
+  \State $\mat{F}\gets \filter{\|\diffvecZ{\mat{S}\vect{B}^T}\mat{B}^{-T}\|_{row} < t}$\Comment{filter for \emph{close spots}}
+  \If{$\trace(\mat{F}) < m$}\Comment{too few \emph{close spots}?}
+    \State exit for loop
+  \EndIf
+  \State $\mat{B}\gets \argmin_{\mat{X}} \| \mat{F}(\mat{S}\mat{X}^T - \mat{C}_{i,p,q}) \|^2$\Comment{least squares on \emph{close spots}}
+  \State $t\gets \lambda t$
+\EndFor
+\State $\mat{B}_{i,p,q}^{refined}\gets \vect{B}$
+\State \Return $\mat{B}_{i,p,q}^{refined}$
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
 
 \subsection{Selecting Final Solutions}\label{subsec:selection}
 
@@ -529,7 +577,7 @@ The greedy method of selecting crystals in Section \ref{subsec:selection} is exp
  \item $Q^*$ from Algorithm \ref{alg:cellsampling} gives the number of rotation angle sampling points.
  \item $Q$ from Section \ref{subsec:cellsampling} gives the number of kept unit cell orientation candidates.
  \item $\tau$ from Algorithm \ref{alg:mirroraxis} gives a threshold for the collinearity check.
- \item $\lambda$ from Algorithm \ref{alg:cellrefinement} gives the contraction factor for the closeness threshold.
+ \item $\lambda$ from Algorithm \ref{alg:cellrefinement} and \ref{alg:cellrefinement-reciprocal} gives the contraction factor for the closeness threshold.
 \end{itemize}
 
 The current implementation doesn't make such consistent use of parameters as described here. Parameters like $\beta$ and $m$ are separately given for different calculations. So there are different versions of $\beta$ for the candidate vector orientation scoring in Algorithm \ref{alg:pointscore}, the cell orientation scoring in Algorithm \ref{alg:cellscore}, and the final solution selection in Section \ref{subsec:selection}. If split versions of such parameters make sense or not is still experimental.
