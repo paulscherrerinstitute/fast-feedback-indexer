@@ -473,7 +473,7 @@ The resulting $(\mat{B}_k, \mathcal{I}_k)$ pairs should be a pretty decent appro
  \item $\mathcal{I}_k \setminus \mathcal{I}_l \neq \emptyset,\text{ except for }l=k$ in (\ref{eq:solution-set}) is not guaranteed. But the scoring mechanism in Algorithms \ref{alg:pointscore} and \ref{alg:cellscore} lead to a selection of candidates with large $|\mathcal{I}_k|$. For single crystal solutions, the unit cell candidate with the largest $|\mathcal{I}_k|$ should be in $\mathcal{S}$ as defined by (\ref{eq:solution-set}). For multiple crystals, if $P$ and $Q$ are large enough, the crystal selection procedure described in Section \ref{sec:intro} should yield very similar results.
 \end{enumerate}
 %
-To have a ˘better match between measured spots and induced spots, (\ref{eq:viable-reciprocal}) leads to an alternative to Algorithm \ref{alg:cellrefinement} with weaker properties, but a better correspondence to the measurement.
+To have a better match between measured spots and induced spots, (\ref{eq:viable-reciprocal}) leads to an alternative to Algorithm \ref{alg:cellrefinement} with weaker properties, but a better correspondence to the measurement through an iterative fit to selected spots in reciprocal space.
 
 \begin{algorithm}
 \caption{Cell orientation refinement}

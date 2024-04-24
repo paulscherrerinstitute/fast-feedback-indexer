@@ -664,14 +664,13 @@ template<typename float_type=float> struct indexer_ifse;
 %
 The refinement configuration is the same as for the \emph{ifss} method, and all methods and members are similar. The idea behind this experimental refinement is to bring the method closer to something resembling the steepest descent method and allow algorithm developers to try modifications of the $\mat{\Delta}$ delta matrix and its calculation.
 
-Additionally, the \emph{convenience} API offers the experimental \textbf{indexer\_ifssr} object that uses an iterative fit to selected spots refinement method with another spot selection method. Instead of measuring the distance to induced integer spot coordinates, it measures the distance spots and induced spot in reciprocal space:
+To achieve a better fit between induced and measured spots, the \emph{convenience} API offers the experimental \textbf{indexer\_ifssr} object that uses an iterative fit to selected spots refinement method with another spot selection method. Instead of measuring the distance to induced integer spot coordinates, it measures the distance spots and induced spot in reciprocal space:
 %
 \[
 d_i = \| \round{\vect{s}_i\mat{B}^T}\mat{B}^{-T} - \vect{s}_i \|.
 \]
 %
 The spot is considered \emph{close}, if $d_i < t$, where $t$ is the current closeness threshold. The configuration and methods are the same as for the \emph{ifss} method.
-
 
 \subsection{Thread Safety}
 
