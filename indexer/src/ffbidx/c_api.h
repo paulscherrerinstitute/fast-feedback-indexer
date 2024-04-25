@@ -106,6 +106,9 @@ int crystals(int handle,
              unsigned min_spots,
              unsigned* indices,
              unsigned indices_size);
+// foreign convenience wrappers, use cuda_runtime.h directly if possible
+int num_gpus();
+int select_gpu(int gpu);
 
 #ifdef __cplusplus
 } // extern "C"

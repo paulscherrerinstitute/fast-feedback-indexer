@@ -9,6 +9,7 @@
 #include <Eigen/Dense>
 #include "ffbidx/refine.h"
 #include "ffbidx/c_api.h"
+#include "cuda_runtime.h"
 
 namespace {
     constexpr std::string_view no_error{"OK"};
@@ -411,5 +412,21 @@ extern "C" {
                  unsigned indices_size)
     {
         return crystals_impl(handle, in, out, threshold, min_spots, indices, indices_size);
+    }
+
+    // try to avoid using the following, they don't really belong here
+    int num_gpus()
+    {
+        int ngpus = 0;
+        if (cudaGetDeviceCount(&ngpus) != cudaSuccess)
+            return -1;
+        return ngpus;
+    }
+
+    int select_gpu(int gpu)
+    {
+        if (cudaSetDevice(gpu) != cudaSuccess)
+            return -1;
+        return 0;
     }
 } // extern "C"
