@@ -17,23 +17,69 @@ namespace {
         std::unique_ptr<fast_feedback::indexer<float_type>> idx;
         error* err;
         void* data;
+        fast_feedback::memory_pin pin_isx;
+        fast_feedback::memory_pin pin_isy;
+        fast_feedback::memory_pin pin_isz;
+        fast_feedback::memory_pin pin_icx;
+        fast_feedback::memory_pin pin_icy;
+        fast_feedback::memory_pin pin_icz;
+        fast_feedback::memory_pin pin_ox;
+        fast_feedback::memory_pin pin_oy;
+        fast_feedback::memory_pin pin_oz;
+        fast_feedback::memory_pin pin_os;
+        fast_feedback::memory_pin pin_crt;
     };
 
     std::atomic_int next_id{0};
     std::unordered_map<int, handler> handler_map{};
 
+    void set_error(error* err, const char* message)
+    {
+        if (err)
+            std::snprintf(err->message, err->msg_len, "%s", message);
+    }
+
     int error_from_exception(handler& hdl, const std::exception& ex)
     {
-        if (hdl.err)
-            std::snprintf(hdl.err->message, hdl.err->msg_len, "%s", ex.what());
+        set_error(hdl.err, ex.what());
         return -1;
     }
 
     int error_from_msg(handler& hdl, const std::string_view& msg)
     {
-        if (hdl.err)
-            std::snprintf(hdl.err->message, hdl.err->msg_len, "%s", msg.data());
+        set_error(hdl.err, msg.data());
         return -1;
+    }
+
+    void set_defaults_impl(config_persistent* cfg_persistent,
+                           config_runtime* cfg_runtime,
+                           config_ifssr* cfg_ifssr)
+    {
+        if (cfg_runtime) {
+            cfg_runtime->length_threshold=1e-9;      // threshold for determining equal vector length (|va| - threshold < |vb| < |va| + threshold)
+            cfg_runtime->triml=0.001;                // lower trim value for distance to nearest integer objective value - 0 < triml < trimh
+            cfg_runtime->trimh=0.3;                  // higher trim value for distance to nearest integer objective value - triml < trimh < 0.5
+            cfg_runtime->delta=0.1;                  // log2 curve position: score = log2(trim(dist(x)) + delta)
+            cfg_runtime->dist1=0.2;                  // maximum distance to int for single coordinate
+            cfg_runtime->dist3=0.15;                 // maximum distance to int for tripple coordinates
+            cfg_runtime->num_halfsphere_points=32*1024; // number of sample points on half sphere for finding vector candidates
+            cfg_runtime->num_angle_points=0;         // number of sample points in rotation space for finding cell candidates (0: auto)
+        }
+
+        if (cfg_persistent) {
+            cfg_persistent->max_output_cells=1;      // maximum number of output unit cells
+            cfg_persistent->max_input_cells=1;       // maximum number of input unit cells, (must be before max_spots in memory, see copy_in())
+            cfg_persistent->max_spots=200;           // maximum number of input spots, (must be after max_input_cells in memory, see copy_in())
+            cfg_persistent->num_candidate_vectors=32; // number of candidate vectors (per input cell vector)
+            cfg_persistent->redundant_computations=false; // compute candidates for all three cell vectors instead of just one
+        }
+
+        if (cfg_ifssr) {
+            cfg_ifssr->threshold_contraction=.8;     // contract error threshold by this value in every iteration
+            cfg_ifssr->max_distance=.00075;          // max distance to reciprocal spots for inliers
+            cfg_ifssr->min_spots=8;                  // minimum number of spots to fit against
+            cfg_ifssr->max_iter=32;                  // max number of iterations
+        }
     }
 
     int create_indexer_impl(const config_persistent* cfg_persistent,
@@ -49,12 +95,15 @@ namespace {
             }
             const auto* cpers = reinterpret_cast<const fast_feedback::config_persistent<float_type>*>(cfg_persistent);
             std::unique_ptr<fast_feedback::indexer<float_type>> idx{new fast_feedback::indexer<float_type>{*cpers}};
-            handler_map.emplace(std::make_pair(id, handler{std::move(idx), err, data}));
+            handler_map.emplace(std::make_pair(id, handler{std::move(idx), err, data, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}}));
             error_from_msg(handler_map[id], no_error);
             return id;
+        } catch (std::exception& ex) {
+            set_error(err, ex.what());
         } catch (...) {
-            return -1;
+            ; // ignore
         }
+        return -1;
     }
 
     int drop_indexer_impl(int handle)
@@ -94,10 +143,32 @@ namespace {
         const fast_feedback::config_runtime<float_type> default_crt{};
         try {
             handler& hdl = handler_map.at(handle);
-            const auto* crt = cfg_runtime == nullptr ?
-                &default_crt :
-                reinterpret_cast<const fast_feedback::config_runtime<float_type>*>(cfg_runtime);
             try {
+                if (hdl.pin_crt.ptr != cfg_runtime)
+                    hdl.pin_crt = fast_feedback::memory_pin::on(cfg_runtime);
+                if (hdl.pin_isx.ptr != in->spot.x)
+                    hdl.pin_isx = fast_feedback::memory_pin(in->spot.x, in->n_spots * sizeof(float));
+                if (hdl.pin_isy.ptr != in->spot.y)
+                    hdl.pin_isy = fast_feedback::memory_pin(in->spot.y, in->n_spots * sizeof(float));
+                if (hdl.pin_isz.ptr != in->spot.z)
+                    hdl.pin_isz = fast_feedback::memory_pin(in->spot.z, in->n_spots * sizeof(float));
+                if (hdl.pin_icx.ptr != in->spot.x)
+                    hdl.pin_icx = fast_feedback::memory_pin(in->cell.x, 3*in->n_cells * sizeof(float));
+                if (hdl.pin_icy.ptr != in->spot.y)
+                    hdl.pin_icy = fast_feedback::memory_pin(in->cell.y, 3*in->n_cells * sizeof(float));
+                if (hdl.pin_icz.ptr != in->spot.z)
+                    hdl.pin_icz = fast_feedback::memory_pin(in->cell.z, 3*in->n_cells * sizeof(float));
+                if (hdl.pin_ox.ptr != out->x)
+                    hdl.pin_ox = fast_feedback::memory_pin(out->x, 3*out->n_cells * sizeof(float));
+                if (hdl.pin_oy.ptr != out->y)
+                    hdl.pin_oy = fast_feedback::memory_pin(out->y, 3*out->n_cells * sizeof(float));
+                if (hdl.pin_oz.ptr != out->z)
+                    hdl.pin_oz = fast_feedback::memory_pin(out->z, 3*out->n_cells * sizeof(float));
+                if (hdl.pin_os.ptr != out->score)
+                    hdl.pin_os = fast_feedback::memory_pin(out->score, out->n_cells * sizeof(float));
+                const auto* crt = cfg_runtime == nullptr ?
+                    &default_crt :
+                    reinterpret_cast<const fast_feedback::config_runtime<float_type>*>(cfg_runtime);
                 hdl.idx->index_start(
                     *reinterpret_cast<const fast_feedback::input<float_type>*>(in),
                     *reinterpret_cast<fast_feedback::output<float_type>*>(out),
@@ -142,27 +213,38 @@ namespace {
         using Vx = Eigen::VectorXf;
         using Eigen::Map;
 
-        if (! cfg_ifssr)
+        if (cfg_ifssr == NULL)
             return 0;
 
         try {
             handler& hdl = handler_map.at(handle);
             try {
-                Mx3 spots(in->n_spots, 3);
-                spots.col(0) = Map<Vx>(in->spot.x, in->n_spots);
-                spots.col(1) = Map<Vx>(in->spot.y, in->n_spots);
-                spots.col(2) = Map<Vx>(in->spot.z, in->n_spots);
+                Mx3 spots{in->n_spots, 3};
+                const Map<Vx> sx{in->spot.x, in->n_spots};
+                spots.col(0) = sx;
+                const Map<Vx> sy{in->spot.y, in->n_spots};
+                spots.col(1) = sy;
+                const Map<Vx> sz{in->spot.z, in->n_spots};
+                spots.col(2) = sz;
                 Mx3 cells(3*in->n_cells, 3);
-                cells.col(0) = Map<Vx>(out->x, 3*out->n_cells);
-                cells.col(1) = Map<Vx>(out->y, 3*out->n_cells);
-                cells.col(2) = Map<Vx>(out->z, 3*out->n_cells);
-                Vx scores{Map<Vx>{out->score, out->n_cells}};
+                Map<Vx> cx{out->x, 3*out->n_cells};
+                cells.col(0) = cx;
+                Map<Vx> cy{out->y, 3*out->n_cells};
+                cells.col(1) = cy;
+                Map<Vx> cz{out->z, 3*out->n_cells};
+                cells.col(2) = cz;
+                Map<Vx> sc{out->score, out->n_cells};
+                Vx scores{sc};
                 static_assert(sizeof(refine::config_ifssr<float_type>) == sizeof(config_ifssr));
                 refine::indexer_ifssr<float_type>::refine(
                     spots, cells, scores,
                     *reinterpret_cast<const refine::config_ifssr<float_type>*>(cfg_ifssr),
                     block, nblocks
                 );
+                cx = cells.col(0);
+                cy = cells.col(1);
+                cz = cells.col(2);
+                sc = scores;
             } catch (std::exception& ex) {
                 return error_from_exception(hdl, ex);
             }
@@ -172,11 +254,11 @@ namespace {
         return 0;
     }
 
-    int index_impl(int handle,
-                   const input* in,
-                   output* out,
-                   const config_runtime* cr,
-                   const config_ifssr* cfg_ifssr)
+    int indexer_op_impl(int handle,
+                        const input* in,
+                        output* out,
+                        const config_runtime* cr,
+                        const config_ifssr* cfg_ifssr)
     {
         if (index_start_impl(handle, in, out, cr, nullptr, nullptr))
             return -1;
@@ -240,7 +322,7 @@ namespace {
                 );
                 unsigned len = std::min((unsigned)idx.size(), indices_size);
                 std::copy(std::cbegin(idx), std::cbegin(idx)+len, indices);
-                return 0;
+                return len;
             } catch (std::exception& ex) {
                 return error_from_exception(hdl, ex);
             }
@@ -251,6 +333,13 @@ namespace {
 } // namespace
 
 extern "C" {
+    void set_defaults(config_persistent* cfg_persistent,
+                      config_runtime* cfg_runtime,
+                      config_ifssr* cfg_ifssr)
+    {
+        set_defaults_impl(cfg_persistent, cfg_runtime, cfg_ifssr);
+    }
+
     int create_indexer(const config_persistent* cfg_persistent,
                        error* err,
                        void* data)
@@ -298,13 +387,13 @@ extern "C" {
         return refine_impl(handle, in, out, cfg_ifssr, block, nblocks);
     }
 
-    int index(int handle,
-              const input* in,
-              output* out,
-              const config_runtime* cfg_runtime,
-              const config_ifssr* cfg_ifssr)
+    int indexer_op(int handle,
+                   const input* in,
+                   output* out,
+                   const config_runtime* cfg_runtime,
+                   const config_ifssr* cfg_ifssr)
     {
-        return index_impl(handle, in, out, cfg_runtime, cfg_ifssr);
+        return indexer_op_impl(handle, in, out, cfg_runtime, cfg_ifssr);
     }
 
     int best_cell(int handle,

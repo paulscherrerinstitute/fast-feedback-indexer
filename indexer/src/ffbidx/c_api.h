@@ -2,6 +2,7 @@
 #define FFBIDX_C_API_H
 
 #include <stddef.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -9,7 +10,7 @@ extern "C" {
 
 typedef float float_type;
 
-struct input final {
+struct input {
     struct {
         float_type* x;  // x coordinates, pinned memory
         float_type* y;  // y coordinates, pinned memory
@@ -26,78 +27,81 @@ struct input final {
     bool new_spots;     // set to true if spots are new or have changed
 };
 
-struct output final {
+struct output {
     float_type* x;      // x coordinates, pinned memory
     float_type* y;      // y coordinates, pinned memory
     float_type* z;      // z coordinates, pinned memory
     float_type* score;  // per cell score, pinned memory
-    unsigned n_cells=1u;// number of unit cells
+    unsigned n_cells;   // number of unit cells
 };
 
 struct config_runtime {
-    float_type length_threshold=1e-9;       // threshold for determining equal vector length (|va| - threshold < |vb| < |va| + threshold)
-    float_type triml=0.001;                 // lower trim value for distance to nearest integer objective value - 0 < triml < trimh
-    float_type trimh=0.3;                   // higher trim value for distance to nearest integer objective value - triml < trimh < 0.5
-    float_type delta=0.1;                   // log2 curve position: score = log2(trim(dist(x)) + delta)
-    float_type dist1=0.2;                   // maximum distance to int for single coordinate
-    float_type dist3=0.15;                  // maximum distance to int for tripple coordinates
-    unsigned num_halfsphere_points=32*1024; // number of sample points on half sphere for finding vector candidates
-    unsigned num_angle_points=0;            // number of sample points in rotation space for finding cell candidates (0: auto)
+    float_type length_threshold;    // threshold for determining equal vector length (|va| - threshold < |vb| < |va| + threshold)
+    float_type triml;               // lower trim value for distance to nearest integer objective value - 0 < triml < trimh
+    float_type trimh;               // higher trim value for distance to nearest integer objective value - triml < trimh < 0.5
+    float_type delta;               // log2 curve position: score = log2(trim(dist(x)) + delta)
+    float_type dist1;               // maximum distance to int for single coordinate
+    float_type dist3;               // maximum distance to int for tripple coordinates
+    unsigned num_halfsphere_points; // number of sample points on half sphere for finding vector candidates
+    unsigned num_angle_points;      // number of sample points in rotation space for finding cell candidates (0: auto)
 };
 
 struct config_persistent {
-    unsigned max_output_cells=1;            // maximum number of output unit cells
-    unsigned max_input_cells=1;             // maximum number of input unit cells, (must be before max_spots in memory, see copy_in())
-    unsigned max_spots=200;                 // maximum number of input spots, (must be after max_input_cells in memory, see copy_in())
-    unsigned num_candidate_vectors=32;      // number of candidate vectors (per input cell vector)
-    bool redundant_computations=false;      // compute candidates for all three cell vectors instead of just one
+    unsigned max_output_cells;      // maximum number of output unit cells
+    unsigned max_input_cells;       // maximum number of input unit cells, (must be before max_spots in memory, see copy_in())
+    unsigned max_spots;             // maximum number of input spots, (must be after max_input_cells in memory, see copy_in())
+    unsigned num_candidate_vectors; // number of candidate vectors (per input cell vector)
+    bool redundant_computations;    // compute candidates for all three cell vectors instead of just one
 };
 
 struct config_ifssr {
-    float_type threshold_contraction=.8;    // contract error threshold by this value in every iteration
-    float_type max_distance=.00075;         // max distance to reciprocal spots for inliers
-    unsigned min_spots=8;                   // minimum number of spots to fit against
-    unsigned max_iter=32;                   // max number of iterations
+    float_type threshold_contraction; // contract error threshold by this value in every iteration
+    float_type max_distance;        // max distance to reciprocal spots for inliers
+    unsigned min_spots;             // minimum number of spots to fit against
+    unsigned max_iter;              // max number of iterations
 };
 
 struct error {
-    char* message = NULL;   // initialized pointer to a char array of length at least msg_len
-    unsigned msg_len;       // length of char array pointed to by message
+    char* message;      // initialized pointer to a char array of length at least msg_len
+    unsigned msg_len;   // length of char array pointed to by message
 };
 
 typedef void(*callback_func)(void*);
 
-// return -1 (or NULL) on error, 0 (or pointer) on success
-int create_indexer(const config_persistent* cfg_persistent,
-                   error* err,          // error message will be put here
+// return -1 (or NULL) on error, 0 (or pointer, or handle, or number of crystals) on success
+void set_defaults(struct config_persistent* cfg_persistent,
+                  struct config_runtime* cfg_runtime,
+                  struct config_ifssr* cfg_ifssr);
+int create_indexer(const struct config_persistent* cfg_persistent,
+                   struct error* err,   // error message will be put here
                    void* data);         // arbitrary user data
 int drop_indexer(int handle);           // destroy indexer object, but neither error pointer nor data pointer
-error* error_message(int handle);       // error message for handle
+struct error* error_message(int handle); // error message for handle
 void* user_data(int handle);            // user data for handle
 int index_start(int handle,
-                const input* in,
-                output* out,
-                const config_runtime* cfg_runtime,
+                const struct input* in,
+                struct output* out,
+                const struct config_runtime* cfg_runtime,
                 callback_func callback, // if not NULL, don't call index_end before this function is called
                 void* data);            // data for callback function
 int index_end(int handle,
-              output* out);
+              struct output* out);
 int refine(int handle,
-           const input* in,
-           output* out,
-           const config_ifssr* cfg_ifssr,       // noop if NULL
+           const struct input* in,
+           struct output* out,
+           const struct config_ifssr* cfg_ifssr, // noop if NULL
            unsigned block, unsigned nblocks);   // handle one block out of nblocks output cells, threadsafe
                                                 // (set to 0,1 for all cells)
-int index(int handle,   // just do it all
-          const input* in,
-          output* out,
-          const config_runtime* cfg_runtime,
-          const config_ifssr* cfg_ifssr);   // no refinement if NULL
+int indexer_op(int handle,   // just do it all
+               const struct input* in,
+               struct output* out,
+               const struct config_runtime* cfg_runtime,
+               const struct config_ifssr* cfg_ifssr);   // no refinement if NULL
 int best_cell(int handle,
-              const output* out);
+              const struct output* out);
 int crystals(int handle,
-             const input* in,
-             const output* out,
+             const struct input* in,
+             const struct output* out,
              float_type threshold,
              unsigned min_spots,
              unsigned* indices,
