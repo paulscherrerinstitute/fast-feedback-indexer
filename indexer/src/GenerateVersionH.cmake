@@ -15,4 +15,6 @@ if(VERSION_TXT STREQUAL "")
   message(WARNING "Failed to determine version from Git.")
 endif()
 
+message("Version detection in directory ${CMAKE_SOURCE_DIR} found: ${VERSION_TXT}")
+
 configure_file(${SRC} ${DST} @ONLY)
