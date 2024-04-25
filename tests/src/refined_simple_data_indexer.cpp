@@ -175,7 +175,7 @@ int main (int argc, char *argv[])
             min_spots = cifssr.min_spots;
             max_dist = cifssr.max_distance;
         } else {
-            throw std::runtime_error("indexer method must be one of 'ifss', 'ifse'");
+            throw std::runtime_error("indexer method must be one of 'ifss', 'ifse', 'ifssr'");
         }
 
         fast_feedback::refine::indexer<float>& indexer = *indexer_p;
