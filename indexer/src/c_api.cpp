@@ -108,8 +108,18 @@ namespace {
     }
 
     int drop_indexer_impl(int handle)
-    {
-        return handler_map.erase(handle) != 0 ? 0 : -1;
+    {   
+        struct error* err = NULL;
+        try {
+            handler& hdl = handler_map.at(handle);
+            err = hdl.err;
+            return handler_map.erase(handle) != 0 ? 0 : -1;
+        } catch (std::exception& ex) {
+            set_error(err, ex.what());
+        } catch (...) {
+            ; // ignore
+        }
+        return -1;
     }
 
     error* error_message_impl(int handle)
