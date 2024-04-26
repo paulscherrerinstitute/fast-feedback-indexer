@@ -912,7 +912,7 @@ namespace fast_feedback {
         inline std::vector<unsigned> select_crystals (const Eigen::MatrixBase<CellMat>& cells,
                                                       const Eigen::MatrixBase<SpotMat>& spots,
                                                       const Eigen::DenseBase<VecX>& scores,
-                                                      float_type threshold=.02f, unsigned min_spots=9u,
+                                                      float_type threshold=.00075, unsigned min_spots=8u,
                                                       bool reciprocal=true)
         {
             using namespace Eigen;
@@ -921,7 +921,6 @@ namespace fast_feedback {
             using Vx = VectorX<bool>;
 
             std::vector<unsigned> crystals;
-            const unsigned n_spots = spots.rows();
             const unsigned n_cells = scores.size();
             std::vector<unsigned> sorted(n_cells);
 
@@ -947,23 +946,12 @@ namespace fast_feedback {
                 return crystals;
             crystals.push_back(sorted[0]);
 
-            auto new_spots_filt = [&allcover, n_spots](auto& cellcover) -> unsigned {
-                unsigned cnt = 0u;
-                for (unsigned i=0; i<n_spots; i++) {
-                    if (allcover[i])
-                        cellcover[i] = false;   // set spots already covered to false in cellcover
-                    else if (cellcover[i])
-                        cnt++;
-                }
-                return cnt; // number of spots covered by cellcover, but not by allcover
-            };
-
             for (unsigned i=1u; i<n_cells; i++) {
                 Vx cellcover = spots_covered(sorted[i]);
-                const unsigned cnt = new_spots_filt(cellcover);    // modifies cellcover
+                const unsigned cnt = (cellcover.array() && !allcover.array()).count();
                 if (cnt < min_spots)
                     continue;
-                allcover += cellcover;
+                allcover = allcover || cellcover;
                 crystals.push_back(sorted[i]);
             }
             return crystals;

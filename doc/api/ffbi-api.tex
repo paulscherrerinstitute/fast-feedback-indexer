@@ -27,7 +27,9 @@
 \newcommand{\floor}[1]{\lfloor #1 \rfloor}
 \newcommand{\ceil}[1]{\lceil #1 \rceil}
 \newcommand{\distZ}[1]{d_\mathbb{Z}(#1)}
+\newcommand{\diffZ}[1]{\Delta_\mathbb{Z}(#1)}
 \newcommand{\distvecZ}[1]{\vect{d}_\mathbb{Z}(#1)}
+\newcommand{\diffvecZ}[1]{\vect{\Delta}_\mathbb{Z}(#1)}
 \newcommand{\trim}[3]{\trimop_{#1}^{#2}\left ( #3 \right )}
 \newcommand{\filter}[1]{F^{#1}}
 
@@ -409,8 +411,9 @@ vector<unsigned> select_crystals (
     const MatrixBase<CellMat>& cells,
     const MatrixBase<SpotMat>& spots,
     const DenseBase<VecX>& scores,
-    float_type threshold=.02f,
-    unsigned min_spots=9u
+    float_type threshold=.00075,
+    unsigned min_spots=8u,
+    bool reciprocal=true
 );
 \end{lstlisting}
 
@@ -422,13 +425,15 @@ The \textbf{threshold} represents the $\beta$ parameter in the algorithm descrip
 
 The \textbf{min\_spots} argument represents the minimum number of fresh spots, denoted by $m$ in the algorithm description, a new candidate cell has to cover in order to be considered as a representative of a new crystal.
 
+The \textbf{reciprocal} flag selects the distance measurement method. Distance to integer coordinates for \emph{false}, and distance between induced and measured spot for \emph{true}.
+
 If two unit cell candidates have exactly the same score, the unit cell candidate obtained with the \emph{best\_cell} function might not be part of the unit cell candidate set obtained with \emph{select\_crystals}.
 
 Before calling these functions, it is possible to influence the result by adding a positive penalty term to the scores, for example based on results from the \emph{cell\_similarity} function.
 
 \subsubsection{Unit Cell Viability}
 
-The \emph{convenience} API provides a function to check unit cell viability explicitly. A unit cell passes the check, if at least \emph{min\_spots} have spot coordinates that approximate integer coordinates within \emph{threshold}. If refinement has been done with the same \emph{min\_spots} parameter, and cell scores have not been fiddled with, this check can, for a unit cell candidate with index $i$, simply be replaced by a simple and more performant $scores[i] < threshold$ check. However, if cell scores have been altered, or scores from the \emph{raw} API are used, this check is necessary.
+The \emph{convenience} API provides a function to check unit cell viability explicitly. A unit cell passes the check, if either at least \emph{min\_spots} have spot coordinates that approximate integer coordinates within \emph{threshold}, or the distance between induced and measured spots is within \emph{threshold} in reciprocal space for at least that many spots. If refinement has been done with the same \emph{min\_spots} parameter, and cell scores have not been fiddled with, this check can, for a unit cell candidate with index $i$, simply be replaced by a more performant $scores[i] < threshold$ check. However, if cell scores have been altered, or scores from the \emph{raw} API are used, this check is necessary.
 %
 \begin{lstlisting}
 template <typename Mat3, typename MatX3,
@@ -436,8 +441,9 @@ template <typename Mat3, typename MatX3,
 inline bool is_viable_cell (
     const Eigen::MatrixBase<Mat3>& cell,
     const Eigen::MatrixBase<MatX3>& spots,
-    float_type threshold=.02f,
-    unsigned min_spots=9u
+    float_type threshold=.00075,
+    unsigned min_spots=8u,
+    bool reciprocal=true
 );
 \end{lstlisting}
 
@@ -445,7 +451,9 @@ The \textbf{cell} matrix gives the single unit cell which should be checked for 
 
 The \textbf{spots} matrix gives the spots in reciprocal space as row vectors.
 
-The \textbf{threshold} gives the distance limit to integer coordinates, and the \textbf{min\_spots} argument the minimum acceptable number of spots that have to be approximated within the \emph{threshold}.
+The \textbf{threshold} gives the distance limit, and the \textbf{min\_spots} argument the minimum acceptable number of spots that have to be approximated within the \emph{threshold}.
+
+The \textbf{reciprocal} flag selects the distance measurement method. Distance to integer coordinates for \emph{false}, and distance between induced and measured spot for \emph{true}.
 
 \subsection{Convenience Wrappers}
 

@@ -23,6 +23,7 @@
 \newcommand{\mat}[1]{\mathbf{#1}}
 \newcommand{\round}[1]{\lfloor #1 \rceil}
 \newcommand{\floor}[1]{\lfloor #1 \rfloor}
+\newcommand{\ceil}[1]{\lceil #1 \rceil}
 \newcommand{\distZ}[1]{d_\mathbb{Z}(#1)}
 \newcommand{\diffZ}[1]{\Delta_\mathbb{Z}(#1)}
 \newcommand{\distvecZ}[1]{\vect{d}_\mathbb{Z}(#1)}
@@ -476,7 +477,7 @@ The resulting $(\mat{B}_k, \mathcal{I}_k)$ pairs should be a pretty decent appro
 To have a better match between measured spots and induced spots, (\ref{eq:viable-reciprocal}) leads to an alternative to Algorithm \ref{alg:cellrefinement} with weaker properties, but a better correspondence to the measurement through an iterative fit to selected spots in reciprocal space.
 
 \begin{algorithm}
-\caption{Cell orientation refinement}
+\caption{Cell orientation refinement (reciprocal space)}
 \label{alg:cellrefinement-reciprocal}
 \begin{algorithmic}[1]
 \Function{cell-refinement}{$\mat{B}_{i,p,q},\mat{S},score_{i,p,q},maxiter,m,\lambda$}
@@ -523,6 +524,20 @@ To address some of the issues in Section \ref{subsec:approxsol}, we first define
 \end{algorithmic}
 \end{algorithm}
 
+The alternative version comparing induced and measured spots uses the distance between those instead of the distance to integer coordinates.
+
+\begin{algorithm}
+\caption{Calculate $m$th best spot approximation score (reciprocal space)}
+\label{alg:mthbest-reciprocal}
+\begin{algorithmic}[1]
+\Function{mth-best}{$\mat{B},\mat{S},m$}\Comment{$\mat{S} = \in \mathbb{R}^{n\times 3}, \mat{S}=\begin{pmatrix} \vect{s}_1\\ \vdots \\ \vect{s}_n \end{pmatrix}$}
+\State $\prescript{m}{}{\vect{s}} = \prescript{j:\|\diffvecZ{\vect{s}_j\mat{B}^T}\mat{B}^{-T}\|}{}{\vect{S}}\downarrow m\uparrow 1$\Comment{$m$th best approximated spot}
+\State $\prescript{m}{}{\vect{z}} = \prescript{m}{}{\vect{s}}\mat{B}^T$\Comment{coordinates of $\prescript{m}{}{\vect{s}}$}
+\State \Return $\|\diffvecZ{\prescript{m}{}{\vect{z}}}\mat{B}^{-T}\|$\Comment{distance induced-measured}
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
 For finding single crystals, the set $\mathcal{Q}^{refined}$ should be sorted and filtered as described in Section \ref{sec:intro} using the score for the $m$th best approximated spot and the threshold $\beta$:
 %
 \[
@@ -538,7 +553,10 @@ The best solution approximation can now be found in the following way:
 For multicrystals, we will accept new unit cells only if they cover a substantial amount of new spots. For this we'll compute the set of spots covered by a unit cell $\mat{B}_i\in\mathcal{Q}^{viable}$
 %
 \[
- \mathcal{C}_i = \{ j \mid \vect{s}_j\mat{B}_i^T < \beta \}
+ \begin{split}
+ \mathcal{C}_i &= \{ j \mid \distZ{\vect{s}_j\mat{B}_i^T} < \beta \}\text{ or}\\
+ \mathcal{C}_i &= \{ j \mid \|\diffvecZ{\vect{s}_j\mat{B}_i^T}\mat{B}^{-T}\| < \beta \}\text{ (reciprocal)}
+ \end{split}
 \]
 %
 We'll interpret $\mat{B}_i$ as the $i$th item in the sorted sequence $\mathcal{Q}^{viable}$, so $\mat{B}_1$ is the same as $\mat{B}^\bigstar$. Then we look at the series of sets of indices into sequence $\mathcal{Q}^{viable}$ for accepted unit cells $\mathcal{U}_i$ with $\mathcal{U}_1 = \{ 1 \}$ as the initial set. We'll put the index $i+1$ for a new unit cell $\mat{B}_{i+1} \in \mathcal{Q}^{viable}$ into the set $\mathcal{U}_{i+1}$ if

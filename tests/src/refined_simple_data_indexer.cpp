@@ -212,8 +212,8 @@ int main (int argc, char *argv[])
         }
         std::cout << "scores:\n" << indexer.oScoreV() << "\n\n";
         unsigned best_cell = fast_feedback::refine::best_cell(indexer.oScoreV());
-        bool indexable = fast_feedback::refine::is_viable_cell(indexer.oCell(best_cell), indexer.Spots(), max_dist, min_spots);
-        std::vector<unsigned> crystalls = fast_feedback::refine::select_crystals(indexer.oCellM(), indexer.Spots(), indexer.oScoreV(), max_dist, min_spots);
+        bool indexable = fast_feedback::refine::is_viable_cell(indexer.oCell(best_cell), indexer.Spots(), max_dist, min_spots, (method == "ifssr"));
+        std::vector<unsigned> crystalls = fast_feedback::refine::select_crystals(indexer.oCellM(), indexer.Spots(), indexer.oScoreV(), max_dist, min_spots, (method == "ifssr"));
         std::cout << "best cell: " << best_cell << ", is viable: " << (indexable ? "true " : "false") << '\n';
         std::cout << "crystalls:\n" << Eigen::Map<Eigen::VectorX<unsigned>>(crystalls.data(), crystalls.size()) << "\n\n";
         std::cout << "timings:\n"
