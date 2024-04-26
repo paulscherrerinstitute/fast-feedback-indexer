@@ -160,6 +160,10 @@ int index_end(int handle,
 // different block values). All cells are handled at once by passing
 // block=0 and nblocks=1
 // This will modify output cells and scores.
+// If refinement is done, a cell viability check for cell i can be done like this:
+// cell_ok = (out->score[i] < cfg_ifssr->max_distance)
+// meaning that at least cfg_ifssr->min_spots induced spots are within distance
+// cfg_ifssr->max_distance of the measured spots given by in->spots
 // Return:
 // - 0 on success
 // - -1 on error (tries to fill in error message)
@@ -172,6 +176,7 @@ int refine(int handle,
 
 // Combined index_start(), index_end() and refine()
 // This will pin data (see comments for input, output, and cfg_runtime) (!!)
+// Check comments for refine() about cell viability checking.
 // Return:
 // - 0 on success
 // - -1 on failure (tries  to fill in error message)
@@ -196,8 +201,8 @@ int best_cell(int handle,
 int crystals(int handle,
              const struct input* in,
              const struct output* out,
-             float_type threshold,
-             unsigned min_spots,
+             float_type threshold,      // distance threshold for matched spots
+             unsigned min_spots,        // minimum number of new matches for a new crystal
              unsigned* indices,         // preallocated array
              unsigned indices_size);    // size of preallocated array
 
