@@ -912,9 +912,11 @@ namespace fast_feedback {
         inline std::vector<unsigned> select_crystals (const Eigen::MatrixBase<CellMat>& cells,
                                                       const Eigen::MatrixBase<SpotMat>& spots,
                                                       const Eigen::DenseBase<VecX>& scores,
-                                                      float_type threshold=.02f, unsigned min_spots=9u)
+                                                      float_type threshold=.02f, unsigned min_spots=9u,
+                                                      bool reciprocal=true)
         {
             using namespace Eigen;
+            using M3 = Matrix3f;
             using Mx3 = MatrixX3<float_type>;
             using Vx = VectorX<bool>;
 
@@ -928,10 +930,15 @@ namespace fast_feedback {
                 return scores[a] < scores[b];
             });
 
-            auto spots_covered = [&cells, &spots, threshold](unsigned i) -> Vx {
-                Mx3 resid = spots * cells.block(3u * i, 0u, 3u, 3u).transpose();
+            auto spots_covered = [&cells, &spots, threshold, reciprocal](unsigned i) -> Vx {
+                M3 cell = cells.block(3u * i, 0u, 3u, 3u).transpose();
+                Mx3 resid = spots * cell;
                 const Mx3 miller = round(resid.array());
-                resid -= miller;
+                if (reciprocal) {
+                    resid = spots - miller * cell.inverse();
+                } else {
+                    resid -= miller;
+                }
                 return (resid.rowwise().norm().array() < threshold);
             };
 
