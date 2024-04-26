@@ -30,7 +30,7 @@ endif()
 add_custom_target(source_version ALL
   DEPENDS ${SOURCE_VERSION_FILE})
 
-if (EXISTS ${CMAKE_SOURCE_DIR}/eigen/CMakeLists.txt)
+if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/eigen/CMakeLists.txt)
     add_subdirectory(eigen)
 endif()
 add_subdirectory(indexer)

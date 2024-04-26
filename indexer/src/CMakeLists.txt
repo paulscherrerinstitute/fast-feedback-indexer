@@ -32,9 +32,9 @@ if (BUILD_FAST_INDEXER OR BUILD_FAST_INDEXER_STATIC)
                 ${CMAKE_COMMAND}
                         -E chdir ${CMAKE_CURRENT_SOURCE_DIR}
                         ${CMAKE_COMMAND}
-                        -D SRC=${CMAKE_SOURCE_DIR}/indexer/src/version.h.in
-                        -D DST=${CMAKE_SOURCE_DIR}/indexer/src/ffbidx/version.h
-                        -P ${CMAKE_SOURCE_DIR}/indexer/src/GenerateVersionH.cmake
+                        -D SRC=${CMAKE_CURRENT_SOURCE_DIR}/version.h.in
+                        -D DST=${CMAKE_CURRENT_SOURCE_DIR}/ffbidx/version.h
+                        -P ${CMAKE_CURRENT_SOURCE_DIR}/GenerateVersionH.cmake
         )
         set(THREADS_PREFER_PTHREAD_FLAG ON)
         find_package(Threads REQUIRED)
