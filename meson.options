@@ -1,0 +1,18 @@
+# Compile options, can be set to 'ignore'
+option('cpu-arch', type: 'string', value: 'native')
+option('gpu-arch', type: 'string', value: 'arch=compute_89,code=sm_89')
+
+# Build fast indexer library
+option('build-ffbidx', type: 'feature', value: 'enabled')
+option('include-c-api', type: 'feature', value: 'enabled')
+option('include-python-api', type: 'feature', value: 'disabled')
+
+# Build the toy simple data indexers
+option('build-simple-indexers', type: 'feature', value: 'disabled')
+
+# Install the simple data files and header only reader library
+option('install-simple-data-files', type: 'feature', value: 'disabled')
+option('install-simple-data-reader', type: 'feature', value: 'disabled')
+
+# Build the test executables for enabled features
+option('build-tests', type: 'feature', value: 'disabled')
