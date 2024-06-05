@@ -1,5 +1,19 @@
 if get_option('build-ffbidx').enabled()
-    eigen3 = dependency('eigen3')
+    fs = import('fs')
+    if get_option('eigen-source-dir') != 'ignore'
+        eigen_dir = join_paths('../..', get_option('eigen-source-dir'))
+    else
+        eigen_dir = '.' # will fail intensionally
+    endif
+    if fs.is_dir(eigen_dir+'/Eigen')
+        eigen3 = declare_dependency( include_directories: [
+            eigen_dir,
+            eigen_dir+'/unsupported'
+        ])
+        message('Using Eigen source in '+eigen_dir)
+    else
+        eigen3 = dependency('eigen3')
+    endif
 
     conf_data = configuration_data()
     conf_data.set('PROJECT_VERSION', '0.1.0')

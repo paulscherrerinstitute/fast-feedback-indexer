@@ -29,3 +29,19 @@ if get_option('build-tests').enabled()
             args:[ meson.project_source_root()+'/data/simple/files/image0_local.txt' ])
     endif
 endif
+
+if get_option('build-simple-indexers').enabled()
+    if get_option('install-simple-data-reader').disabled()
+        error('"-D install-simple-data-reader=enabled" option is required for enabling option "build-simple-indexers"')
+    endif
+    executable('simple_data_indexer',
+        sources: 'simple_data_indexer.cpp',
+        dependencies: [ simple_data_dep, ffbidx_dep ],
+        install: true,
+        install_rpath: get_option('prefix')+'/'+get_option('libdir'))
+    executable('refined_simple_data_indexer',
+        sources: 'refined_simple_data_indexer.cpp',
+        dependencies: [ simple_data_dep, ffbidx_dep ],
+        install: true,
+        install_rpath: get_option('prefix')+'/'+get_option('libdir'))
+endif

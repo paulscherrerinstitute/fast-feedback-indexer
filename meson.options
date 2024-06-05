@@ -2,6 +2,11 @@
 option('cpu-arch', type: 'string', value: 'native')
 option('gpu-arch', type: 'string', value: 'arch=compute_89,code=sm_89')
 
+# Eigen include directory, can be set to 'ignore'
+# If this doesn't have the 'Eigen' subdirectory,
+# pkg-config will be tried to find Eigen
+option('eigen-source-dir', type: 'string', value: 'eigen')
+
 # Build fast indexer library
 option('build-ffbidx', type: 'feature', value: 'enabled')
 option('include-c-api', type: 'feature', value: 'enabled')
