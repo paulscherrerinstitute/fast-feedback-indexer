@@ -118,7 +118,10 @@ See: https://git.psi.ch/germann_e/spack-psi
 In the top code directory do the following after adapting these lines to your own needs:
 ```
 $ FFBIDX_INSTALL_DIR=${HOME}/ffbidx
-$ CXX=g++-13 meson setup --reconfigure --buildtype=release --prefix=$FFBIDX_INSTALL_DIR --libdir=lib -D install-simple-data-reader=enabled -D install-simple-data-files=enabled -D build-tests=enabled -D build-simple-indexers=enabled -D include-python-api=enabled -D gpu-arch=arch='compute_89,code=sm_89' meson
+$ CXX=g++-13 meson setup --reconfigure --buildtype=release --prefix=$FFBIDX_INSTALL_DIR \
+  --libdir=lib -D install-simple-data-reader=enabled -D install-simple-data-files=enabled \
+  -D build-tests=enabled -D build-simple-indexers=enabled -D include-python-api=enabled \
+  -D gpu-arch=arch='compute_89,code=sm_89' meson
 $ cd meson
 $ meson compile -v
 $ meson test
