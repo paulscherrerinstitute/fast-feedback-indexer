@@ -115,10 +115,12 @@ spack load ffbidx
 See: https://git.psi.ch/germann_e/spack-psi
 
 ### Meson (experimental)
+(This was tested with meson-1.4.0 and ninja-1.10.1)
+
 In the top code directory do the following after adapting these lines to your own needs:
 ```
 $ FFBIDX_INSTALL_DIR=${HOME}/ffbidx
-$ CXX=g++-13 meson setup --reconfigure --buildtype=release --prefix=$FFBIDX_INSTALL_DIR \
+$ CXX=g++-13 meson setup --reconfigure --buildtype=release --prefix=${FFBIDX_INSTALL_DIR} \
   --libdir=lib -D install-simple-data-reader=enabled -D install-simple-data-files=enabled \
   -D build-tests=enabled -D build-simple-indexers=enabled -D include-python-api=enabled \
   -D gpu-arch=arch='compute_89,code=sm_89' meson
