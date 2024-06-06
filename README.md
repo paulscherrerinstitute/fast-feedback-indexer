@@ -76,7 +76,7 @@ As a quick installation test you could do
 ```
 $ refined_simple_data_indexer \
   ${FFBIDX_INSTALL_DIR}/share/ffbidx/data/files/image0_local.txt \
-  300 1 1 $((32*1024)) false ifss .8 6 15
+  300 1 1 $((32*1024)) false ifssr .8 .02 6 15
 $ python -c "import ffbidx; print('OK')"
 ```
 
@@ -113,3 +113,16 @@ spack load ffbidx
 ### Installation with Spack on Merlin (PSI cluster)
 
 See: https://git.psi.ch/germann_e/spack-psi
+
+### Meson (experimental)
+In the top code directory do the following after adapting these lines to your own needs:
+```
+$ FFBIDX_INSTALL_DIR=${HOME}/ffbidx
+$ CXX=g++-13 meson setup --reconfigure --buildtype=release --prefix=$FFBIDX_INSTALL_DIR --libdir=lib -D install-simple-data-reader=enabled -D install-simple-data-files=enabled -D build-tests=enabled -D build-simple-indexers=enabled -D include-python-api=enabled -D gpu-arch=arch='compute_89,code=sm_89' meson
+$ cd meson
+$ meson compile -v
+$ meson test
+$ meson install
+$ . ${FFBIDX_INSTALL_DIR}/share/ffbidx/setup-env.sh
+```
+Then do the qiuck installation test above.
