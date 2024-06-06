@@ -38,10 +38,15 @@ if get_option('build-simple-indexers').enabled()
         sources: 'simple_data_indexer.cpp',
         dependencies: [ simple_data_dep, ffbidx_dep ],
         install: true,
-        install_rpath: get_option('prefix')+'/'+get_option('libdir'))
+        install_rpath: join_paths(get_option('prefix'), get_option('libdir')))
     executable('refined_simple_data_indexer',
         sources: 'refined_simple_data_indexer.cpp',
         dependencies: [ simple_data_dep, ffbidx_dep ],
         install: true,
-        install_rpath: get_option('prefix')+'/'+get_option('libdir'))
+        install_rpath: join_paths(get_option('prefix'), get_option('libdir')))
+
+    fast_feedback_indexer_ENV_SETUP += 'ffbidx_PATH='+join_paths(
+        get_option('prefix'), 
+        get_option('bindir')
+    )+';'
 endif

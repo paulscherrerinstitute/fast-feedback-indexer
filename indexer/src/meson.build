@@ -1,4 +1,6 @@
 if get_option('build-ffbidx').enabled()
+    pkg_config_dir = get_option('datadir')+'/ffbidx/pkgconfig'
+
     fs = import('fs')
     if get_option('eigen-source-dir') != 'ignore'
         eigen_dir = join_paths('../..', get_option('eigen-source-dir'))
@@ -26,7 +28,7 @@ if get_option('build-ffbidx').enabled()
     configure_file(input: 'fast_indexer.pc.in',
         output: 'fast_indexer.pc',
         configuration: conf_data,
-        install_dir: get_option('datadir')+'/ffbidx/pkgconfig',
+        install_dir: pkg_config_dir,
         install_mode: 'r--r--r--')
     
     git_exe = find_program('git')
@@ -50,37 +52,6 @@ if get_option('build-ffbidx').enabled()
     sources = ['log.cpp', 'indexer.cpp', 'indexer_gpu.cu']
     if get_option('include-c-api').enabled()
         sources += 'c_api.cpp'
-    endif
-
-    cpu_arch = ''
-    if get_option('cpu-arch') != 'ignore'
-        cpu_arch = '-march='+get_option('cpu-arch')
-    endif
-
-    nvcc_flags = [ '--std=c++17', '--ftz=true', '--fmad=true' ]
-    if get_option('buildtype') == 'release'
-        nvcc_flags += [
-            '--compiler-options', cpu_arch+',-Wall,-Wextra,-Ofast',
-            '-DNDEBUG',
-            '--extra-device-vectorization',
-            '-O3'
-        ]
-    endif
-    if get_option('gpu-arch') != 'ignore'
-        nvcc_flags += [ '-gencode', get_option('gpu-arch') ]
-    endif
-
-    cxx_flags = [ '--std=c++17' ]
-    if get_option('buildtype') == 'release'
-        cxx_flags += [
-            '-Ofast',
-            '-Wall',
-            '-Wextra',
-            '-DNDEBUG'
-        ]
-        if cpu_arch != ''
-            cxx_flags += cpu_arch
-        endif
     endif
 
     ffbidx = library('fast_indexer',
@@ -109,4 +80,17 @@ if get_option('build-ffbidx').enabled()
     endif
 
     install_headers(headers, subdir: 'ffbidx')
+
+    fast_feedback_indexer_ENV_SETUP += 'ffbidx_PKG_CONFIG_PATH='+join_paths(
+        get_option('prefix'), 
+        pkg_config_dir
+    )+';'
+    fast_feedback_indexer_ENV_SETUP += 'ffbidx_CPLUS_INCLUDE_PATH='+join_paths(
+        get_option('prefix'),
+        get_option('includedir')
+    )+';'
+    fast_feedback_indexer_ENV_SETUP += 'ffbidx_LIBRARY_PATH='+join_paths(
+        get_option('prefix'),
+        get_option('libdir')
+    )+';'
 endif
