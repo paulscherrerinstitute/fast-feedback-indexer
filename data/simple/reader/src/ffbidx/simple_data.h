@@ -124,7 +124,7 @@ namespace simple_data {
         {
             std::ifstream input_file(input_file_name);
             if (! input_file.is_open())
-                error("unable to read file");
+                error((std::string("unable to read file <")+input_file_name+">").c_str());
 
             {
                 std::istringstream line = next_line(input_file);

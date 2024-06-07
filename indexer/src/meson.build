@@ -17,20 +17,6 @@ if get_option('build-ffbidx').enabled()
         eigen3 = dependency('eigen3')
     endif
 
-    conf_data = configuration_data()
-    conf_data.set('PROJECT_VERSION', '0.1.0')
-    conf_data.set('CMAKE_INSTALL_PREFIX', get_option('prefix'))
-    conf_data.set('CMAKE_INSTALL_INCLUDEDIR', get_option('includedir'))
-    conf_data.set('CMAKE_INSTALL_LIBDIR', get_option('libdir'))
-    conf_data.set('PROJECT_NAME', 'fast_indexer')
-    conf_data.set('PROJECT_DESCRIPTION', 'Library for fast feedback indexing using brute force sampling')
-
-    configure_file(input: 'fast_indexer.pc.in',
-        output: 'fast_indexer.pc',
-        configuration: conf_data,
-        install_dir: pkg_config_dir,
-        install_mode: 'r--r--r--')
-    
     git_exe = find_program('git')
     if git_exe.found()
         version_txt = run_command(git_exe, 'log', '--pretty=format:%H: %aD', '-1', check: true).stdout()
@@ -54,19 +40,61 @@ if get_option('build-ffbidx').enabled()
         sources += 'c_api.cpp'
     endif
 
-    ffbidx = library('fast_indexer',
-        sources,
-        include_directories: 'ffbidx',
-        dependencies: [eigen3, cuda_dep, version_dep, thread_dep],
-        install: true,
-        install_mode: 'r-xr-xr-x',
-        cuda_args: nvcc_flags,
-        cpp_args: cxx_flags)
-    ffbidx_dep = declare_dependency(
-        dependencies: eigen3,
-        include_directories: '.',
-        link_with: ffbidx,
-    )
+    conf_data = configuration_data()
+    conf_data.set('PROJECT_VERSION', '0.1.0')
+    conf_data.set('CMAKE_INSTALL_PREFIX', get_option('prefix'))
+    conf_data.set('CMAKE_INSTALL_INCLUDEDIR', get_option('includedir'))
+    conf_data.set('CMAKE_INSTALL_LIBDIR', get_option('libdir'))
+    conf_data.set('PROJECT_NAME', 'fast_indexer')
+    conf_data.set('PROJECT_DESCRIPTION', 'Library for fast feedback indexing using brute force sampling')
+
+    if get_option('default_library') in [ 'static', 'both' ]
+        ffbidx_static = static_library('fast_indexer_static',
+            sources,
+            include_directories: 'ffbidx',
+            dependencies: [eigen3, cuda_dep, version_dep, thread_dep],
+            install: true,
+            install_mode: 'r-xr-xr-x',
+            cuda_args: nvcc_flags,
+            cpp_args: cxx_flags)
+
+        configure_file(input: 'fast_indexer_static.pc.in',
+            output: 'fast_indexer_static.pc',
+            configuration: conf_data,
+            install_dir: pkg_config_dir,
+            install_mode: 'r--r--r--')
+    endif
+
+    if get_option('default_library') in [ 'shared', 'both' ]
+        ffbidx = shared_library('fast_indexer',
+            sources,
+            include_directories: 'ffbidx',
+            dependencies: [eigen3, cuda_dep, version_dep, thread_dep],
+            install: true,
+            install_mode: 'r-xr-xr-x',
+            cuda_args: nvcc_flags,
+            cpp_args: cxx_flags)
+
+        configure_file(input: 'fast_indexer.pc.in',
+            output: 'fast_indexer.pc',
+            configuration: conf_data,
+            install_dir: pkg_config_dir,
+            install_mode: 'r--r--r--')
+    endif
+
+    if get_option('default_library') in [ 'shared', 'both' ]
+        ffbidx_dep = declare_dependency(
+            dependencies: eigen3,
+            include_directories: '.',
+            link_with: ffbidx,
+        )
+    else
+        ffbidx_dep = declare_dependency(
+            dependencies: eigen3,
+            include_directories: '.',
+            link_with: ffbidx_static,
+        )
+    endif
 
     headers = [
         'ffbidx/envvar.h',

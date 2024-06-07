@@ -3,7 +3,7 @@ includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
 libdir=${prefix}/@CMAKE_INSTALL_LIBDIR@
 
 Name: @PROJECT_NAME@
-Description: @PROJECT_DESCRIPTION@
+Description: @PROJECT_DESCRIPTION@ (static library)
 URL: https://github.com/paulscherrerinstitute/fast-feedback-indexer
 Version: @PROJECT_VERSION@
 Cflags: -I"${includedir}"

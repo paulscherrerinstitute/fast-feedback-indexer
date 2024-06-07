@@ -9,7 +9,7 @@ if get_option('include-python-api').enabled()
         ).stdout().strip()
     )
 
-    library('__init__',
+    shared_library('__init__',
         sources: 'python_module.cpp',
         dependencies: [ ffbidx_dep, python_dep ],
         include_directories: incdir_numpy,
