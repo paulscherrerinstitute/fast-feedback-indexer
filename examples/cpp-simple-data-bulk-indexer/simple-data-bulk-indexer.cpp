@@ -74,14 +74,14 @@ namespace {
 
     [[noreturn]] void usage (std::string msg = {})
     {
-        std::cout << "usage: " << program_invocation_short_name << " --method=(raw|ifss|ifse) [options] file1 file2 ...\n\n"
+        std::cout << "usage: " << program_invocation_short_name << " --method=(raw|ifssr|ifss|ifse) [options] file1 file2 ...\n\n"
                      "  Index simple data files.\n\n"
                      "output options:\n"
                      "  --help         show this help\n"
                      "  --quiet        no indexing result output\n"
                      "  --allcells     output all cells instead of only the best\n"
                      "indexer options:\n"
-                     "  --method       output cell refinement method, one of raw, ifss(default), ifse\n"
+                     "  --method       output cell refinement method, one of raw, ifssr(default), ifss, ifse\n"
                      "  --reducalc     calculate candidate vectors for all cell vectors instead of one\n"
                      "  --maxspot      maximum number of spots\n"
                      "  --cells        number of output cells with scores\n"
@@ -91,10 +91,10 @@ namespace {
                      "  --triml        trim lows\n"
                      "  --trimh        trim heights\n"
                      "  --delta        log2 curve position\n"
-                     "  --contr        ifss/ifse threshold contraction\n"
-                     "  --maxdist      ifss/ifse maximum distance to integer\n"
-                     "  --minpts       ifss/ifse minimum number of points for fitting\n"
-                     "  --iter         ifse/ifse maximum iterations\n"
+                     "  --contr        ifssr/ifss/ifse threshold contraction\n"
+                     "  --maxdist      ifssr/ifss/ifse maximum distance to integer\n"
+                     "  --minpts       ifssr/ifss/ifse minimum number of points for fitting\n"
+                     "  --iter         ifssr/ifss/ifse maximum iterations\n"
                      "pipeline options:\n"
                      "  --gpus         comma separated list of gpu idranges. range = single number or dash separated numbers\n"
                      "  --ipg          indexer objects per gpu\n"
@@ -135,7 +135,7 @@ namespace {
     void check_method()
     {
         if (method.empty())
-            method = "ifss";
+            method = "ifssr";
         else if ((method != "ifss") && (method != "ifse") && (method != "ifssr") && (method != "raw"))
             error(std::string("unsupported method: ") + method);
     }
