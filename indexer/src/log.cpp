@@ -32,11 +32,7 @@ Author: hans-christian.stadler@psi.ch
 
 namespace {
 
-    #ifndef FAST_INDEXER_MESON_BUILD
-        #include "ffbidx/version.h"
-    #else
-        #include "version.h"
-    #endif
+    #include "ffbidx/version.h"
 
     using namespace fast_feedback::logger;
 

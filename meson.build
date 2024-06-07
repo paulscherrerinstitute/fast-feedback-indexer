@@ -22,7 +22,7 @@ if get_option('gpu-arch') != 'ignore'
     nvcc_flags += [ '-gencode', get_option('gpu-arch') ]
 endif
 
-cxx_flags = [ '-DFAST_INDEXER_MESON_BUILD', '--std=c++17' ]
+cxx_flags = [ '--std=c++17' ]
 if get_option('buildtype') == 'release'
     cxx_flags += [
         '-Ofast',
