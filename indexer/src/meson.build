@@ -19,7 +19,7 @@ if get_option('build-ffbidx').enabled()
 
     git_exe = find_program('git')
     if git_exe.found()
-        version_txt = run_command(git_exe, 'log', '--pretty=format:%H: %aD', '-1', check: true).stdout()
+        version_txt = '"'+run_command(git_exe, 'log', '--pretty=format:%H: %aD', '-1', check: true).stdout()+'"'
     else
         version_txt = 'unknown'
     endif
