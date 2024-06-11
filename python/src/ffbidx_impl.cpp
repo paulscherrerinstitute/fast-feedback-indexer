@@ -419,7 +419,7 @@ extern "C" {
         .m_free = ffbidx_free
     };
 
-    PyMODINIT_FUNC PyInit_ffbidx(void)
+    PyMODINIT_FUNC PyInit_ffbidx_impl(void)
     {
         import_array();
         if (PyErr_Occurred())

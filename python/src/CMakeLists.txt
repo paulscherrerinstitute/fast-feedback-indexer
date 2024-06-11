@@ -28,7 +28,7 @@ if(PYTHON_MODULE)
                 message(FATAL_ERROR "PYTHON_MODULE needs -DBUILD_FAST_INDEXER=1 as a cmake argument")
         endif()
         Python3_add_library(ffbidx SHARED
-                python_module.cpp)
+                ffbidx_impl.cpp)
         target_compile_features(ffbidx PRIVATE cxx_std_17)
         target_include_directories(ffbidx PUBLIC ${Python3_INCLUDE_DIRS} ${Python3_NumPy_INCLUDE_DIRS})
         target_link_libraries(ffbidx
@@ -56,9 +56,12 @@ if(PYTHON_MODULE)
         endif(PYTHON_MODULE_RPATH)
         set_target_properties(ffbidx PROPERTIES
                 PREFIX ""
-                OUTPUT_NAME "__init__"
+                OUTPUT_NAME "ffbidx_impl"
                 INSTALL_RPATH ${ffbidx_INSTALL_RPATH})
         install(TARGETS ffbidx
+                DESTINATION ${ffbidx_INSTALL_PATH}
+                COMPONENT ffbidx_python)
+        install(FILES __init__.py
                 DESTINATION ${ffbidx_INSTALL_PATH}
                 COMPONENT ffbidx_python)
         cmake_path(ABSOLUTE_PATH PYTHON_MODULE_PATH

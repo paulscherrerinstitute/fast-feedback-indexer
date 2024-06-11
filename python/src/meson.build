@@ -9,8 +9,8 @@ if get_option('include-python-api').enabled()
         ).stdout().strip()
     )
 
-    shared_library('__init__',
-        sources: 'python_module.cpp',
+    shared_library('ffbidx_impl',
+        sources: 'ffbidx_impl.cpp',
         dependencies: [ ffbidx_dep, python_dep ],
         include_directories: incdir_numpy,
         name_prefix: '',
@@ -18,6 +18,11 @@ if get_option('include-python-api').enabled()
         install: true,
         install_dir: get_option('libdir')+'/ffbidx',
         cpp_args: cxx_flags)
+
+    install_data(
+        '__init__.py',
+        install_dir: get_option('libdir')+'/ffbidx'
+    )
 
     fast_feedback_indexer_ENV_SETUP += 'ffbidx_PYTHONPATH='+join_paths(get_option('prefix'), get_option('libdir'))+';'
 endif
