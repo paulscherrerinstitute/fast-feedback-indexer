@@ -77,7 +77,7 @@ namespace fast_feedback {
                 }
                 level = entry->second;
             }
-            if (!initialized && (level >= l_info)) {
+            if (!initialized && (level >= l_info) && (level <= l_debug)) {
                 initialized = true;
                 std::lock_guard logger_output_lock{lock()};
                 std::clog << "(version) " << get_version() << '\n';
