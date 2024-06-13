@@ -157,7 +157,7 @@ namespace {
             return nullptr;
         }
 
-        if (smethod == "ifss" && contraction >= 1.) {
+        if (contraction >= 1.) {
             PyErr_SetString(PyExc_ValueError, "contraction parameter >= 1");
             return nullptr;
         }
