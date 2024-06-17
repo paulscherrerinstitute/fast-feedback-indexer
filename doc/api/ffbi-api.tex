@@ -672,7 +672,7 @@ template<typename float_type=float> struct indexer_ifse;
 %
 The refinement configuration is the same as for the \emph{ifss} method, and all methods and members are similar. The idea behind this experimental refinement is to bring the method closer to something resembling the steepest descent method and allow algorithm developers to try modifications of the $\mat{\Delta}$ delta matrix and its calculation.
 
-To achieve a better fit between induced and measured spots, the \emph{convenience} API offers the experimental \textbf{indexer\_ifssr} object that uses an iterative fit to selected spots refinement method with another spot selection method. Instead of measuring the distance to induced integer spot coordinates, it measures the distance spots and induced spot in reciprocal space:
+To achieve a better fit between induced and measured spots, the \emph{convenience} API offers the experimental \textbf{indexer\_ifssr} object that uses an iterative fit to selected spots refinement method with another spot selection method. Instead of measuring the distance to induced integer spot coordinates, it measures the distance between given spot and induced spot in reciprocal space:
 %
 \[
 d_i = \| \round{\vect{s}_i\mat{B}^T}\mat{B}^{-T} - \vect{s}_i \|.
@@ -703,40 +703,49 @@ Through a module called \textbf{ffbidx}, the Python API provides very simple fun
 # Import module
 import ffbidx
 
-# Create handle to indexer object
-handle = ffbidx.indexer(
-    max_output_cells,
-    max_input_cells,
-    max_spots,
-    num_candidate_vectors,
-    redundant_calculations=false
+# Create indexer object
+indexer = ffbidx.Indexer(
+    max_output_cells=32,
+    max_input_cells=1,
+    max_spots=300,
+    num_candidate_vectors=32,
+    redundant_calculations=True
 )
 
 # Run indexing
-output_cells, scores = ffbidx.index(
-    handle,
+output_cells, scores = indexer.run(
     spots,
     input_cells,
-    method='ifss',
+    method='ifssr',
     length_threshold=1e-9,
-    triml=.05,
-    trimh=.15,
+    triml=.001,
+    trimh=.3,
     delta=0.1,
-    dist1=.0,
-    dist3=.0,
+    dist1=.1,
+    dist3=.15,
     num_sample_points=32*1024,
-    n_output_cells=1,
+    n_output_cells=32,
     contraction=.8,
-    max_dist=.001,
-    min_spots=6,
-    n_iter=15
+    max_dist=.00075,
+    min_spots=8,
+    n_iter=32
+)
+
+# Select crystals from cell candidates
+indices = indexer.crystals(
+  cells,
+  spots,
+  scores,
+  method='ifssr',
+  threshold=.00075,
+  min_spots=8
 )
 
 # Dispose off the indexer object
-ffbidx.release(handle)
+indxer.__del__()
 \end{lstlisting}
 %
-The \textbf{ffbidx.indexer} function creates an indexer object and returns a \emph{handle} for this object. The arguments are
+The \textbf{ffbidx.Indexer} function creates an indexer object. The arguments are
 %
 \begin{enumerate}
  \item \textbf{max\_output\_cells} - the maximum number of output cells generated
@@ -748,10 +757,9 @@ The \textbf{ffbidx.indexer} function creates an indexer object and returns a \em
 %
 This allocates space on the GPU for all the data structures used in the computation.
 
-The \textbf{ffbidx.index} function runs the fast feedback indexer and returns \emph{output\_cells} and their \emph{scores}. Output cells vectors are stored as consecutive column vectors with a \emph{C\_CONTIGUOUS} memory layout. The arguments are
+The \textbf{indexer.run} method runs the fast feedback indexer and returns \emph{output\_cells} and their \emph{scores}. Output cells vectors are stored as consecutive column vectors with a \emph{C\_CONTIGUOUS} memory layout. The arguments are
 %
 \begin{enumerate}
- \item \textbf{handle} - the indexer object handle
  \item \textbf{spots} - a numpy array of reciprocal space spot coordinate vectors stored as column vectors in \emph{C\_CONTIGUOUS} memory layout, or row vectors in \emph{F\_CONTIGUOUS} memory layout.
  \item \textbf{input\_cells} - a numpy array of real space input cell vectors in consecutive groups of 3 vectors, stored as column vectors in \emph{C\_CONTIGUOUS} memory layout, or row vectors in \emph{F\_CONTIGUOUS} memory layout.
  \item \textbf{method} - refinement method: \emph{raw} (no refinement), \emph{ifss} (iterative fit to selected spots), or \emph{ifse} (iterative fit to selected errors)
@@ -769,8 +777,19 @@ The \textbf{ffbidx.index} function runs the fast feedback indexer and returns \e
  \item \textbf{min\_spots} - minimum number of spots to fit against for methods \emph{ifss} and \emph{ifse}
  \item \textbf{n\_iter} - maximum number of iterations for methods \emph{ifss} and \emph{ifse}
 \end{enumerate}
+
+The \textbf{indexer.crystals} method calculates the indices of cells that represent separate crystals. The arguments are
 %
-The \textbf{ffbidx.release} function takes a \textbf{handle} to an indexer object and disposes off its state on the GPU and on the CPU.
+\begin{enumerate}
+ \item \textbf{cells} - a numpy array of real space candidate cell vectors in consecutive groups of 3 vectors, stored as column vectors in \emph{C\_CONTIGUOUS} memory layout, or row vectors in \emph{F\_CONTIGUOUS} memory layout.
+ \item \textbf{spots} - a numpy array of reciprocal space spot coordinate vectors stored as column vectors in \emph{C\_CONTIGUOUS} memory layout, or row vectors in \emph{F\_CONTIGUOUS} memory layout.
+ \item \textbf{scores} - a numpy array of candidate cell scores, one for each candidate cell, stored in contiguous memory.
+ \item \textbf{method} - distance measurement method. Measures the distance between given and indiced spot for method \emph{ifssr}, for \emph{raw}, \emph{ifss}, \emph{ifss} the distance to nearest integer coordinates is considered.
+ \item \textbf{threshold} - distance threshold for considering a spot covered by the candidate cell.
+ \item \textbf{min\_spots} - minimum number of extra spots covered by a candidate cell for considering the cell a representative of a separate crystal.
+\end{enumerate}
+
+The \textbf{indexer.\_\_del\_\_()} method disposes off an indexer objects state on the GPU and on the CPU.
 
 \subsection{Issues}
 
