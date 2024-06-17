@@ -20,7 +20,10 @@ if get_option('include-python-api').enabled()
         cpp_args: cxx_flags)
 
     install_data(
-        '__init__.py',
+        [
+            '__init__.py',
+            'ffbidx_cl.py'
+        ],
         install_dir: get_option('libdir')+'/ffbidx'
     )
 

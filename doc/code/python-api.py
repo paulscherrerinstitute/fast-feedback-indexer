@@ -44,11 +44,11 @@ print("B:\n", B)
 print("Binv:\n", Binv)
 print("Spots:\n", Spots)
 
-handle = ffbidx.indexer(32, 1, 10, 32, True)
-Cand, Score = ffbidx.index(handle, Spots, B0,
-                           method='ifss',
-                           n_output_cells=32)
-ffbidx.release(handle)
+indexer = ffbidx.Indexer(32, 1, 10, 32, True)
+Cand, Score = indexer.run(Spots, B0,
+                          method='ifssr',
+                          n_output_cells=32)
+del indexer
 best = np.argmin(Score)
 Cand = np.reshape(Cand.ravel(), (3*32,3), order='F')
 

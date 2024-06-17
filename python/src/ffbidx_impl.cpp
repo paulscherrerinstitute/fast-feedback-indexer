@@ -32,8 +32,8 @@ namespace {
         using std::numeric_limits;
 
         constexpr const char* kw[] = {"max_output_cells", "max_input_cells", "max_spots", "num_candidate_vectors", "redundant_computations", nullptr};
-        long max_output_cells=1, max_input_cells=1, max_spots=200, num_candidate_vectors=32;
-        int redundant_computations=false;
+        long max_output_cells=32, max_input_cells=1, max_spots=300, num_candidate_vectors=32;
+        int redundant_computations=true;
         if (PyArg_ParseTupleAndKeywords(args, kwds, "llll|p", (char**)kw, &max_output_cells, &max_input_cells, &max_spots, &num_candidate_vectors, &redundant_computations) == 0)
             return nullptr;
 
@@ -85,8 +85,8 @@ namespace {
         PyArrayObject* spots_ndarray = nullptr;
         PyArrayObject* input_cells_ndarray = nullptr;
         const char* method = "ifssr";
-        double length_threshold=1e-9, triml=.001, trimh=.3, delta=.1, dist1=.1, dist3=.15;
-        long num_halfsphere_points=32*1024, num_angle_points=0, n_output_cells=1;
+        double length_threshold=1e-9, triml=.001, trimh=.3, delta=.1, dist1=.1, dist3=.3;
+        long num_halfsphere_points=32*1024, num_angle_points=0, n_output_cells=32;
         double contraction=.8, max_dist=.00075;
         long min_spots=8, n_iter=32;
         if (PyArg_ParseTupleAndKeywords(args, kwds, "lO!O!|sddddddlllddll", (char**)kw,
@@ -354,6 +354,176 @@ namespace {
         return tuple;
     }
 
+    PyObject* ffbidx_crystals_(PyObject *args, PyObject *kwds)
+    {
+        using std::numeric_limits;
+
+        constexpr const char* kw[] = {"cells", "spots", "scores",
+                                      "method",
+                                      "threshold",
+                                      "min_spots",
+                                      nullptr};
+        PyArrayObject* cells_ndarray = nullptr;
+        PyArrayObject* spots_ndarray = nullptr;
+        PyArrayObject* scores_ndarray = nullptr;
+        const char* method = "ifssr";
+        double threshold=.00075;
+        long min_spots=8;
+
+        if (PyArg_ParseTupleAndKeywords(args, kwds, "O!O!O!|sdl", (char**)kw,
+                                        &PyArray_Type, &cells_ndarray,
+                                        &PyArray_Type, &spots_ndarray,
+                                        &PyArray_Type, &scores_ndarray,
+                                        &method, &threshold, &min_spots) == 0)
+            return nullptr;
+
+        const std::string smethod{method};
+        if ((smethod != "raw") && (smethod != "ifss") && (smethod != "ifse") && (smethod != "ifssr")) {
+            PyErr_SetString(PyExc_ValueError, "method must be either raw, ifss, ifse, od ifssr");
+            return nullptr;
+        }
+
+        npy_intp n_cells = 0;
+
+        if (PyArray_NDIM(cells_ndarray) != 2) {
+            PyErr_SetString(PyExc_RuntimeError, "cells array must be 2 dimensional");
+            return nullptr;
+        }
+
+        if (PyArray_TYPE(cells_ndarray) != NPY_FLOAT32) {
+            PyErr_SetString(PyExc_RuntimeError, "only float32 cell data is supported");
+            return nullptr;
+        }
+
+        {
+            auto* shape = PyArray_DIMS(cells_ndarray);
+
+            if (PyArray_ISCARRAY(cells_ndarray)) {
+                if (shape[0] != 3) {
+                    PyErr_SetString(PyExc_RuntimeError, "only shape (3, -1) CARRAY cell data is supported");
+                    return nullptr;
+                }
+                if (shape[1] % 3 != 0) {
+                    PyErr_SetString(PyExc_RuntimeError, "incomplete CARRAY cell data");
+                    return nullptr;
+                }
+                n_cells = shape[1] / 3;
+            } else if (PyArray_ISFARRAY(cells_ndarray)) {
+                if (shape[1] != 3) {
+                    PyErr_SetString(PyExc_RuntimeError, "only shape (-1, 3) FARRAY cell data is supported");
+                    return nullptr;
+                }
+                if (shape[0] % 3 != 0) {
+                    PyErr_SetString(PyExc_RuntimeError, "incomplete FARRAY cell data");
+                    return nullptr;
+                }
+                n_cells = shape[0] / 3;
+            } else {
+                PyErr_SetString(PyExc_RuntimeError, "only NPY_ARRAY_CARRAY or NPY_ARRAY_FARRAY data is supported");
+                return nullptr;
+            }
+        }
+
+        if (n_cells <= 0) {
+            PyErr_SetString(PyExc_RuntimeError, "no cells");
+            return nullptr;
+        }
+
+        npy_intp n_spots = 0;
+
+        if (PyArray_NDIM(spots_ndarray) != 2) {
+            PyErr_SetString(PyExc_RuntimeError, "spots array must be 2 dimensional");
+            return nullptr;
+        }
+
+        if (PyArray_TYPE(spots_ndarray) != NPY_FLOAT32) {
+            PyErr_SetString(PyExc_RuntimeError, "only float32 spot data is supported");
+            return nullptr;
+        }
+
+        {
+            auto* shape = PyArray_DIMS(spots_ndarray);
+
+            if (PyArray_ISCARRAY(spots_ndarray)) {
+                if (shape[0] != 3) {
+                    PyErr_SetString(PyExc_RuntimeError, "only shape (3, -1) CARRAY spot data is supported");
+                    return nullptr;
+                }
+                n_spots = shape[1];
+            } else if (PyArray_ISFARRAY(spots_ndarray)) {
+                if (shape[1] != 3) {
+                    PyErr_SetString(PyExc_RuntimeError, "only shape (-1, 3) FARRAY spot data is supported");
+                    return nullptr;
+                }
+                n_spots = shape[0];
+            } else {
+                PyErr_SetString(PyExc_RuntimeError, "only NPY_ARRAY_CARRAY or NPY_ARRAY_FARRAY spot data is supported");
+                return nullptr;
+            }
+        }
+        
+        if (n_spots <= 0) {
+            PyErr_SetString(PyExc_RuntimeError, "no spots");
+            return nullptr;
+        }
+
+        if (PyArray_NDIM(scores_ndarray) != 1) {
+            PyErr_SetString(PyExc_RuntimeError, "scores array must be 1 dimensional");
+            return nullptr;
+        }
+
+        if (PyArray_TYPE(scores_ndarray) != NPY_FLOAT32) {
+            PyErr_SetString(PyExc_RuntimeError, "only float32 score data is supported");
+            return nullptr;
+        }
+
+        {
+            auto* shape = PyArray_DIMS(scores_ndarray);
+
+            if (!PyArray_ISCARRAY(scores_ndarray) && !PyArray_ISFARRAY(scores_ndarray)) {
+                PyErr_SetString(PyExc_RuntimeError, "only CARRAY or FARRAY score data is supported");
+                    return nullptr;
+            }
+
+            if (shape[0] != n_cells) {
+                PyErr_SetString(PyExc_RuntimeError, "number of cells and scores must match");
+                return nullptr;
+            }
+        }
+
+        try {
+            using namespace Eigen;
+            using namespace fast_feedback::refine;
+
+            const Map<MatrixX3f> cells{(float*)PyArray_DATA(cells_ndarray), 3*n_cells, 3};
+            const Map<MatrixX3f> spots{(float*)PyArray_DATA(spots_ndarray), 3*n_spots, 3};
+            const Map<VectorXf> scores{(float*)PyArray_DATA(scores_ndarray), n_cells};
+
+            const std::vector<unsigned> crystals = select_crystals(cells, spots, scores, (float)threshold, min_spots, smethod=="ifssr");
+
+            if (crystals.empty())
+                Py_RETURN_NONE;
+
+            PyArrayObject* crystals_ndarray;
+            {
+                npy_intp crystals_dim = crystals.size();
+                crystals_ndarray = (PyArrayObject*)PyArray_SimpleNew(1, &crystals_dim, NPY_UINT);
+            }
+
+            if (crystals_ndarray == nullptr) {
+                PyErr_SetString(PyExc_RuntimeError, "unable to create crystals array");
+                return nullptr;
+            }
+
+            unsigned* crystals_data = (unsigned*)PyArray_DATA(crystals_ndarray);
+            std::copy(std::begin(crystals), std::end(crystals), crystals_data);
+            return (PyObject*)crystals_ndarray;
+        } catch (std::exception& ex) {
+            PyErr_SetString(PyExc_RuntimeError, ex.what());
+            return nullptr;
+        }
+    }
+
     PyObject* ffbidx_release_(PyObject *args, PyObject *kwds)
     {
         using std::numeric_limits;
@@ -395,6 +565,11 @@ extern "C" {
         return ffbidx_index_(args, kwds);
     }
 
+    PyObject* ffbidx_crystals([[maybe_unused]] PyObject *self, PyObject *args, PyObject *kwds)
+    {
+        return ffbidx_crystals_(args, kwds);
+    }
+
     PyObject* ffbidx_release([[maybe_unused]] PyObject *self, PyObject *args, PyObject *kwds)
     {
         return ffbidx_release_(args, kwds);
@@ -403,6 +578,7 @@ extern "C" {
     PyMethodDef ffbidx_methods[] = {
         {"indexer", (PyCFunction)(void*)ffbidx_indexer, METH_VARARGS | METH_KEYWORDS, PyDoc_STR("Get an indexer handle")},
         {"index", (PyCFunction)(void*)ffbidx_index, METH_VARARGS | METH_KEYWORDS, PyDoc_STR("Call indexer")},
+        {"crystals", (PyCFunction)(void*)ffbidx_crystals, METH_VARARGS | METH_KEYWORDS, PyDoc_STR("Select crystals")},
         {"release", (PyCFunction)(void*)ffbidx_release, METH_VARARGS | METH_KEYWORDS, PyDoc_STR("Release indexer handle")},
         {NULL, NULL, 0, NULL}
     };

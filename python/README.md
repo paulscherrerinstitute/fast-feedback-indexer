@@ -1,4 +1,4 @@
-## Simplistic Python Module
+## Simple Python Module
 
 The idea is to provide simple access to the fast feedback indexer via python, mainly as a means to make more people evaluate the fast feedback indexer and find deficiencies to determine future coding action.
 
@@ -10,17 +10,20 @@ The python module also uses libpython. Only if the *PYTHON_MODULE_RPATH* cmake o
 
 ### Interface
 
-The module has a primitive non pythonic interface, sorry for that.
+The module provides an Indexer object used to keep state on the GPU and run indexing operations.
+Only basic indexing and refinement methods are implemented so far.
 
 #### import ffbidx
 
 Imports the module.
 
-#### ffbidx.indexer(max_output_cells, max_input_cells, max_spots, num_candidate_vectors, redundant_calculations=false)
+#### ffbidx.Indexer(max_output_cells=32, max_input_cells=1, max_spots=300, num_candidate_vectors=32, redundant_calculations=True)
+
+Create indexer object and including state allocated on the GPU.
 
 **Return**:
 
-Handle to the indexer object
+Indexer object
 
 **Arguments**:
 
@@ -32,7 +35,7 @@ Handle to the indexer object
 
 This allocates space on the GPU for all the data structures used in the computation. The GPU device is parsed from the *INDEXER_GPU_DEVICE* environment variable. If it is not set, the current GPU device is used.
 
-#### ffbidx.index(handle, spots, input_cells, method='ifss', length_threshold=1e-9, triml=.05, trimh=.15, delta=0.1, dist1=.0, dist3=.0, num_sample_points=32*1024, n_output_cells=1, contraction=.8, max_dist=.001, min_spots=6, n_iter=15)
+#### Indexer.run(spots, input_cells, method='ifssr', length_threshold=1e-9, triml=.001, trimh=.3, delta=0.1, dist1=.0, dist3=.15, num_sample_points=32*1024, n_output_cells=32, contraction=.8, max_dist=.00075, min_spots=8, n_iter=32)
 
 Run the fast feedback indexer on given 3D real space input cells and reciprocal spots packed in the **input_cells** and **spots** numpy array and return oriented cells and their scores. The still experimental *'raw'* method first finds candidate vectors according to the score $\sqrt[|spots|]{\prod_{s \in spots} trim_l^h(dist(s, clp)) + delta} - delta - c - 1$, which are then used as rotation axes for the input cell. The cell score for the *'raw'* method is
 the same. Here, $trim$ stands for trimming, $dist(s, clp)$ for the distance of a spot to the closest lattice point, $l,h$ are the lower and higher trimming thresholds, and $c$ is the number of close spots contributing to the score.
@@ -46,10 +49,9 @@ A tuple of numpy arrays *(output_cells, scores)*
 
 **Arguments**:
 
-- **handle** is the indexer object handle
 - **spots** is a numpy array of spot coordinates in reciprocal space. In memory, all x coordinates followed by all y coordinates and finally all z coordinates. If there are *K* spots, the array shape is either *(3, K), order='C'*, or *(K, 3), order='F'*.
 - **input_cells** is a numpy array of input cell vector coordinates in real space. In memory, all x coordinates followed by all y coordinates and finally all z coordinates in consecutive packs of 3 coordinates. If there are *M* input cells, the array shape is either *(3, 3M), order='C'*, or *(3M, 3), order='F'*.
-- **method** refinement method: one of *'raw'* (no refinement), *'ifss'* (iterative fit to selected spots), *'ifse'* (iterative fit to selected errors)
+- **method** refinement method: one of *'raw'* (no refinement), *'ifss'* (iterative fit to selected spots), *'ifse'* (iterative fit to selected errors), *'ifssr'* (iterative fit to selected spots reciprocal).
 - **length_threshold**: consider input cell vector length the same if they differ by less than this
 - **triml**: >= 0, low trim value, 0 means no trimming
 - **trimh**: <= 0.5, high trim value, 0.5 means no trimming
@@ -73,15 +75,30 @@ Both methods use the normalized sum of logarithms part from the *'raw'* cell sco
 
 *'ifse'*: Iteratively fit an additive delta to the errors $\\{ dist(s, clp) : s \in spots \land dist(s, clp) < t \\}$ and contract the threshold. Stop when the maximum number of iterations is reached, or the maximum distance has been reached, or the errors set size is below the minimum number of spots.
 
-#### ffbidx.release(handle)
+*'ifssr'*: Iteratively fit a new cell to the spots $\\{ s \in spots: ||s, is|| < t \\}$, where *'is'* is the induced spot and contract the threshold. Stop when the maximum number of iterations is reached, or the maximum distance has been reached, or the spot set size is below the minimum number of spots.
 
-Release the indexer object and associated GPU memory. The handle must not be used after this.
+#### Indexer.crystals(output_cells, spots, output_scores, method='ifssr', threshold=.00075, min_spots=8)
+
+Calculate crystals contained in output candidate cells.
+
+**Return**:
+
+Numpy array with indices of the cells representing separate crystals.
 
 **Arguments**:
 
-- **handle** is the indexer object handle
+- **output_cells**: is a numpy array of candidate cell vector coordinates in real space. In memory, all x coordinates followed by all y coordinates and finally all z coordinates in consecutive packs of 3 coordinates. If there are *M* candidate cells, the array shape is either *(3, 3M), order='C'*, or *(3M, 3), order='F'*.
+- **spots**: is a numpy array of spot coordinates in reciprocal space. In memory, all x coordinates followed by all y coordinates and finally all z coordinates. If there are *K* spots, the array shape is either *(3, K), order='C'*, or *(K, 3), order='F'*.
+- **output_scores**: is a numpy array with the scores for the output cells.
+- **method**: how to measure the distance, one of *'raw'* (no refinement), *'ifss'* (iterative fit to selected spots), *'ifse'* (iterative fit to selected errors). For *'ifssr'* the distance between measured and induced spot is compaed to the threshold, otherwise the distance to integer coordinates is compared to threshold.
+- **threshold**: Distance threshold for considering a spot covered.
+- **min_spots**: Minimal number of extra covered spots for a separate crystal.
+
+#### Indexer.__del__()
+
+Release the indexer object and associated GPU memory.
 
 ### Issues
 
    * The module sets the logging level just once on loading, so the *INDEXER_LOG_LEVEL* environment variable has to be set before the import statement.
-   * The handles are taken from an increasing 32 bit counter that wraps around
+   * Internally used handles taken from an increasing 32 bit counter may wrap around.
