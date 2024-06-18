@@ -4,7 +4,7 @@ project(python_impl
 
 option(PYTHON_MODULE "Enable python module" OFF)
 option(PYTHON_MODULE_RPATH "Set python module RPATH to fast indexer library installation" OFF)
-set(PYTHON_MODULE_PATH "${CMAKE_INSTALL_LIBDIR}/ffbidx" CACHE PATH "Indexer python module installation path")
+set(PYTHON_MODULE_PATH "${CMAKE_INSTALL_LIBDIR}" CACHE PATH "Indexer python module installation path")
 
 if(PYTHON_MODULE)
         find_package(Eigen3 3 NO_MODULE)
@@ -61,7 +61,7 @@ if(PYTHON_MODULE)
         install(TARGETS ffbidx
                 DESTINATION ${ffbidx_INSTALL_PATH}
                 COMPONENT ffbidx_python)
-        install(FILES __init__.py
+        install(FILES __init__.py ffbidx_cl.py
                 DESTINATION ${ffbidx_INSTALL_PATH}
                 COMPONENT ffbidx_python)
         cmake_path(ABSOLUTE_PATH PYTHON_MODULE_PATH
