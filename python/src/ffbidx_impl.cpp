@@ -195,13 +195,13 @@ namespace {
         {
             auto* shape = PyArray_DIMS(spots_ndarray);
 
-            if (PyArray_ISCARRAY(spots_ndarray)) {
+            if (PyArray_ISCARRAY_RO(spots_ndarray)) {
                 if (shape[0] != 3) {
                     PyErr_SetString(PyExc_RuntimeError, "only shape (3, -1) CARRAY spot data is supported");
                     return nullptr;
                 }
                 n_spots = shape[1];
-            } else if (PyArray_ISFARRAY(spots_ndarray)) {
+            } else if (PyArray_ISFARRAY_RO(spots_ndarray)) {
                 if (shape[1] != 3) {
                     PyErr_SetString(PyExc_RuntimeError, "only shape (-1, 3) FARRAY spot data is supported");
                     return nullptr;
@@ -233,7 +233,7 @@ namespace {
         {
             auto* shape = PyArray_DIMS(input_cells_ndarray);
 
-            if (PyArray_ISCARRAY(input_cells_ndarray)) {
+            if (PyArray_ISCARRAY_RO(input_cells_ndarray)) {
                 if (shape[0] != 3) {
                     PyErr_SetString(PyExc_RuntimeError, "only shape (3, -1) CARRAY input cell data is supported");
                     return nullptr;
@@ -243,7 +243,7 @@ namespace {
                     return nullptr;
                 }
                 n_input_cells = shape[1] / 3;
-            } else if (PyArray_ISFARRAY(input_cells_ndarray)) {
+            } else if (PyArray_ISFARRAY_RO(input_cells_ndarray)) {
                 if (shape[1] != 3) {
                     PyErr_SetString(PyExc_RuntimeError, "only shape (-1, 3) FARRAY input cell data is supported");
                     return nullptr;
@@ -326,7 +326,7 @@ namespace {
             if (smethod != "raw") {
                 using namespace Eigen;
                 using namespace fast_feedback::refine;
-                Map<MatrixX3f> spots{spot_data, n_spots, 3};
+                const Map<MatrixX3f> spots{spot_data, n_spots, 3};
                 Map<MatrixX3f> cells{out_data, 3*n_out, 3};
                 Map<VectorXf> scores{score_data, n_out};
 
@@ -396,9 +396,9 @@ namespace {
         }
 
         {
-            auto* shape = PyArray_DIMS(cells_ndarray);
+            const auto* shape = PyArray_DIMS(cells_ndarray);
 
-            if (PyArray_ISCARRAY(cells_ndarray)) {
+            if (PyArray_ISCARRAY_RO(cells_ndarray)) {
                 if (shape[0] != 3) {
                     PyErr_SetString(PyExc_RuntimeError, "only shape (3, -1) CARRAY cell data is supported");
                     return nullptr;
@@ -408,7 +408,7 @@ namespace {
                     return nullptr;
                 }
                 n_cells = shape[1] / 3;
-            } else if (PyArray_ISFARRAY(cells_ndarray)) {
+            } else if (PyArray_ISFARRAY_RO(cells_ndarray)) {
                 if (shape[1] != 3) {
                     PyErr_SetString(PyExc_RuntimeError, "only shape (-1, 3) FARRAY cell data is supported");
                     return nullptr;
@@ -419,7 +419,7 @@ namespace {
                 }
                 n_cells = shape[0] / 3;
             } else {
-                PyErr_SetString(PyExc_RuntimeError, "only NPY_ARRAY_CARRAY or NPY_ARRAY_FARRAY data is supported");
+                PyErr_SetString(PyExc_RuntimeError, "only NPY_ARRAY_CARRAY or NPY_ARRAY_FARRAY cell data is supported");
                 return nullptr;
             }
         }
@@ -442,15 +442,15 @@ namespace {
         }
 
         {
-            auto* shape = PyArray_DIMS(spots_ndarray);
+            const auto* shape = PyArray_DIMS(spots_ndarray);
 
-            if (PyArray_ISCARRAY(spots_ndarray)) {
+            if (PyArray_ISCARRAY_RO(spots_ndarray)) {
                 if (shape[0] != 3) {
                     PyErr_SetString(PyExc_RuntimeError, "only shape (3, -1) CARRAY spot data is supported");
                     return nullptr;
                 }
                 n_spots = shape[1];
-            } else if (PyArray_ISFARRAY(spots_ndarray)) {
+            } else if (PyArray_ISFARRAY_RO(spots_ndarray)) {
                 if (shape[1] != 3) {
                     PyErr_SetString(PyExc_RuntimeError, "only shape (-1, 3) FARRAY spot data is supported");
                     return nullptr;
@@ -478,9 +478,9 @@ namespace {
         }
 
         {
-            auto* shape = PyArray_DIMS(scores_ndarray);
+            const auto* shape = PyArray_DIMS(scores_ndarray);
 
-            if (!PyArray_ISCARRAY(scores_ndarray) && !PyArray_ISFARRAY(scores_ndarray)) {
+            if (!PyArray_ISCARRAY_RO(scores_ndarray) && !PyArray_ISFARRAY(scores_ndarray)) {
                 PyErr_SetString(PyExc_RuntimeError, "only CARRAY or FARRAY score data is supported");
                     return nullptr;
             }
@@ -495,9 +495,9 @@ namespace {
             using namespace Eigen;
             using namespace fast_feedback::refine;
 
-            const Map<MatrixX3f> cells{(float*)PyArray_DATA(cells_ndarray), 3*n_cells, 3};
-            const Map<MatrixX3f> spots{(float*)PyArray_DATA(spots_ndarray), 3*n_spots, 3};
-            const Map<VectorXf> scores{(float*)PyArray_DATA(scores_ndarray), n_cells};
+            const Map<const MatrixX3f> cells{(const float*)PyArray_DATA(cells_ndarray), 3*n_cells, 3};
+            const Map<const MatrixX3f> spots{(const float*)PyArray_DATA(spots_ndarray), n_spots, 3};
+            const Map<const VectorXf> scores{(const float*)PyArray_DATA(scores_ndarray), n_cells};
 
             const std::vector<unsigned> crystals = select_crystals(cells, spots, scores, (float)threshold, min_spots, smethod=="ifssr");
 
