@@ -17,7 +17,7 @@ Only basic indexing and refinement methods are implemented so far.
 
 Imports the module.
 
-#### ffbidx.Indexer(max_output_cells=32, max_input_cells=1, max_spots=300, num_candidate_vectors=32, redundant_calculations=True)
+#### indexer = ffbidx.Indexer(max_output_cells=32, max_input_cells=1, max_spots=300, num_candidate_vectors=32, redundant_calculations=True)
 
 Create indexer object and including state allocated on the GPU.
 
@@ -35,7 +35,7 @@ Indexer object
 
 This allocates space on the GPU for all the data structures used in the computation. The GPU device is parsed from the *INDEXER_GPU_DEVICE* environment variable. If it is not set, the current GPU device is used.
 
-#### Indexer.run(spots, input_cells, method='ifssr', length_threshold=1e-9, triml=.001, trimh=.3, delta=0.1, dist1=.0, dist3=.15, num_sample_points=32*1024, n_output_cells=32, contraction=.8, max_dist=.00075, min_spots=8, n_iter=32)
+#### output_cells, output_scores = indexer.run(spots, input_cells, method='ifssr', length_threshold=1e-9, triml=.001, trimh=.3, delta=0.1, dist1=.0, dist3=.15, num_sample_points=32*1024, n_output_cells=32, contraction=.8, max_dist=.00075, min_spots=8, n_iter=32)
 
 Run the fast feedback indexer on given 3D real space input cells and reciprocal spots packed in the **input_cells** and **spots** numpy array and return oriented cells and their scores. The still experimental *'raw'* method first finds candidate vectors according to the score $\sqrt[|spots|]{\prod_{s \in spots} trim_l^h(dist(s, clp)) + delta} - delta - c - 1$, which are then used as rotation axes for the input cell. The cell score for the *'raw'* method is
 the same. Here, $trim$ stands for trimming, $dist(s, clp)$ for the distance of a spot to the closest lattice point, $l,h$ are the lower and higher trimming thresholds, and $c$ is the number of close spots contributing to the score.
@@ -77,13 +77,13 @@ Both methods use the normalized sum of logarithms part from the *'raw'* cell sco
 
 *'ifssr'*: Iteratively fit a new cell to the spots $\\{ s \in spots: ||s, is|| < t \\}$, where *'is'* is the induced spot and contract the threshold. Stop when the maximum number of iterations is reached, or the maximum distance has been reached, or the spot set size is below the minimum number of spots.
 
-#### Indexer.crystals(output_cells, spots, output_scores, method='ifssr', threshold=.00075, min_spots=8)
+#### cell_indices = indexer.crystals(output_cells, spots, output_scores, method='ifssr', threshold=.00075, min_spots=8)
 
 Calculate crystals contained in output candidate cells.
 
 **Return**:
 
-Numpy array with indices of the cells representing separate crystals.
+Numpy array with indices of the cells representing separate crystals, or *None* for no crystals found. If *i* is returned in *cell_indices*, *output_cells*[3 * *i*: 3 * *i* + 3] (for *output_cells* in order='C') represents a separate crystal.
 
 **Arguments**:
 
@@ -94,7 +94,7 @@ Numpy array with indices of the cells representing separate crystals.
 - **threshold**: Distance threshold for considering a spot covered.
 - **min_spots**: Minimal number of extra covered spots for a separate crystal.
 
-#### Indexer.__del__()
+#### del indexer
 
 Release the indexer object and associated GPU memory.
 
