@@ -14,9 +14,9 @@ Develop an indexer for fast feedback
 
 When referring to the algorithm implemented here, please use:
  
-DOI: https://doi.org/10.26434/chemrxiv-2023-wnm9n
+DOI: https://doi.org/10.1107/S1600576724003182
 
-*TODO*: Add non-preprint version in the future
+A copy of the BibTeX file can be found in this repo with the name *BIBTeX.bib*.
 
 ### Attributions
 
