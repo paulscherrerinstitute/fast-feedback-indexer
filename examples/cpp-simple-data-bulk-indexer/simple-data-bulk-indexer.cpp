@@ -812,7 +812,7 @@ int main (int argc, char *argv[])
             debug << stanza << "cifss: contr=" << cifss.threshold_contraction << ", minpts=" << cifss.min_spots << ", iter=" << cifss.max_iter << '\n';
         } else if (method == "ifse") {
             debug << stanza << "cifse: contr=" << cifse.threshold_contraction << ", minpts=" << cifss.min_spots << ", iter=" << cifse.max_iter << '\n';
-        } else { // ifssr
+        } else if (method == "ifssr") {
             debug << stanza << "cifssr: contr=" << cifssr.threshold_contraction << ", minpts=" << cifssr.min_spots << ", iter=" << cifssr.max_iter << '\n';
         }
 
