@@ -4,6 +4,7 @@
 #include <limits>
 #include <memory>
 #include <cstdio>
+#include <cstring>
 #include <utility>
 #include <algorithm>
 #include <Eigen/Dense>
@@ -12,6 +13,13 @@
 #include "cuda_runtime.h"
 
 namespace {
+    // Make sure the config and input/output structs are compatible between C and C++
+    static_assert(sizeof(fast_feedback::config_persistent<float>) == sizeof(::config_persistent));
+    static_assert(sizeof(fast_feedback::config_runtime<float>) == sizeof(::config_runtime));
+    static_assert(sizeof(fast_feedback::refine::config_ifssr<float>) == sizeof(::config_ifssr));
+    static_assert(sizeof(fast_feedback::input<float>) == sizeof(::input));
+    static_assert(sizeof(fast_feedback::output<float>) == sizeof(::output));
+
     constexpr std::string_view no_error{"OK"};
 
     struct handler final {
@@ -57,29 +65,18 @@ namespace {
                            config_ifssr* cfg_ifssr)
     {
         if (cfg_runtime) {
-            cfg_runtime->length_threshold=1e-9;      // threshold for determining equal vector length (|va| - threshold < |vb| < |va| + threshold)
-            cfg_runtime->triml=0.001;                // lower trim value for distance to nearest integer objective value - 0 < triml < trimh
-            cfg_runtime->trimh=0.3;                  // higher trim value for distance to nearest integer objective value - triml < trimh < 0.5
-            cfg_runtime->delta=0.1;                  // log2 curve position: score = log2(trim(dist(x)) + delta)
-            cfg_runtime->dist1=0.2;                  // maximum distance to int for single coordinate
-            cfg_runtime->dist3=0.15;                 // maximum distance to int for tripple coordinates
-            cfg_runtime->num_halfsphere_points=32*1024; // number of sample points on half sphere for finding vector candidates
-            cfg_runtime->num_angle_points=0;         // number of sample points in rotation space for finding cell candidates (0: auto)
+            const fast_feedback::config_runtime<float> crt{};
+            std::memcpy(cfg_runtime, &crt, sizeof(config_runtime));
         }
 
         if (cfg_persistent) {
-            cfg_persistent->max_output_cells=32;     // maximum number of output unit cells
-            cfg_persistent->max_input_cells=1;       // maximum number of input unit cells, (must be before max_spots in memory, see copy_in())
-            cfg_persistent->max_spots=300;           // maximum number of input spots, (must be after max_input_cells in memory, see copy_in())
-            cfg_persistent->num_candidate_vectors=32; // number of candidate vectors (per input cell vector)
-            cfg_persistent->redundant_computations=true; // compute candidates for all three cell vectors instead of just one
+            const fast_feedback::config_persistent<float> cpers{};
+            std::memcpy(cfg_persistent, &cpers, sizeof(config_persistent));
         }
 
         if (cfg_ifssr) {
-            cfg_ifssr->threshold_contraction=.8;     // contract error threshold by this value in every iteration
-            cfg_ifssr->max_distance=.00075;          // max distance to reciprocal spots for inliers
-            cfg_ifssr->min_spots=8;                  // minimum number of spots to fit against
-            cfg_ifssr->max_iter=32;                  // max number of iterations
+            const fast_feedback::refine::config_ifssr<float> cifssr;
+            std::memcpy(cfg_ifssr, &cifssr, sizeof(config_ifssr));
         }
     }
 

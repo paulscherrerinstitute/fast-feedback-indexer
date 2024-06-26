@@ -94,7 +94,7 @@ struct error {
 // Callback will be called with data given to indexer_start()
 typedef void(*callback_func)(void*);
 
-// Fill in these structures with default values
+// Fill in these structures with default values from the C++ API
 // Pointer arguments can be NULL
 void set_defaults(struct config_persistent* cfg_persistent,
                   struct config_runtime* cfg_runtime,
