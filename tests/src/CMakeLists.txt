@@ -32,6 +32,7 @@ if(TEST_INDEXER_SIMPLE)
         if(NOT BUILD_FAST_INDEXER)
                 message(FATAL_ERROR "TEST_INDEXER_SIMPLE needs -DBUILD_FAST_INDEXER=1 as a cmake argument")
         endif()
+
         add_executable(test_indexer test_indexer.cpp)
         target_compile_features(test_indexer PRIVATE cxx_std_17)
         target_link_libraries(test_indexer
@@ -41,6 +42,15 @@ if(TEST_INDEXER_SIMPLE)
         add_test(NAME index_file_0 COMMAND test_indexer $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/data/simple/files/image0_local.txt>)
         set_property(TEST index_file_0 PROPERTY PASS_REGULAR_EXPRESSION "Test OK")
         set_property(TEST index_file_0 PROPERTY FAIL_REGULAR_EXPRESSION "Test failed")
+
+        add_executable(test_capi test_capi.cpp)
+        target_compile_features(test_capi PRIVATE cxx_std_17)
+        target_link_libraries(test_capi
+                PRIVATE fast_indexer
+                PRIVATE simple_data)
+        add_test(NAME capi_index_file_0 COMMAND test_capi $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/data/simple/files/image0_local.txt>)
+        set_property(TEST capi_index_file_0 PROPERTY PASS_REGULAR_EXPRESSION "Test OK")
+        set_property(TEST capi_index_file_0 PROPERTY FAIL_REGULAR_EXPRESSION "Test failed")
 endif(TEST_INDEXER_SIMPLE)
 
 if(TEST_INDEXER_EXCEPTION)

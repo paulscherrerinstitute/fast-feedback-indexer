@@ -68,11 +68,11 @@ namespace {
         }
 
         if (cfg_persistent) {
-            cfg_persistent->max_output_cells=1;      // maximum number of output unit cells
+            cfg_persistent->max_output_cells=32;     // maximum number of output unit cells
             cfg_persistent->max_input_cells=1;       // maximum number of input unit cells, (must be before max_spots in memory, see copy_in())
-            cfg_persistent->max_spots=200;           // maximum number of input spots, (must be after max_input_cells in memory, see copy_in())
+            cfg_persistent->max_spots=300;           // maximum number of input spots, (must be after max_input_cells in memory, see copy_in())
             cfg_persistent->num_candidate_vectors=32; // number of candidate vectors (per input cell vector)
-            cfg_persistent->redundant_computations=false; // compute candidates for all three cell vectors instead of just one
+            cfg_persistent->redundant_computations=true; // compute candidates for all three cell vectors instead of just one
         }
 
         if (cfg_ifssr) {

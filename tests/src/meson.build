@@ -27,6 +27,13 @@ if get_option('build-tests').enabled()
         test('index_file_0',
             test,
             args:[ meson.project_source_root()+'/data/simple/files/image0_local.txt' ])
+        
+        test = executable('test_capi',
+            'test_capi.cpp',
+            dependencies: [ffbidx_dep, simple_data_dep])
+        test('capi_index_file_0',
+            test,
+            args:[ meson.project_source_root()+'/data/simple/files/image0_local.txt' ])
     endif
 endif
 
