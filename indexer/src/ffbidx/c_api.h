@@ -15,7 +15,7 @@ typedef float float_type;
 // The user is responsible to keep the pinned memory area valid
 // during use!
 // The idea is to preallocate coordinate data space and then
-// keep eorking inside this area.
+// keep working inside this area.
 // It's possible to change coordinate pointers before indexing starts.
 // This is detected by (!!) pointer comparison (!!). The old pointer is then
 // unpinned, and the area of a size given with 3*n_cells or n_spots
@@ -32,8 +32,8 @@ struct input {
         float_type* y;  // y coordinates, pinned memory
         float_type* z;  // z coordinates, pinned memory
     } spot;
-    unsigned n_cells;   // number of given unit cells (must be before n_spots in memory, see copy_in())
-    unsigned n_spots;   // number of spots (must be after n_cells in memory, see copy_in())
+    unsigned n_cells;   // number of given unit cells
+    unsigned n_spots;   // number of spots
     bool new_cells;     // set to true if cells are new or have changed
     bool new_spots;     // set to true if spots are new or have changed
 };
@@ -66,8 +66,8 @@ struct config_runtime {             // pinned memory
 // Values cannot be changed, instead drop the indexer handle and create a new one
 struct config_persistent {
     unsigned max_output_cells;      // maximum number of output unit cells
-    unsigned max_input_cells;       // maximum number of input unit cells, (must be before max_spots in memory, see copy_in())
-    unsigned max_spots;             // maximum number of input spots, (must be after max_input_cells in memory, see copy_in())
+    unsigned max_input_cells;       // maximum number of input unit cells
+    unsigned max_spots;             // maximum number of input spots
     unsigned num_candidate_vectors; // number of candidate vectors (per input cell vector)
     bool redundant_computations;    // compute candidates for all three cell vectors instead of just one
 };
@@ -155,7 +155,7 @@ int index_end(int handle,
 
 // Refine output cells on CPU using the iterative fit to selected
 // spots reciprocal method.
-// It's possible to call this from multiple threads on multually exclusive
+// It's possible to call this from multiple threads on mutually exclusive
 // cell blocks (all parallel calls must give the same nblocks value, but
 // different block values). All cells are handled at once by passing
 // block=0 and nblocks=1
