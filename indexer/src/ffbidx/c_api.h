@@ -174,11 +174,11 @@ int refine(int handle,
            unsigned block, unsigned nblocks);   // handle one block out of nblocks output cells, threadsafe
                                                 // (set to 0,1 for all cells)
 
-// Combined index_start(), index_end() and refine()
+// Combined index_start(), index_end(), refine() and best_cell()
 // This will pin data (see comments for input, output, and cfg_runtime) (!!)
 // Check comments for refine() about cell viability checking.
 // Return:
-// - 0 on success
+// - index (>=0) of cell with best score
 // - -1 on failure (tries  to fill in error message)
 int indexer_op(int handle,   // just do it all
                const struct input* in,

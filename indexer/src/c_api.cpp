@@ -237,7 +237,7 @@ namespace {
                 spots.col(1) = sy;
                 const Map<Vx> sz{in->spot.z, in->n_spots};
                 spots.col(2) = sz;
-                Mx3 cells(3*in->n_cells, 3);
+                Mx3 cells(3*out->n_cells, 3);
                 Map<Vx> cx{out->x, 3*out->n_cells};
                 cells.col(0) = cx;
                 Map<Vx> cy{out->y, 3*out->n_cells};
