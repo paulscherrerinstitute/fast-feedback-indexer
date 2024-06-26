@@ -81,15 +81,21 @@ int main (int argc, char *argv[])
             i++;            
         }
 
-        std::array<float, 20> buf;                      // 2x output coordinate/score container
-
         config_persistent cpers;                        // persistent config
         config_runtime crt;                             // runtime config
         config_ifssr cifssr;                            // ifssr refinement config
         set_defaults(&cpers, &crt, &cifssr);            // fill in defaults
 
+        std::vector<float> buf((3*3+1)*cpers.max_output_cells); // output cell coordinates + score container
+
         input in = {{&x[0], &y[0], &z[0]}, {&x[3], &y[3], &z[3]}, 1u, i-3u, true, true}; // indexer input object
-        output out = {&buf[0], &buf[3], &buf[6], &buf[9], 1u}; // indexer output object
+        output out = {
+            &buf[0],
+            &buf[3*cpers.max_output_cells],
+            &buf[6*cpers.max_output_cells],
+            &buf[9*cpers.max_output_cells],
+            cpers.max_output_cells
+        }; // indexer output object
 
         std::vector<char> error_msg(128);               // memory for error message
         error err = { error_msg.data(), (unsigned)error_msg.size() };
@@ -107,22 +113,22 @@ int main (int argc, char *argv[])
             throw std::runtime_error{error_msg.data()};
 
         const float max_score = cifssr.max_distance;    // maximum acceptable output score
-        std::cout << "score: " << out.score[0];
-        if (out.score[0] > max_score) {
+        std::cout << "best cell: " << idx << " with score: " << out.score[res];
+        if (out.score[idx] > max_score) {
             std::cout << " > " << max_score << " => bad\n";
             throw std::runtime_error("output score above maximum acceptable");
         } else {
             std::cout << " <= " << max_score << " => ok\n";
         }
         
-        constexpr float delta = .2f;                    // it's a match if spot indices are all around delta from an integer
-        constexpr unsigned n_matches = 100u;            // accept output cell if it matches so many spots
+        constexpr float delta = .02f;                   // it's a match if spot indices are all around delta from an integer
+        constexpr unsigned n_matches = 20u;             // accept output cell if it matches so many spots
         unsigned spots_matched = 0u;
 
-        for (const auto& spot : data.spots) {          // check for spots that match
+        for (const auto& spot : data.spots) {           // check for spots that match
             std::array<float, 3> m{};
             for (unsigned i=0; i<3u; i++)
-                m[i] = spot.x * out.x[0] + spot.y * out.x[1] + spot.z * out.x[2];
+                m[i] = spot.x * out.x[3*idx+i] + spot.y * out.y[3*idx+i] + spot.z * out.z[3*idx+i];
             std::cout << "spot: " << spot.x << ' ' << spot.y << ' ' << spot.z << " --> " << m[0] << ' ' << m[1] << ' ' << m[2]; 
             int i = 0;
             while (i<3) {

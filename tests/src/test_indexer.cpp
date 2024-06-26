@@ -130,14 +130,14 @@ int main (int argc, char *argv[])
             std::cout << " <= " << max_score << " => ok\n";
         }
         
-        constexpr float delta = .2f;                    // it's a match if spot indices are all around delta from an integer
+        constexpr float delta = .1f;                    // it's a match if spot indices are all around delta from an integer
         constexpr unsigned n_matches = 100u;            // accept output cell if it matches so many spots
         unsigned spots_matched = 0u;
 
-        for (const auto& spot : data.spots) {          // check for spots that match
+        for (const auto& spot : data.spots) {           // check for spots that match
             std::array<float, 3> m{};
             for (unsigned i=0; i<3u; i++)
-                m[i] = spot.x * out.x[0] + spot.y * out.x[1] + spot.z * out.x[2];
+                m[i] = spot.x * out.x[i] + spot.y * out.y[i] + spot.z * out.z[i];
             std::cout << "spot: " << spot.x << ' ' << spot.y << ' ' << spot.z << " --> " << m[0] << ' ' << m[1] << ' ' << m[2]; 
             int i = 0;
             while (i<3) {
