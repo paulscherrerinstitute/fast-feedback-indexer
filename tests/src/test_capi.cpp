@@ -100,6 +100,9 @@ int main (int argc, char *argv[])
         std::vector<char> error_msg(128);               // memory for error message
         error err = { error_msg.data(), (unsigned)error_msg.size() };
 
+        if (check_config(&cpers, &crt, &cifssr, &err) == -1)
+            throw std::runtime_error{error_msg.data()};
+
         int h = create_indexer(&cpers, &err, nullptr);  // indexer
         if (h == -1)
             throw std::runtime_error{error_msg.data()};

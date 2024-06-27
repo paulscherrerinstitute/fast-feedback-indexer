@@ -59,6 +59,10 @@ namespace gpu {
 
    // Deallocate pinned host memory
    void dealloc_pinned(void* ptr);
+   
+   // GPU version of check_config
+   template<typename float_type=float>
+   void check_config(const config_persistent<float_type>* cpers, const config_runtime<float_type>* crt);
 
 } // namespace gpu
 

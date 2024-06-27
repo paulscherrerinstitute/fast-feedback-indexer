@@ -206,6 +206,17 @@ int crystals(int handle,
              unsigned* indices,         // preallocated array
              unsigned indices_size);    // size of preallocated array
 
+// Check configuration
+// Every pointer can be NULL, leading to a noop with
+// respect to that pointer.
+// Return:
+// - 0 if no inconsistencies were detected
+// - -1 if inconsistencies were detected (tries to fill in err)
+int check_config(const struct config_persistent* cfg_persistent,
+                 const struct config_runtime* cfg_runtime,
+                 const struct config_ifssr* cfg_ifssr,
+                 struct error* err);
+
 // Foreign convenience wrappers, use cuda_runtime.h directly if possible
 int num_gpus();
 int select_gpu(int gpu);

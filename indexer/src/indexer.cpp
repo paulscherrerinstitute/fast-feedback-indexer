@@ -80,9 +80,15 @@ namespace fast_feedback {
         gpu::dealloc_pinned(ptr);
     }
 
+    template<typename float_type>
+    void check_config(const config_persistent<float_type>* cpers, const config_runtime<float_type>* crt)
+    {
+        gpu::check_config(cpers, crt);
+    }
+
     template void indexer<float>::init(indexer<float>&, const config_persistent<float>&);
     template void indexer<float>::drop(indexer<float>&);
     template void indexer<float>::index_start(const input<float>&, output<float>&, const config_runtime<float>&, void(*)(void*), void*);
     template void indexer<float>::index_end(output<float>&);
-
+    template void check_config<float>(const config_persistent<float>*, const config_runtime<float>*);
 } // namespace fast_feedback

@@ -336,6 +336,13 @@ namespace fast_feedback {
         return ptr;
     }
 
+    // Check configuration consistency
+    // Throw exception with error message on detected inconsistency.
+    // Parameters can set separately to nullptr for a noop with respect
+    // to the particular parameter.
+    template<typename float_type=float>
+    void check_config(const config_persistent<float_type>* cpers, const config_runtime<float_type>* crt);
+
 } // namespace fast_feedback
 
 #endif

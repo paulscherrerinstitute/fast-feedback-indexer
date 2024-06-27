@@ -2284,9 +2284,40 @@ namespace gpu {
         CU_CHECK_EXT(cudaFreeHost(ptr));
     }
 
+    template<typename float_type>
+    void check_config(const config_persistent<float_type>* cpers, const config_runtime<float_type>* crt)
+    {
+        if (cpers) {
+            if (cpers->max_input_cells <= 0u)
+                throw FF_EXCEPTION("max_input_cells <= 0");
+            if (cpers->max_output_cells <= 0u)
+                throw FF_EXCEPTION("max_output_cells <= 0");
+            if (cpers->max_output_cells > n_threads)
+                throw FF_EXCEPTION("fewer threads in a block than output cells");
+            if (cpers->max_spots <= 0u)
+                throw FF_EXCEPTION("max_spots <= 0");
+            if (cpers->num_candidate_vectors <= 0u)
+                throw FF_EXCEPTION("num_candidate_vectors <= 0");
+        }
+        if (crt) {
+            if (crt->delta <= .0f)
+                throw FF_EXCEPTION("nonpositive delta value in runtime configuration");
+            if (crt->triml >= crt->trimh)
+                throw FF_EXCEPTION("lower trim value bigger than higher trim value");
+            if (crt->triml < .0f)
+                throw FF_EXCEPTION("negative lower trim value");
+        }
+        if (crt && cpers) {
+            if (crt->num_halfsphere_points < cpers->num_candidate_vectors)
+                throw FF_EXCEPTION("fewer halfsphere sample points than required candidate vectors");
+            if ((crt->num_angle_points > 0u) && (crt->num_angle_points < cpers->max_output_cells))
+                throw FF_EXCEPTION("fewer angle sample points than required candidate cells");
+        }
+    }
+
     template void init<float> (const indexer<float>&);
     template void drop<float> (const indexer<float>&);
     template void index_start<float> (const indexer<float>&, const input<float>&, output<float>&, const config_runtime<float>&, void(*)(void*), void*);
     template void index_end<float> (const indexer<float>&, output<float>&);
-
+    template void check_config<float> (const config_persistent<float>*, const config_runtime<float>*);
 } // namespace gpu

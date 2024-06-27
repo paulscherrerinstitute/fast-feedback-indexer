@@ -421,6 +421,29 @@ extern "C" {
         return crystals_impl(handle, in, out, threshold, min_spots, indices, indices_size);
     }
 
+    int check_config(const struct config_persistent* cfg_persistent,
+                     const struct config_runtime* cfg_runtime,
+                     const struct config_ifssr* cfg_ifssr,
+                     struct error* err)
+    {
+        try {
+            fast_feedback::check_config(
+                reinterpret_cast<const fast_feedback::config_persistent<float>*>(cfg_persistent),
+                reinterpret_cast<const fast_feedback::config_runtime<float>*>(cfg_runtime)
+            );
+            if (cfg_ifssr)
+                fast_feedback::refine::indexer_ifssr<float>::check_config(
+                    *reinterpret_cast<const fast_feedback::refine::config_ifssr<float>*>(cfg_ifssr)
+                );
+            return 0;
+        } catch (std::exception& ex) {
+            set_error(err, ex.what());
+        } catch (...) {
+            ; // ignore
+        }
+        return -1;
+    }
+
     // try to avoid using the following, they don't really belong here
     int num_gpus()
     {
