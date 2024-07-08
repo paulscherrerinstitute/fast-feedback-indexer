@@ -1,5 +1,6 @@
 project(python_impl
         DESCRIPTION "Python module"
+        VERSION 1.0.0
         LANGUAGES CXX)
 
 option(PYTHON_MODULE "Enable python module" OFF)

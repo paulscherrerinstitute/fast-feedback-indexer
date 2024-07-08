@@ -2,7 +2,7 @@ cmake_policy(SET CMP0048 NEW)
 
 project(fast_indexer
         DESCRIPTION "Library for fast feedback indexing using brute force sampling"
-        VERSION 0.1.0
+        VERSION 1.0.0
         LANGUAGES CXX CUDA)
 
 option(BUILD_FAST_INDEXER "Build fast indexer library" ON)
@@ -74,8 +74,8 @@ if(BUILD_FAST_INDEXER)
         add_dependencies(fast_indexer version_txt)
         set_target_properties(fast_indexer PROPERTIES
                 CUDA_RUNTIME_LIBRARY Shared
-                SOVERSION 0
-                VERSION 0.1.0
+                SOVERSION ${PROJECT_VERSION_MAJOR}
+                VERSION ${PROJECT_VERSION}
                 POSITION_INDEPENDENT_CODE ON)
         target_compile_features(fast_indexer PUBLIC cxx_std_17)
         target_include_directories(fast_indexer PUBLIC .)
@@ -111,7 +111,7 @@ if(BUILD_FAST_INDEXER_STATIC)
         add_dependencies(fast_indexer_static version_txt)
         set_target_properties(fast_indexer_static PROPERTIES
                 CUDA_RUNTIME_LIBRARY Static
-                VERSION 0.1.0)
+                VERSION ${PROJECT_VERSION})
         target_compile_features(fast_indexer_static PUBLIC cxx_std_17)
         target_include_directories(fast_indexer_static PUBLIC .)
         target_link_libraries(fast_indexer_static

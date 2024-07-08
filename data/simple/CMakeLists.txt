@@ -1,5 +1,3 @@
-project(simple_data_top)
-
 add_subdirectory(reader)
 
 option(INSTALL_SIMPLE_DATA_FILES "Install simple data files" OFF)

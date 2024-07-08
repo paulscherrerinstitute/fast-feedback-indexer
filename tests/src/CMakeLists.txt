@@ -1,5 +1,6 @@
 project(tests_impl
         DESCRIPTION "Tests"
+        VERSION 1.0.0
         LANGUAGES CXX CUDA)
 
 # ---- Indexer Tests ----

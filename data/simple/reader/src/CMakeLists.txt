@@ -12,7 +12,7 @@ if(BUILD_SIMPLE_DATA_READER)
         set(simple_data_PUB_HEADER_LIST ffbidx/simple_data.h)
         add_library(simple_data INTERFACE)
         set_target_properties(simple_data PROPERTIES
-                VERSION 1.0.0)
+                VERSION ${PROJECT_VERSION})
         target_compile_features(simple_data INTERFACE cxx_std_17)
         target_sources(simple_data INTERFACE ${simple_data_PUB_HEADER_LIST})
         target_include_directories(simple_data INTERFACE .)
