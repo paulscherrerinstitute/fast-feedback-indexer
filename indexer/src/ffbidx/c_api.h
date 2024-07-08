@@ -164,6 +164,7 @@ int index_end(int handle,
 // cell_ok = (out->score[i] < cfg_ifssr->max_distance)
 // meaning that at least cfg_ifssr->min_spots induced spots are within distance
 // cfg_ifssr->max_distance of the measured spots given by in->spots
+// If the check fails for the best cell, indexing failed to find a viable cell.
 // Return:
 // - 0 on success
 // - -1 on error (tries to fill in error message)
@@ -187,6 +188,7 @@ int indexer_op(int handle,   // just do it all
                const struct config_ifssr* cfg_ifssr);   // no refinement if NULL
 
 // Find index of cell with best score
+// Check comments for refine() about cell viability checking.
 // Return:
 // - index (>=0) of cell with best score
 // - -1 on failure (tries to fill in error message)

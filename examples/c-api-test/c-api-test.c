@@ -104,6 +104,10 @@ int main(int argc, char *argv[])
         error(-1, errno, "can't read input file");
 
     read_input(f, &in);
+    fclose(f);
+
+    if (check_config(&cpers, &crt, &cifssr, &err))
+        error(-1, 0, "config check failed: %s", message);
 
     int h = create_indexer(&cpers, &err, NULL);
     if (h < 0)
