@@ -34,7 +34,7 @@ Author: hans-christian.stadler@psi.ch
 namespace fast_feedback {
 
     template <typename result_type>
-    inline result_type envvar(const char *name, std::function<result_type()> func)
+    inline result_type envvar([[maybe_unused]] const char *name, [[maybe_unused]] std::function<result_type()> func)
     {}
 
     // throw std::invalid_argument, if value is not accepted
