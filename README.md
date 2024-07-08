@@ -2,7 +2,9 @@
 
 Develop an indexer for fast feedback
 
-*Status*: We're optimistic that it does what it's supposed to. *Luis Barbas* PyTorch implementation has been benchmarked extensively here at PSI and shows indexing quality on par with other known indexers and superior speed. This CUDA version is behind the PyTorch implementation, but I'm trying to catch up.
+*Status*: We're optimistic that it does what it's supposed to. *Filip Leonarski* will integrate this code into CrystFEL.
+
+*Luis Barbas* PyTorch implementation has been benchmarked extensively here at PSI and shows indexing quality on par with other known indexers and superior speed. This CUDA version has been tested internally as well, shows indexing quality on par with XGandalf and superior speed.
 
 *Issues*: Implemented in CUDA, so only Nvidia GPUs are supported currently. Good guess of initial cell required.
 
@@ -10,11 +12,14 @@ Develop an indexer for fast feedback
 
 *Luis Barba* from the Swiss Data Science Center has done an implementation with PyTorch: https://renkulab.io/projects/lfbarba/toro-indexer-for-serial-crystallography
 
+The CUDA implementation exploits parallelism within the algorithm to a larger extent than the PyTorch version. That's why the PyTorch version relies on batching for speed, where the CUDA version can be fast taking frame by frame separately. The Python code of the PyTorch version is easier to understand and is thus recommended for experimentation with the algorithm.
+
 ### Referencing
 
 When referring to the algorithm implemented here, please use:
  
-DOI: https://doi.org/10.1107/S1600576724003182
+- DOI: https://doi.org/10.1107/S1600576724003182
+- *TODO*: Add some future paper with quality tests for the CUDA version
 
 A copy of the BibTeX file can be found in this repo with the name *BIBTeX.bib*.
 
