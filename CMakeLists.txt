@@ -31,7 +31,7 @@ add_custom_target(source_version ALL
   DEPENDS ${SOURCE_VERSION_FILE})
 
 if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/eigen/CMakeLists.txt)
-    add_subdirectory(eigen)
+    add_subdirectory(eigen EXCLUDE_FROM_ALL)
 endif()
 add_subdirectory(indexer)
 add_subdirectory(data)
