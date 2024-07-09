@@ -15,7 +15,7 @@ Start with cloning the fast feedback indexer library repository:
 
 If you have a working installation of the Eigen library, this option can be set to 'ignore'. Otherwise you can set it to 'eigen' after checking out the Eigen library source code with
 
-    $ git submodule update --force --recursive
+    $ git submodule update --force --recursive --init
 
 If you manage your own Eigen installation, set the option to the directory that contains the 'Eigen' subdirectory with the header files.
 
