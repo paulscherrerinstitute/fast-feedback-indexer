@@ -4,9 +4,11 @@ Develop an indexer for fast feedback
 
 *Status*: We're optimistic that it does what it's supposed to. *Filip Leonarski* will integrate this code into CrystFEL.
 
-*Luis Barbas* PyTorch implementation has been benchmarked extensively here at PSI and shows indexing quality on par with other known indexers and superior speed. This CUDA version has been tested internally as well, shows indexing quality on par with XGandalf and superior speed.
+*Luis Barbas* PyTorch implementation has been benchmarked extensively here at PSI and shows indexing quality on par with other known indexers and superior speed. This CUDA version has been tested internally by *Duan Jiaxin*, shows indexing quality on par with XGandalf and superior speed.
 
-*Issues*: Implemented in CUDA, so only Nvidia GPUs are supported currently. Good guess of initial cell required.
+*Restrictions*: Initial cell geometry is required. In other words - this indexer cannot be used for finding a cell from scratch.
+
+*Issues*: Implemented in CUDA, so only Nvidia GPUs are supported currently. With a suitable development machine, porting the code to HIP looks like a very realistic possibility. Porting to SYCL could also be an option.
 
 ### Alternative Implementations
 
