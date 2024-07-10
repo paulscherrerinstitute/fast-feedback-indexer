@@ -2,6 +2,9 @@
 
 This directory contains the code for the fast feedback indexer library, implementaed in C++17 and CUDA.
 
+* The algorithm description is here: https://github.com/paulscherrerinstitute/fast-feedback-indexer/tree/main/doc/algorithm
+* The API description is here: https://github.com/paulscherrerinstitute/fast-feedback-indexer/tree/main/doc/api
+
 ### Vector candidate refinement
 
 The algorithm features four steps
@@ -23,7 +26,7 @@ The vector candidate refinement can be switched off using the VECTOR_CANDIDATE_R
 
 * C++17
 * CUDA Runtime
-* Eigen for lsq refined indexer
+* Eigen for cell refining
 
 ### Memory handling
 
@@ -31,17 +34,13 @@ The vector candidate refinement can be switched off using the VECTOR_CANDIDATE_R
 
 ### Memory pinning
 
-* Who does memory pinning for asynchronous memory transfers from/to GPU?
-* Currently the client is responsible for pinning the memory, maybe a second option would be convenient.
+Memory needs to be pinned and kept alive by the user.
 
 ### Multiple GPUs
 
-* Every indexer object can act on a separate GPU
-   * if *INDEXER_GPU_DEVICE* is set in the environment, the device is taken from that
-   * otherwise the current CUDA device is used
-* I think it's most efficient to use multiple GPUs for different indexing problems. This sometimes increases latency, but maximizes throughput.
-* But if required, multiple GPUs could collaborate on the same indexing problem.
-* Multi GPU collaboration is necessary if the data doesn't fit onto the GPU, which I think is not a danger for indexing.
+Every indexer object can act on a separate GPU
+* if *INDEXER_GPU_DEVICE* is set in the environment, the device is taken from that
+* otherwise the current CUDA device is used
 
 ### Multiple GPU Streams
 
@@ -50,17 +49,21 @@ Every *fast_feedback::indexer* object uses a separate Cuda stream
 ### Documentation
 
 * **TODO**: If required, use doxygen
-* Developper info in markdown files
-* **TODO**: Maybe add user documentation in a separate doc folder with markdown files
+* The main documentation is provided as LaTeX files in the doc folder
 
 ### Thread safety
 
-* Threads should be able to use their private *fast_feedback::indexer* object in parallel
+* Threads can use their private *fast_feedback::indexer* object in parallel
+* Methods on the indexer objects are not thread safe, except where stated otherwise (e.g. cell refinement on CPU)
 * Logger is thread safe. Currently log output from different threads can get mingled (use LOG_START and LOG_END macros consistently to prevent that)
 
 ### Logging
 
 Logging output steered by *INDEXER_LOG_LEVEL* goes to stdlog (the same as stderr), except logging output from the GPU device steered by *INDEXER_GPU_DEBUG*, which goes to stdout.
+
+### Version
+
+The library version (in the form of commit id and date) is printed as a log message at log levels info/debug.
 
 ### Environment Variables
 
@@ -82,3 +85,10 @@ Steer library behaviour with environment variables.
    * https://cmake.org/cmake/help/latest/variable/CMAKE_LANG_FLAGS.html
 * CXX: C++ Compiler
    * https://cmake.org/cmake/help/latest/envvar/CXX.html#cxx
+
+### Meson
+
+The Meson build differs in certain points from the CMake build.
+* GPU and CPU architecture can be left undefined
+* Less control over rpaths and compiler options
+See the meson.options file for available options.
