@@ -5,15 +5,17 @@ project('ffbidx',
 # Shell script variable settings for setup-env.sh
 fast_feedback_indexer_ENV_SETUP  = ''
 
+nvcc_compiler_flags = '-Wall,-Wextra,-Ofast'
 cpu_arch = ''
 if get_option('cpu-arch') != 'ignore'
     cpu_arch = '-march='+get_option('cpu-arch')
+    nvcc_compiler_flags += ','+cpu_arch
 endif
 
 nvcc_flags = [ '--std=c++17', '--ftz=true', '--fmad=true' ]
 if get_option('buildtype') == 'release'
     nvcc_flags += [
-        '--compiler-options', cpu_arch+',-Wall,-Wextra,-Ofast',
+        '--compiler-options', nvcc_compiler_flags,
         '-DNDEBUG',
         '--extra-device-vectorization',
         '-O3'
