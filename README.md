@@ -19,7 +19,7 @@ The CUDA implementation exploits parallelism within the algorithm to a larger ex
 ### Referencing
 
 When referring to the algorithm implemented here, please use:
- 
+
 - DOI: https://doi.org/10.1107/S1600576724003182
 - *TODO*: Add some future paper with quality tests for the CUDA version
 
@@ -29,10 +29,10 @@ A copy of the BibTeX file can be found in this repo with the name *BIBTeX.bib*.
 
 This is the result of the REDML Project, and other more or less informal collaborations between
 
-* REDML: PSI MX Group (https://www.psi.ch/en/macromolecular-crystallography)
-* REDML: Swiss Data Science Center (https://datascience.ch)
-* REDML: PSI AWI (https://www.psi.ch/en/awi)
-* REDML: CSCS (https://www.cscs.ch)
+* REDML: *Filip Leonarski*, *Duan Jiaxin* - PSI MX Group (https://www.psi.ch/en/macromolecular-crystallography)
+* REDML: *Luis Barba*, *Benjamin Béjar* - Swiss Data Science Center (https://datascience.ch)
+* REDML: *Piero Gasparotto* (formerly), *Hans-Christian Stadler*, *Greta Assmann*, *Else Germann* - PSI AWI (https://www.psi.ch/en/awi)
+* REDML: *Henrique Mendonça* - CSCS (https://www.cscs.ch)
 * Graeme Winter, Nick Devenish, Richard Gildea - DIALS group at Diamond Light Source (https://dials.github.io/about.html)
 
 ### External Build Dependencies
@@ -88,6 +88,8 @@ $ python -c "import ffbidx; print('OK')"
 ```
 
 ### Installation with Spack on custom systems
+
+Due to *Elsa Germann*, we are able to provide spack integration.
 
 Install the official Spack instance
 ```
