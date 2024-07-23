@@ -35,7 +35,7 @@ Indexer object
 
 This allocates space on the GPU for all the data structures used in the computation. The GPU device is parsed from the *INDEXER_GPU_DEVICE* environment variable. If it is not set, the current GPU device is used.
 
-#### output_cells, output_scores = indexer.run(spots, input_cells, method='ifssr', length_threshold=1e-9, triml=.001, trimh=.3, delta=0.1, dist1=.0, dist3=.15, num_sample_points=32*1024, n_output_cells=32, contraction=.8, max_dist=.00075, min_spots=8, n_iter=32)
+#### output_cells, output_scores = indexer.run(spots, input_cells, method='ifssr', length_threshold=1e-9, triml=.001, trimh=.3, delta=0.1, dist1=.0, dist3=.15, num_halfsphere_points=32*1024, num_angle_points=0, n_output_cells=32, contraction=.8, max_dist=.00075, min_spots=8, n_iter=32)
 
 Run the fast feedback indexer on given 3D real space input cells and reciprocal spots packed in the **input_cells** and **spots** numpy array and return oriented cells and their scores. The still experimental *'raw'* method first finds candidate vectors according to the score $\sqrt[|spots|]{\prod_{s \in spots} trim_l^h(dist(s, clp)) + delta} - delta - c - 1$, which are then used as rotation axes for the input cell. The cell score for the *'raw'* method is
 the same. Here, $trim$ stands for trimming, $dist(s, clp)$ for the distance of a spot to the closest lattice point, $l,h$ are the lower and higher trimming thresholds, and $c$ is the number of close spots contributing to the score.
@@ -59,7 +59,7 @@ A tuple of numpy arrays *(output_cells, scores)*
 - **dist1**: spots within this distance are contributing to the score in the vector sampling step (set to *trimh* if <=0)
 - **dist3**: spots within this distance are contributing to the score in the cell sampling step (set to *trimh* if <=0)
 - **num_halfsphere_points** is the number of sampling points per sample vector length on the half sphere for vector sampling
-- **num_angle_points** is the number of angular sampling points for cell rotation sampling
+- **num_angle_points** is the number of angular sampling points for cell rotation sampling (0 for heuristic)
 - **n_output_cells** is the number of desired output cells
 - **contraction** threshold contraction parameter for methods *'ifss'* and *'ifse'*
 - **max_dist** maximum distance parameter for methods *'ifss'* and *'ifse'*
