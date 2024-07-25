@@ -98,11 +98,13 @@ class Indexer:
         RuntimeError
             If the indexer object cannot be created.
         """
+        self.initialized = False
         self.handle = indexer(max_output_cells=max_output_cells,
             max_input_cells=max_input_cells,
             max_spots=max_spots,
             num_candidate_vectors=num_candidate_vectors,
             redundant_computations=redundant_computations)
+        self.initialized = True
     
     def run(self,
             spots, input_cells,
@@ -245,4 +247,5 @@ class Indexer:
 
     def __del__(self):
         """Release the state allocated on GPU."""
-        release(self.handle)
+        if (self.initialized):
+            release(self.handle)
