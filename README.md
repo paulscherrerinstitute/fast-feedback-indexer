@@ -31,9 +31,11 @@ This is the result of the REDML Project, and other more or less informal collabo
 
 * REDML: *Filip Leonarski*, *Duan Jiaxin* - PSI MX Group (https://www.psi.ch/en/macromolecular-crystallography)
 * REDML: *Luis Barba*, *Benjamin Béjar* - Swiss Data Science Center (https://datascience.ch)
-* REDML: *Piero Gasparotto* (formerly), *Hans-Christian Stadler*, *Greta Assmann*, *Else Germann* - PSI AWI (https://www.psi.ch/en/awi)
+* REDML: *Piero Gasparotto* (formerly), *Hans-Christian Stadler*, *Greta Assmann*, *Elsa Germann* - PSI AWI (https://www.psi.ch/en/awi)
 * REDML: *Henrique Mendonça* - CSCS (https://www.cscs.ch)
 * Graeme Winter, Nick Devenish, Richard Gildea - DIALS group at Diamond Light Source (https://dials.github.io/about.html)
+* David Waterman - CCP4 (https://www.ccp4.ac.uk)
+* Thomas White - DESY (https://www.desy.de/~twhite/crystfel)
 
 ### External Build Dependencies
 
