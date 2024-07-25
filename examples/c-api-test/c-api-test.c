@@ -62,6 +62,11 @@ int main(int argc, char *argv[])
     if (argc != 2)
         error(-1, 0, "usage: %s <filename>\n", argv[0]);
 
+    if (num_gpus() < 1)
+        error(-1, 0, "no gpus found");
+    if (select_gpu(0) == -1)
+        error(-1, 0, "unable to select gpu 0");
+
     struct config_persistent cpers;
     struct config_runtime crt;
     struct config_ifssr cifssr;

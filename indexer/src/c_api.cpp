@@ -35,7 +35,6 @@ Author: hans-christian.stadler@psi.ch
 #include <Eigen/Dense>
 #include "ffbidx/refine.h"
 #include "ffbidx/c_api.h"
-#include "cuda_runtime.h"
 
 namespace {
     // Make sure the config and input/output structs are compatible between C and C++
@@ -470,18 +469,16 @@ extern "C" {
     }
 
     // try to avoid using the following, they don't really belong here
+    extern int _num_gpus();         // from indexer_gpu.cu
+    extern int _select_gpu(int);    // from indexer_gpu.cu
+
     int num_gpus()
     {
-        int ngpus = 0;
-        if (cudaGetDeviceCount(&ngpus) != cudaSuccess)
-            return -1;
-        return ngpus;
+        return _num_gpus();
     }
 
     int select_gpu(int gpu)
     {
-        if (cudaSetDevice(gpu) != cudaSuccess)
-            return -1;
-        return 0;
+        return _select_gpu(gpu);
     }
 } // extern "C"

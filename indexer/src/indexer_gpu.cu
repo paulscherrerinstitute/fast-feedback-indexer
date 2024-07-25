@@ -2321,3 +2321,20 @@ namespace gpu {
     template void index_end<float> (const indexer<float>&, output<float>&);
     template void check_config<float> (const config_persistent<float>*, const config_runtime<float>*);
 } // namespace gpu
+
+extern "C" {
+    int _num_gpus()
+    {
+        int ngpus = 0;
+        if (cudaGetDeviceCount(&ngpus) != cudaSuccess)
+            return -1;
+        return ngpus;
+    }
+
+    int _select_gpu(int gpu)
+    {
+        if (cudaSetDevice(gpu) != cudaSuccess)
+            return -1;
+        return 0;
+    }
+}
