@@ -17,7 +17,7 @@ Only basic indexing and refinement methods are implemented so far.
 
 Imports the module.
 
-#### indexer = ffbidx.Indexer(max_output_cells=32, max_input_cells=1, max_spots=300, num_candidate_vectors=32, redundant_calculations=True)
+#### indexer = ffbidx.Indexer(max_output_cells=32, max_input_cells=1, max_spots=300, num_candidate_vectors=32, redundant_computations=True)
 
 Create indexer object and including state allocated on the GPU.
 
@@ -31,7 +31,7 @@ Indexer object
 - **max_input_cells** is the maximum number of input cells considered
 - **max_spots** is the maximum number of spots considered
 - **num_candidate_vectors** is the number of candidates (best sample vectors of a specific length) computed per length
-- **redundant_calculations** makes the code compute candidates for all vectors per input cell instead of just one
+- **redundant_computations** makes the code compute candidates for all vectors per input cell instead of just one
 
 This allocates space on the GPU for all the data structures used in the computation. The GPU device is parsed from the *INDEXER_GPU_DEVICE* environment variable. If it is not set, the current GPU device is used.
 
