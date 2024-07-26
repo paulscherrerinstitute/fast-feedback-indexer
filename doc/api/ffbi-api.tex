@@ -757,25 +757,25 @@ The \textbf{ffbidx.Indexer} function creates an indexer object. The arguments ar
 %
 This allocates space on the GPU for all the data structures used in the computation.
 
-The \textbf{indexer.run} method runs the fast feedback indexer and returns \emph{output\_cells} and their \emph{scores}. Output cells vectors are stored as consecutive column vectors with a \emph{C\_CONTIGUOUS} memory layout. The arguments are
+The \textbf{indexer.run} method runs the fast feedback indexer and returns \emph{output\_cells} and their \emph{scores}. Output cell vectors are stored as consecutive column vectors with a \emph{C\_CONTIGUOUS} memory layout. The arguments are
 %
 \begin{enumerate}
  \item \textbf{spots} - a numpy array of reciprocal space spot coordinate vectors stored as column vectors in \emph{C\_CONTIGUOUS} memory layout, or row vectors in \emph{F\_CONTIGUOUS} memory layout.
  \item \textbf{input\_cells} - a numpy array of real space input cell vectors in consecutive groups of 3 vectors, stored as column vectors in \emph{C\_CONTIGUOUS} memory layout, or row vectors in \emph{F\_CONTIGUOUS} memory layout.
- \item \textbf{method} - refinement method: \emph{raw} (no refinement), \emph{ifss} (iterative fit to selected spots), or \emph{ifse} (iterative fit to selected errors)
+ \item \textbf{method} - refinement method: \emph{raw} (no refinement), \emph{ifss} (iterative fit to selected spots), \emph{ifse} (iterative fit to selected errors), \emph{ifssr} (iterative fit to selected spots reciprocal)
  \item \textbf{length\_threshold} - consider input cell vector length the same if they differ by less than this
  \item \textbf{triml} - low trim value, 0 means no trimming
  \item \textbf{trimh} - high trim value, 0.5 means no trimming
  \item \textbf{delta} - $\log_2$ curve position, lower values will increase selectiveness for close spots
- \item \textbf{dist1} - spots within this distance are contributing to the score in the vector sampling step. Will be set to \emph{trimh} if zero.
- \item \textbf{dist3} - spots within this distance are contributing to the score in the cell sampling step. Will be set to \emph{trimh} if zero.
+ \item \textbf{dist1} - spots within this distance in coordinate space are contributing to the score in the vector sampling step. Will be set to \emph{trimh} if zero.
+ \item \textbf{dist3} - spots within this distance in coordinate space are contributing to the score in the cell sampling step. Will be set to \emph{trimh} if zero.
  \item \textbf{num\_halfsphere\_points} - the number of sampling points on the half sphere for vector sampling
  \item \textbf{num\_angle\_points} - the number of angular sampling points for cell sampling
  \item \textbf{n\_output\_cells} - the number of desired output cells
- \item \textbf{contraction} - threshold contraction parameter for methods \emph{ifss} and \emph{ifse}
- \item \textbf{max\_dist} - maximum distance parameter for methods \emph{ifss} and \emph{ifse}
- \item \textbf{min\_spots} - minimum number of spots to fit against for methods \emph{ifss} and \emph{ifse}
- \item \textbf{n\_iter} - maximum number of iterations for methods \emph{ifss} and \emph{ifse}
+ \item \textbf{contraction} - threshold contraction parameter for refinement methods
+ \item \textbf{max\_dist} - maximum distance parameter for refinement methods, measured in coordinate space for methods \emph{ifss} and \emph{ifse}, and in reciprocal space for \emph{ifssr}
+ \item \textbf{min\_spots} - minimum number of spots to fit against for refinement methods
+ \item \textbf{n\_iter} - maximum number of iterations for refinement methods
 \end{enumerate}
 
 The \textbf{indexer.crystals} method calculates the indices of cells that represent separate crystals. The arguments are
@@ -784,7 +784,7 @@ The \textbf{indexer.crystals} method calculates the indices of cells that repres
  \item \textbf{cells} - a numpy array of real space candidate cell vectors in consecutive groups of 3 vectors, stored as column vectors in \emph{C\_CONTIGUOUS} memory layout, or row vectors in \emph{F\_CONTIGUOUS} memory layout.
  \item \textbf{spots} - a numpy array of reciprocal space spot coordinate vectors stored as column vectors in \emph{C\_CONTIGUOUS} memory layout, or row vectors in \emph{F\_CONTIGUOUS} memory layout.
  \item \textbf{scores} - a numpy array of candidate cell scores, one for each candidate cell, stored in contiguous memory.
- \item \textbf{method} - distance measurement method. Measures the distance between given and indiced spot for method \emph{ifssr}, for \emph{raw}, \emph{ifss}, \emph{ifss} the distance to nearest integer coordinates is considered.
+ \item \textbf{method} - distance measurement method. Measures the distance between given and induced spot for method \emph{ifssr}, for \emph{raw}, \emph{ifss}, \emph{ifss} the distance to nearest integer coordinates is considered.
  \item \textbf{threshold} - distance threshold for considering a spot covered by the candidate cell.
  \item \textbf{min\_spots} - minimum number of extra spots covered by a candidate cell for considering the cell a representative of a separate crystal.
 \end{enumerate}
