@@ -17,7 +17,8 @@ if get_option('include-python-api').enabled()
         install_rpath: join_paths(get_option('prefix'), get_option('libdir')),
         install: true,
         install_dir: get_option('libdir')+'/ffbidx',
-        cpp_args: cxx_flags)
+        cpp_args: cxx_flags,
+        link_args: nvcc_link_flags)
 
     install_data(
         [

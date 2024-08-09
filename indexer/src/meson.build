@@ -44,7 +44,8 @@ if get_option('build-ffbidx').enabled()
             install: true,
             install_mode: 'r-xr-xr-x',
             cuda_args: nvcc_flags,
-            cpp_args: cxx_flags)
+            cpp_args: cxx_flags,
+            link_args: nvcc_link_flags)
 
         configure_file(input: 'fast_indexer_static.pc.in',
             output: 'fast_indexer_static.pc',
@@ -61,7 +62,8 @@ if get_option('build-ffbidx').enabled()
             install: true,
             install_mode: 'r-xr-xr-x',
             cuda_args: nvcc_flags,
-            cpp_args: cxx_flags)
+            cpp_args: cxx_flags,
+            link_args: nvcc_link_flags)
 
         configure_file(input: 'fast_indexer.pc.in',
             output: 'fast_indexer.pc',

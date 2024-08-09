@@ -38,6 +38,8 @@ if get_option('buildtype') == 'release'
     endif
 endif
 
+nvcc_link_flags = '--forward-unknown-to-host-compiler'
+
 subdir('data/simple')
 subdir('indexer/src')
 subdir('python/src')
