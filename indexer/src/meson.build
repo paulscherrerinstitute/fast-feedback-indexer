@@ -7,7 +7,7 @@ if get_option('build-ffbidx').enabled()
     if get_option('eigen-source-dir') != 'ignore'
         eigen_dir = join_paths('../..', get_option('eigen-source-dir'))
         if fs.is_dir(eigen_dir+'/Eigen')
-            eigen3 = declare_dependency( include_directories: [
+            eigen3_dep = declare_dependency( include_directories: [
                 eigen_dir,
                 eigen_dir+'/unsupported'
             ])
@@ -16,7 +16,7 @@ if get_option('build-ffbidx').enabled()
             error('Eigen include directory not found under eigen-source-dir:', get_option('eigen-source-dir'))
         endif
     else
-        eigen3 = dependency('eigen3')
+        eigen3_dep = dependency('eigen3')
     endif
 
     thread_dep = dependency('threads')
@@ -40,7 +40,7 @@ if get_option('build-ffbidx').enabled()
         ffbidx_static = static_library('fast_indexer_static',
             sources,
             include_directories: 'ffbidx',
-            dependencies: [eigen3, cuda_dep, version_dep, thread_dep],
+            dependencies: [eigen3_dep, cuda_dep, version_dep, thread_dep],
             install: true,
             install_mode: 'r-xr-xr-x',
             cuda_args: nvcc_flags,
@@ -57,7 +57,7 @@ if get_option('build-ffbidx').enabled()
         ffbidx = shared_library('fast_indexer',
             sources,
             include_directories: 'ffbidx',
-            dependencies: [eigen3, cuda_dep, version_dep, thread_dep],
+            dependencies: [eigen3_dep, cuda_dep, version_dep, thread_dep],
             install: true,
             install_mode: 'r-xr-xr-x',
             cuda_args: nvcc_flags,
@@ -72,13 +72,13 @@ if get_option('build-ffbidx').enabled()
 
     if get_option('default_library') in [ 'shared', 'both' ]
         ffbidx_dep = declare_dependency(
-            dependencies: eigen3,
+            dependencies: eigen3_dep,
             include_directories: '.',
             link_with: ffbidx,
         )
     else
         ffbidx_dep = declare_dependency(
-            dependencies: eigen3,
+            dependencies: eigen3_dep,
             include_directories: '.',
             link_with: ffbidx_static,
         )
