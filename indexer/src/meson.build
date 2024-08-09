@@ -6,15 +6,15 @@ if get_option('build-ffbidx').enabled()
     fs = import('fs')
     if get_option('eigen-source-dir') != 'ignore'
         eigen_dir = join_paths('../..', get_option('eigen-source-dir'))
-    else
-        eigen_dir = '.' # will fail intensionally
-    endif
-    if fs.is_dir(eigen_dir+'/Eigen')
-        eigen3 = declare_dependency( include_directories: [
-            eigen_dir,
-            eigen_dir+'/unsupported'
-        ])
-        message('Using Eigen source in '+eigen_dir)
+        if fs.is_dir(eigen_dir+'/Eigen')
+            eigen3 = declare_dependency( include_directories: [
+                eigen_dir,
+                eigen_dir+'/unsupported'
+            ])
+            message('Using Eigen source in '+eigen_dir)
+        else
+            error('Eigen include directory not found under eigen-source-dir:', get_option('eigen-source-dir'))
+        endif
     else
         eigen3 = dependency('eigen3')
     endif
