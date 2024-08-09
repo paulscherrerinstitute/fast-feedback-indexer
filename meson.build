@@ -12,7 +12,7 @@ if get_option('cpu-arch') != 'ignore'
     nvcc_compiler_flags += ','+cpu_arch
 endif
 
-nvcc_flags = [ '--std=c++17', '--ftz=true', '--fmad=true' ]
+nvcc_flags = [ '--forward-unknown-to-host-compiler', '--std=c++17', '--ftz=true', '--fmad=true' ]
 if get_option('buildtype') == 'release'
     nvcc_flags += [
         '--compiler-options', nvcc_compiler_flags,
