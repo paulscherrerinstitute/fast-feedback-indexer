@@ -21,8 +21,6 @@ if get_option('build-ffbidx').enabled()
 
     thread_dep = dependency('threads')
 
-    cuda_dep = dependency('cuda', version : '>=10')
-
     sources = ['log.cpp', 'indexer.cpp', 'indexer_gpu.cu']
     if get_option('include-c-api').enabled()
         sources += 'c_api.cpp'
@@ -37,6 +35,8 @@ if get_option('build-ffbidx').enabled()
     conf_data.set('PROJECT_DESCRIPTION', 'Library for fast feedback indexing using brute force sampling')
 
     if get_option('default_library') in [ 'static', 'both' ]
+        cuda_dep = dependency('cuda', version : '>=10', modules : ['cudart_static'])
+
         ffbidx_static = static_library('fast_indexer_static',
             sources,
             include_directories: 'ffbidx',
@@ -55,6 +55,8 @@ if get_option('build-ffbidx').enabled()
     endif
 
     if get_option('default_library') in [ 'shared', 'both' ]
+        cuda_dep = dependency('cuda', version : '>=10', modules : ['cudart'])
+
         ffbidx = shared_library('fast_indexer',
             sources,
             include_directories: 'ffbidx',
