@@ -19,7 +19,7 @@ requirements:
         - numpy<2.0
     run:
         - numpy<2.0
-        - cuda-libraries
+        - cuda-cudart
 
 about:
     home: https://github.com/paulscherrerinstitute/fast-feedback-indexer
