@@ -35,3 +35,7 @@ about:
         Code repository: https://github.com/paulscherrerinstitute/fast-feedback-indexer
     dev_url: https://github.com/paulscherrerinstitute/fast-feedback-indexer
     doc_url: https://github.com/paulscherrerinstitute/fast-feedback-indexer/blob/main/python/README.md
+
+extra:
+  recipe-maintainers:
+        - hcstadler
