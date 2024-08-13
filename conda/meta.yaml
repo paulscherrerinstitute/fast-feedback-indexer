@@ -1,4 +1,4 @@
-{% set version = "0.12.0" %}
+{% set version = "1.0.0" %}
 
 package:
     name: ffbidx
@@ -6,10 +6,10 @@ package:
 
 source:
     git_url: https://github.com/paulscherrerinstitute/fast-feedback-indexer.git # [linux and py>=35]
-#    git_rev: {{ "v"+version }}
+    git_rev: {{ "v"+version }}
 
 build:
-    number: 1
+    number: 0
 
 requirements:
     build:
@@ -30,7 +30,7 @@ about:
     license_url: https://github.com/paulscherrerinstitute/fast-feedback-indexer/LICENSE.md
     summary: "Fast feedback indexer library with python module for xray crystallography"
     description: |
-        Provide the fast feedback indexer library with the python module for xray crystallography.
+        Fast feedback indexer library with the python module for xray crystallography.
         Paper reference: https://doi.org/10.1107/S1600576724003182
         Code repository: https://github.com/paulscherrerinstitute/fast-feedback-indexer
     dev_url: https://github.com/paulscherrerinstitute/fast-feedback-indexer
