@@ -9,8 +9,9 @@ if (($# == 0)); then
     grep VERSION meson.build
 elif (($# == 1)); then
     echo "replace version strings by $1"
-    sed -i 's/VERSION\(.*\)\w\.\w\.\w/VERSION\1'"$1"'/' CMakeLists.txt
-    sed -i 's/VERSION\(.*\)\w\.\w\.\w/VERSION\1'"$1"'/' meson.build
+    sed -i 's/VERSION\(.*\)\w\+\.\w\+\.\w\+/VERSION\1'"$1"'/' CMakeLists.txt
+    sed -i 's/VERSION_TXT\(.*\)\w\+\.\w\+\.\w\+/VERSION_TXT\1'"$1"'/' GenerateVersionH.cmake
+    sed -i 's/VERSION\(.*\)\w\+\.\w\+\.\w\+/VERSION\1'"$1"'/' meson.build
 else
     usage
 fi

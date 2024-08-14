@@ -11,7 +11,7 @@ if(GIT_EXECUTABLE)
 endif()
 
 if(VERSION_TXT STREQUAL "")
-  set(VERSION_TXT unknown)
+  set(VERSION_TXT "1.0.0")
   message(WARNING "Failed to determine version from Git.")
 endif()
 
