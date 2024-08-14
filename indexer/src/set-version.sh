@@ -12,6 +12,7 @@ elif (($# == 1)); then
     sed -i 's/VERSION\(.*\)\w\+\.\w\+\.\w\+/VERSION\1'"$1"'/' CMakeLists.txt
     sed -i 's/VERSION_TXT\(.*\)\w\+\.\w\+\.\w\+/VERSION_TXT\1'"$1"'/' GenerateVersionH.cmake
     sed -i 's/VERSION\(.*\)\w\+\.\w\+\.\w\+/VERSION\1'"$1"'/' meson.build
+    sed -i 's/version_txt\(.*\)\w\+\.\w\+\.\w\+/version_txt\1'"$1"'/' ffbidx/meson.build
 else
     usage
 fi
