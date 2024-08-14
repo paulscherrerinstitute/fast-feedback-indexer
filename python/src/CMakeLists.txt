@@ -1,8 +1,3 @@
-project(python_impl
-        DESCRIPTION "Python module"
-        VERSION 1.0.1
-        LANGUAGES CXX)
-
 option(PYTHON_MODULE "Enable python module" OFF)
 option(PYTHON_MODULE_RPATH "Set python module RPATH to fast indexer library installation" OFF)
 set(PYTHON_MODULE_PATH "${CMAKE_INSTALL_LIBDIR}" CACHE PATH "Indexer python module installation path")

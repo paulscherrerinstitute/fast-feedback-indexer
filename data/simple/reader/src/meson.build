@@ -1,7 +1,7 @@
 simple_data_dep = declare_dependency(include_directories: '.')
 
 conf_data = configuration_data()
-conf_data.set('PROJECT_VERSION', '1.0.1')
+conf_data.set('PROJECT_VERSION', meson.project_version())
 conf_data.set('CMAKE_INSTALL_PREFIX', get_option('prefix'))
 conf_data.set('CMAKE_INSTALL_INCLUDEDIR', get_option('includedir'))
 conf_data.set('PROJECT_NAME', 'simple_data')

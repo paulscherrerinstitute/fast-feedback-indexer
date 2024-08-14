@@ -6,7 +6,7 @@ function usage() {
 }
 
 if (($# == 0)); then
-    grep "version =" meta.yaml
+    grep -Hn "version =" meta.yaml
 elif (($# == 1)); then
     echo "replace version strings by $1"
     sed -i 's/version = \"\w\+\.\w\+\.\w\+\"/version = \"'"$1"'\"/' meta.yaml

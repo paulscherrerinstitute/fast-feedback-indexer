@@ -1,8 +1,3 @@
-project(tests_impl
-        DESCRIPTION "Tests"
-        VERSION 1.0.1
-        LANGUAGES CXX CUDA)
-
 # ---- Indexer Tests ----
 
 option(TEST_INDEXER_SIMPLE "Enable ctest test code for simple indexer test" OFF)
