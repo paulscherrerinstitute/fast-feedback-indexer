@@ -1,6 +1,6 @@
 project('ffbidx',
     ['cpp', 'cuda'],
-    version: '1.0.0')
+    version: '1.0.1')
 
 # Shell script variable settings for setup-env.sh
 fast_feedback_indexer_ENV_SETUP  = ''

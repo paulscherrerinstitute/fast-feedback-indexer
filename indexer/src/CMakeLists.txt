@@ -2,7 +2,7 @@ cmake_policy(SET CMP0048 NEW)
 
 project(fast_indexer
         DESCRIPTION "Library for fast feedback indexing using brute force sampling"
-        VERSION 1.0.0
+        VERSION 1.0.1
         LANGUAGES CXX CUDA)
 
 option(BUILD_FAST_INDEXER "Build fast indexer library" ON)

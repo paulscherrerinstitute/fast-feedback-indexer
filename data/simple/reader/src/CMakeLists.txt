@@ -3,7 +3,7 @@ cmake_policy(SET CMP0048 NEW)
 
 project(simple_data
         DESCRIPTION "Reader for simple data"
-        VERSION 1.0.0
+        VERSION 1.0.1
         LANGUAGES CXX)
 
 option(BUILD_SIMPLE_DATA_READER "Build reader API for simple data" OFF)
