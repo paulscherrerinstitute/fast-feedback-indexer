@@ -6,7 +6,7 @@ endif
 if git_exe.found() and result.returncode() == 0
     version_txt = result.stdout()
 else
-    version_txt = 'unknown'
+    version_txt = '"'+meson.project_version()+'"'
 endif
 message('Version string: '+version_txt)
 
