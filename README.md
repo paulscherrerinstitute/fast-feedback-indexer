@@ -125,7 +125,7 @@ spack load ffbidx
 
 See: https://git.psi.ch/germann_e/spack-psi
 
-### Meson (experimental)
+### Installation with Meson
 (This was tested with meson-1.4.0 and ninja-1.10.1)
 
 In the top code directory do the following after adapting these lines to your own needs:
@@ -142,3 +142,14 @@ $ meson install
 $ . ${FFBIDX_INSTALL_DIR}/share/ffbidx/setup-env.sh
 ```
 Then do the qiuck installation test above.
+
+### Installation for Python using micromamba and conda-build (experimental)
+```
+$ micromamba install conda-build
+$ conda-build -c conda-forge conda/meta.yaml
+$ micromamba install -c local ffbidx
+$ python -c "import ffbidx; print('OK')"
+```
+
+### Installation for Python through conda-forge
+TODO
