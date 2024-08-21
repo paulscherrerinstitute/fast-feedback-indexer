@@ -21,19 +21,23 @@ if get_option('build-tests').enabled()
         test('indexer_object',
             test)
 
-        test = executable('test_indexer',
-            'test_indexer.cpp',
-            dependencies: [ffbidx_dep, simple_data_dep])
-        test('index_file_0',
-            test,
-            args:[ meson.project_source_root()+'/data/simple/files/image0_local.txt' ])
-        
-        test = executable('test_capi',
-            'test_capi.cpp',
-            dependencies: [ffbidx_dep, simple_data_dep])
-        test('capi_index_file_0',
-            test,
-            args:[ meson.project_source_root()+'/data/simple/files/image0_local.txt' ])
+        if get_option('install-simple-data-reader').enabled()
+            test = executable('test_indexer',
+                'test_indexer.cpp',
+                dependencies: [ffbidx_dep, simple_data_dep])
+            test('index_file_0',
+                test,
+                args:[ meson.project_source_root()+'/data/simple/files/image0_local.txt' ])
+
+            test = executable('test_capi',
+                'test_capi.cpp',
+                dependencies: [ffbidx_dep, simple_data_dep])
+            test('capi_index_file_0',
+                test,
+                args:[ meson.project_source_root()+'/data/simple/files/image0_local.txt' ])
+        else
+            warning('Some tests cannot be built, set "-D install-simple-data-reader=enabled" option to build them')
+        endif
     endif
 endif
 

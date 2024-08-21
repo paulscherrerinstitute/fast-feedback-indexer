@@ -1,6 +1,7 @@
 # Compile options, can be set to 'ignore'
 option('cpu-arch', type: 'string', value: 'ignore')
 option('gpu-arch', type: 'string', value: 'ignore')
+option('all-warnings', type: 'feature', value: 'disabled')
 
 # Eigen include directory, can be set to 'ignore'
 # If this doesn't have the 'Eigen' subdirectory,
@@ -8,11 +9,13 @@ option('gpu-arch', type: 'string', value: 'ignore')
 option('eigen-source-dir', type: 'string', value: 'ignore')
 
 # Build fast indexer library
+# include-* options require the build-ffbidx option
 option('build-ffbidx', type: 'feature', value: 'enabled')
 option('include-c-api', type: 'feature', value: 'enabled')
 option('include-python-api', type: 'feature', value: 'disabled')
 
 # Build the toy simple data indexers
+# requires: install-simple-data-reader, build-ffbidx
 option('build-simple-indexers', type: 'feature', value: 'disabled')
 
 # Install the simple data files and header only reader library

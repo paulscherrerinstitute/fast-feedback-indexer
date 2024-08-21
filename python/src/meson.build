@@ -1,4 +1,4 @@
-if get_option('include-python-api').enabled()
+if get_option('include-python-api').enabled() and get_option('build-ffbidx').disabled()
     pymod = import('python')
     python = pymod.find_installation('python3', modules: 'numpy')
     python_dep = python.dependency()

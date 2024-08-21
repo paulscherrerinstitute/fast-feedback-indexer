@@ -26,16 +26,19 @@ if get_option('gpu-arch') != 'ignore'
 endif
 
 cxx_flags = [ '--std=c++17' ]
+extra_warning_flags = [ '-Wall', '-Wextra' ]
 if get_option('buildtype') == 'release'
     cxx_flags += [
         '-Ofast',
-        '-Wall',
-        '-Wextra',
         '-DNDEBUG'
     ]
     if cpu_arch != ''
         cxx_flags += cpu_arch
     endif
+endif
+
+if get_option('all-warnings').enabled()
+    cxx_flags += extra_warning_flags
 endif
 
 nvcc_link_flags = '--forward-unknown-to-host-compiler'
