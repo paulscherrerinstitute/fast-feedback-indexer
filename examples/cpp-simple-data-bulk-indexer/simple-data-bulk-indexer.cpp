@@ -27,6 +27,7 @@ Author: hans-christian.stadler@psi.ch
 #include <getopt.h>
 #include <cstdlib>
 #include <cstdint>
+#include <cmath>
 #include <iostream>
 #include <sstream>
 #include <fstream>
@@ -80,6 +81,7 @@ namespace {
                      "  --help         show this help\n"
                      "  --quiet        no indexing result output\n"
                      "  --allcells     output all cells instead of only the best\n"
+                     "  --cellgeom     output cell geometry\n"
                      "indexer options:\n"
                      "  --method       output cell refinement method, one of raw, ifssr(default), ifss, ifse\n"
                      "  --reducalc     calculate candidate vectors for all cell vectors instead of one\n"
@@ -130,6 +132,7 @@ namespace {
     bool quiet = false;                 // don't produce indexing result output
     bool reducalc = false;              // calculate candidates for all 3 cell vectors instead of one
     bool best_only = true;              // output best cell only
+    bool cell_geom = false;             // output cell geometry
     std::string method{};               // refinement method
 
     void check_method()
@@ -208,7 +211,8 @@ namespace {
             { "method",   1, nullptr, 20},
             { "reducalc", 0, nullptr, 21},
             { "allcells", 0, nullptr, 22},
-            { "help",     0, nullptr, 23},
+            { "cellgeom", 0, nullptr, 23},
+            { "help",     0, nullptr, 24},
             { nullptr,    0, nullptr, -1}
         };
 
@@ -284,6 +288,9 @@ namespace {
                     best_only = false;
                     break;
                 case 23:
+                    cell_geom = true;
+                    break;
+                case 24:
                     usage();
                 default:
                     error("internal: unknown option id");
@@ -695,7 +702,8 @@ namespace {
                                 auto t = clock::now();
                                 indexer_time_priv += duration{t - work->tp}.count();
 
-                                if (method == "raw") {
+                                if (method == "raw") { // skip refine state by doing work here
+                                    work->best_cell = refine::best_cell(work->scores);
                                     counter++;
                                     work->repetition++;
                                     if (work->repetition < repetitions) {
@@ -729,6 +737,8 @@ namespace {
                                     indexer_ifse::refine(work->coords.bottomRows(work->in.n_spots), work->cells, work->scores, cifse, block, refinement_blocks);
                                 else if (method == "ifssr")
                                     indexer_ifssr::refine(work->coords.bottomRows(work->in.n_spots), work->cells, work->scores, cifssr, block, refinement_blocks);
+                                else
+                                    throw std::runtime_error("unexpected method in refine state");  
 
                                 refine_time_priv += duration{clock::now() - t}.count();
 
@@ -779,6 +789,23 @@ namespace {
     {
         for (auto& thread : thread_pool)
             thread.join();
+    }
+
+    // print cell geometry
+    void print_cell_geometry(const Eigen::Matrix3<float>&  cell)
+    {
+        const auto a = cell.row(0);
+        const auto b = cell.row(1);
+        const auto c = cell.row(2);
+        const auto la = a.norm();
+        const auto lb = b.norm();
+        const auto lc = c.norm();
+        const auto r2d = 180. / M_PI;
+        const auto ab = std::acos(a.dot(b) / (la * lb)) * r2d;
+        const auto bc = std::acos(b.dot(c) / (lb * lc)) * r2d;
+        const auto ca = std::   acos(c.dot(a) / (lc * la)) * r2d;
+        std::cout << "geom: " << a.norm() << ' ' << b.norm() << ' ' << c.norm() << " / "
+                              << ab << ' ' << ca << ' ' << bc << '\n';
     }
 
 } // namespace
@@ -834,14 +861,20 @@ int main (int argc, char *argv[])
             for (const auto& res : witem_list) {
                 if (best_only) {
                     std::cout << res->filename <<": cell score " << res->scores[res->best_cell] << '\n';
-                    std::cout << res->cells.block(3u * res->best_cell, 0u, 3u, 3u) << "\n\n";
+                    std::cout << res->cells.block(3u * res->best_cell, 0u, 3u, 3u) << '\n';
+                    if (cell_geom)
+                        print_cell_geometry(res->cells.block(3u * res->best_cell, 0u, 3u, 3u));
+                    std::cout << '\n';
                 } else {
                     std::cout << res->filename <<":\n";
                     for (unsigned j=0u; j<cpers.max_output_cells; j++) {
                         if (res->best_cell == j)
                             std::cout << "(best) ";                    
                         std::cout << "cell " << j << ": score " << res->scores[j] << '\n';
-                        std::cout << res->cells.block(3u * j, 0u, 3u, 3u) << "\n\n";
+                        std::cout << res->cells.block(3u * j, 0u, 3u, 3u) << '\n';
+                        if (cell_geom)
+                            print_cell_geometry(res->cells.block(3u * res->best_cell, 0u, 3u, 3u));
+                        std::cout << '\n';
                     }
                 }
             }
