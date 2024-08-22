@@ -804,7 +804,7 @@ namespace {
         const auto ab = std::acos(a.dot(b) / (la * lb)) * r2d;
         const auto bc = std::acos(b.dot(c) / (lb * lc)) * r2d;
         const auto ca = std::   acos(c.dot(a) / (lc * la)) * r2d;
-        std::cout << "geom: " << a.norm() << ' ' << b.norm() << ' ' << c.norm() << " / "
+        std::cout << "geom: " << la << ' ' << lb << ' ' << lc << " / "
                               << ab << ' ' << ca << ' ' << bc << '\n';
     }
 
