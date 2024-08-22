@@ -11,8 +11,8 @@
 \usepackage{algpseudocode}
 \usepackage{listings}
 
-%\usepackage[backend=bibtex,style=numeric]{biblatex}
-%\addbibresource{bibliography}
+\usepackage[backend=bibtex,style=numeric]{biblatex}
+\addbibresource{bibliography}
 
 \DeclareMathOperator*{\mirror}{\longrightarrow}
 \DeclareMathOperator*{\argmin}{argmin}
@@ -47,11 +47,11 @@ This article gives a description of the API for the fast feedback indexing algor
 
 \section{Intro}\label{sec:intro}
 
-The fast feedback indexer (FFBI) is implemented in C++17 with CUDA underneath. Additionally there are primitive wrappers for Python3 and C98.
+The fast feedback indexer (FFBI) is implemented in C++17 with CUDA \cite{cuda} underneath. Additionally there are primitive wrappers for Python3 and C98.
 
 One part of the API, called the \emph{raw} API, only depends on the standard C++ library. With the \emph{raw} API, it is possible to call the GPU part of FFBI. This part delivers unit cell candidates with associated scores.
 
-Another part additionally depends on the \emph{Eigen} library. The most important part is the refinement of cell candidates obtained from the \emph{raw} API and selecting final results. This part also provides a \emph{convenience} API, wrapping the \emph{raw} API in a less performant, but more convenient object oriented interface. This API, although cell refinement and result selection do not strictly belong to that part, will be called \emph{convenience} API in its entirety.
+Another part additionally depends on the \emph{Eigen} library \cite{eigenweb}. The most important part is the refinement of cell candidates obtained from the \emph{raw} API and selecting final results. This part also provides a \emph{convenience} API, wrapping the \emph{raw} API in a less performant, but more convenient object oriented interface. This API, although cell refinement and result selection do not strictly belong to that part, will be called \emph{convenience} API in its entirety.
 
 Both \emph{raw} and \emph{convenience} API provide means to call the GPU code asynchronously.
 
@@ -311,7 +311,7 @@ A logging API is provided for internal purposes.
 
 \section{\emph{Convenience} API}
 
-This API is declared in the file ``ffbidx/refine.h'' under the namespace \emph{fast\_feed\-back::re\-fine}. The \emph{convenience} API provides basic functionality for cell refinement, cell similarity, and cell selection. Then it provides object oriented convenience wrappers for the \emph{raw} API, hence the name. The \emph{convenience} API relies on data stored as vectors and matrices as defined by the Eigen library. Eigen matrices are stores in column major order.
+This API is declared in the file ``ffbidx/refine.h'' under the namespace \emph{fast\_feed\-back::re\-fine}. The \emph{convenience} API provides basic functionality for cell refinement, cell similarity, and cell selection. Then it provides object oriented convenience wrappers for the \emph{raw} API, hence the name. The \emph{convenience} API relies on data stored as vectors and matrices as defined by the Eigen library \cite{eigenweb}. Eigen matrices are stores in column major order.
 
 \subsection{Basic Functionality}
 
@@ -802,7 +802,7 @@ This section describes very simple use cases.
 \subsection{\emph{Raw} API}
 \lstset{language=C++}
 
-The \emph{raw} API, in combination with the basic functionality of the \emph{convenience} API, offers the biggest flexibility and speed potential. Since the \emph{convenience} API works with row vectors in Eigen matrices stored in column major memory order, data should be kept in this form, or at least in a form easily convertable to such matrices. The rationale for column major row vector matrices is the avoidance of memory access strides detrimental to performance.
+The \emph{raw} API, in combination with the basic functionality of the \emph{convenience} API, offers the biggest flexibility and speed potential. Since the \emph{convenience} API works with row vectors in Eigen matrices \cite{eigenweb} stored in column major memory order, data should be kept in this form, or at least in a form easily convertable to such matrices. The rationale for column major row vector matrices is the avoidance of memory access strides detrimental to performance.
 
 The following code first creates a toy setup by hardcoding some Miller indices in $\mat{Coords}$ and a lattice base $\mat{B}$ as a rotated version of $\mat{B0}$. The spots in reciprocal space spots are then $\mat{Spots}=\mat{Coords}\cdot\mat{B}^{-1}$. The indexer should now find $\mat{B}$ when given the $\mat{Spots}$ and $\mat{B0}$.
 %
@@ -1108,5 +1108,5 @@ print("Computed Coords:\n", Spots@Bf.T)
 %
 Unfortunately, the column major memory ordering is a bit awkward to keep up. Instead of \emph{F\_CONTIGUOUS} arrays, it would also be possible to work with \emph{C\_CONTIGUOUS} arrays in their transposed versions. The Python API currently lacks the means to achieve the best performance.
 
-%\printbibliography
+\printbibliography
 \end{document}
