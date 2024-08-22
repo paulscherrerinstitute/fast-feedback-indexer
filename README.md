@@ -8,7 +8,11 @@ Develop an indexer for fast feedback
 
 *Restrictions*: Initial cell geometry is required. In other words - this indexer cannot be used for finding a cell from scratch.
 
-*Issues*: Implemented in CUDA, so only Nvidia GPUs are supported currently. With a suitable development machine, porting the code to HIP looks like a very realistic possibility. Porting to SYCL could also be an option.
+*Issues*:
+
+* The refinement algorithms misbehave with electron diffraction data
+* The refinement algorithms misbehave with small molecule data
+* Implemented in CUDA, so only Nvidia GPUs are supported currently. With a suitable development machine, porting the code to HIP looks like a very realistic possibility. Porting to SYCL could also be an option.
 
 ### Alternative Implementations
 
