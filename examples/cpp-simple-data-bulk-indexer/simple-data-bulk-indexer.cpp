@@ -83,6 +83,7 @@ namespace {
                      "  --notiming     no timing output\n"
                      "  --allcells     output all cells instead of only the best\n"
                      "  --cellgeom     output cell geometry\n"
+                     "  --crystals     output crystal indices\n"
                      "indexer options:\n"
                      "  --method       output cell refinement method, one of raw, ifssr(default), ifss, ifse\n"
                      "  --reducalc     calculate candidate vectors for all cell vectors instead of one\n"
@@ -139,6 +140,7 @@ namespace {
     bool reducalc = false;              // calculate candidates for all 3 cell vectors instead of one
     bool best_only = true;              // output best cell only
     bool cell_geom = false;             // output cell geometry
+    bool crystals = false;              // output crystal indices
     std::string method{};               // refinement method
 
     void check_method()
@@ -220,7 +222,8 @@ namespace {
             { "cellgeom", 0, nullptr, 23},
             { "vrminpts", 1, nullptr, 24},
             { "notiming", 0, nullptr, 25},
-            { "help",     0, nullptr, 26},
+            { "crystals", 0, nullptr, 26},
+            { "help",     0, nullptr, 27},
             { nullptr,    0, nullptr, -1}
         };
 
@@ -304,6 +307,9 @@ namespace {
                     notiming = true;
                     break;
                 case 26:
+                    crystals = true;
+                    break;
+                case 27:
                     usage();
                 default:
                     error("internal: unknown option id");
@@ -505,6 +511,7 @@ namespace {
     struct work_item final {
         std::string filename;                   // simple data file name
         std::unique_ptr<SimpleData> data_ptr;   // pointer to data object obtained with simple_data lib
+        std::vector<unsigned> crystals;         // crystal indices
         Mx3 coords;                             // one unit cell plus spot coordinates
         Mx3 cells;                              // output cells
         Vx scores;                              // output cell scores
@@ -720,6 +727,8 @@ namespace {
 
                                 if (method == "raw") { // skip refine state by doing work here
                                     work->best_cell = refine::best_cell(work->scores);
+                                    if (crystals)
+                                        work->crystals = refine::select_crystals(work->cells, work->coords.bottomRows(work->in.n_spots), work->scores, maxdist, minpts, method=="ifssr");
                                     counter++;
                                     work->repetition++;
                                     if (work->repetition < repetitions) {
@@ -761,6 +770,8 @@ namespace {
                                 block = work->blkcnt.fetch_add(1u); // finished block
                                 if (block + 1u >= refinement_blocks) {
                                     work->best_cell = refine::best_cell(work->scores);
+                                    if (crystals)
+                                        work->crystals = refine::select_crystals(work->cells, work->coords.bottomRows(work->in.n_spots), work->scores, maxdist, minpts, method=="ifssr");
                                     work->repetition++;
                                     if (work->repetition < repetitions) {
                                         // init work item
@@ -875,6 +886,16 @@ int main (int argc, char *argv[])
         if (! quiet) {
             std::cout.precision(12);
             for (const auto& res : witem_list) {
+                if (crystals) {
+                    std::cout << res->filename << ": crystal ids";
+                    if (res->crystals.empty()) {
+                        std::cout << " - none\n";
+                    } else {
+                        for (unsigned i : res->crystals)
+                            std::cout << ' ' << i;
+                        std::cout << '\n';
+                    }
+                }
                 if (best_only) {
                     std::cout << res->filename <<": cell score " << res->scores[res->best_cell] << '\n';
                     std::cout << res->cells.block(3u * res->best_cell, 0u, 3u, 3u) << '\n';
