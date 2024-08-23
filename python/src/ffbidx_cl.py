@@ -196,3 +196,13 @@ class Indexer:
         """Release the state allocated on GPU."""
         if (self.initialized):
             release(self.handle)
+
+    def __enter__(self):
+        """Deliver self as object."""
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Release the state allocated on GPU."""
+        if (self.initialized):
+            release(self.handle)
+            self.initialized = False
