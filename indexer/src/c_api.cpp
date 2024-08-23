@@ -90,7 +90,7 @@ namespace {
     {
         if (cfg_runtime) {
             const fast_feedback::config_runtime<float> crt{};
-            std::memcpy(cfg_runtime, &crt, sizeof(config_runtime));
+            std::memcpy(cfg_runtime, reinterpret_cast<const config_runtime*>(&crt), sizeof(config_runtime));
         }
 
         if (cfg_persistent) {

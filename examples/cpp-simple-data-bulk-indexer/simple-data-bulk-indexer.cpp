@@ -85,14 +85,17 @@ namespace {
                      "indexer options:\n"
                      "  --method       output cell refinement method, one of raw, ifssr(default), ifss, ifse\n"
                      "  --reducalc     calculate candidate vectors for all cell vectors instead of one\n"
-                     "  --maxspot      maximum number of spots\n"
+                     "  --maxspots     maximum number of spots\n"
                      "  --cells        number of output cells with scores\n"
                      "  --cands        number of candidate vectors\n"
                      "  --hsp          number of brute force halfsphere sample points\n"
-                     "  --ap           number of brute force angle sample points\n"
+                     "  --ap           number of brute force angle sample points (0: heuristic)\n"
                      "  --triml        trim lows\n"
                      "  --trimh        trim heights\n"
                      "  --delta        log2 curve position\n"
+                     "  --dist1        vector score: max inlier distance\n"
+                     "  --dist3        cell score: max inlier distance\n"
+                     "  --vrminpts     vector candidate refinement: minimum number of points for fitting (0: no refinement)\n"
                      "  --contr        ifssr/ifss/ifse threshold contraction\n"
                      "  --maxdist      ifssr/ifss/ifse maximum distance to integer\n"
                      "  --minpts       ifssr/ifss/ifse minimum number of points for fitting\n"
@@ -123,6 +126,7 @@ namespace {
     float dist3;
     float contr;
     float maxdist;
+    unsigned vrminpts;
     unsigned minpts;
     unsigned iter;
     unsigned worker_threads = 1u;       // number of worker threads
@@ -212,7 +216,8 @@ namespace {
             { "reducalc", 0, nullptr, 21},
             { "allcells", 0, nullptr, 22},
             { "cellgeom", 0, nullptr, 23},
-            { "help",     0, nullptr, 24},
+            { "vrminpts", 1, nullptr, 24},
+            { "help",     0, nullptr, 25},
             { nullptr,    0, nullptr, -1}
         };
 
@@ -291,6 +296,8 @@ namespace {
                     cell_geom = true;
                     break;
                 case 24:
+                    parse_val(vrminpts, optarg, true); break;
+                case 25:
                     usage();
                 default:
                     error("internal: unknown option id");
@@ -316,6 +323,7 @@ namespace {
         delta = crt.delta;
         dist1 = crt.dist1;
         dist3 = crt.dist3;
+        vrminpts = crt.min_spots;
         // initialize these later, set to invalid here
         contr = -1.;
         maxdist = -1.;
@@ -350,6 +358,7 @@ namespace {
         crt.delta = delta;
         crt.dist1 = dist1;
         crt.dist3 = dist3;
+        crt.min_spots = vrminpts;
         if (contr >= .0f)
             cifss.threshold_contraction = cifse.threshold_contraction = cifssr.threshold_contraction = contr;
         if (maxdist >= .0f)
@@ -834,7 +843,7 @@ int main (int argc, char *argv[])
                         << ", cands=" << cpers.num_candidate_vectors << ", reducalc=" << cpers.redundant_computations << '\n'
               << stanza << "crt: hs-points=" << crt.num_halfsphere_points << ", a-points=" << crt.num_angle_points
                         << ", triml=" << crt.triml << ", trimh=" << crt.trimh << ", delta=" << crt.delta
-                        << ", dist1=" << crt.dist1 << ", dist3=" << crt.dist3 << '\n';
+                        << ", dist1=" << crt.dist1 << ", dist3=" << crt.dist3 << ", min_spots=" << crt.min_spots << '\n';
         if (method == "ifss") {
             debug << stanza << "cifss: contr=" << cifss.threshold_contraction << ", minpts=" << cifss.min_spots << ", iter=" << cifss.max_iter << '\n';
         } else if (method == "ifse") {

@@ -58,6 +58,7 @@ class Indexer:
             delta:float=.1,
             dist1:float=.1,
             dist3:float=.15,
+            vr_min_spots:int=6,
             num_halfsphere_points:int=32*1024,
             num_angle_points:int=0,
             n_output_cells:int=32,
@@ -98,6 +99,8 @@ class Indexer:
         dist3 : float
             Count spots approximated more closely than this value in the cell
             sampling stage.
+        vr_min_spots : int
+            Stop vector refinement if less than this number of spots are selected (0: no refinement).
         num_halfsphere_points : int
             Number of sampling points on the half sphere for vector sampling.
         num_angle_points : int
@@ -112,7 +115,7 @@ class Indexer:
         max_dist : float
             Stop refinement if the error threshold is below this value.
         min_spots : int
-            Stop refinement if less than this number of spots are selected.
+            Stop cell refinement if less than this number of spots are selected.
         n_iter : int
             Stop refinement if this iteration count has been reached.
         
@@ -140,6 +143,7 @@ class Indexer:
             delta=delta,
             dist1=dist1,
             dist3=dist3,
+            vr_min_spots=vr_min_spots,
             num_halfsphere_points=num_halfsphere_points,
             num_angle_points=num_angle_points,
             n_output_cells=n_output_cells,

@@ -40,19 +40,6 @@ Author: hans-christian.stadler@psi.ch
 #include "ffbidx/indexer_gpu.h"
 #include "cuda_runtime.h"
 
-#define VCR_NONE 0  // No vector candidate refinement
-#define VCR_ROPT 1  // Vector candidate refinement with robust optimization
-
-#ifndef VECTOR_CANDIDATE_REFINEMENT // Macro for switching on vector candidate refinement
-    #define VCANDREF VCR_ROPT   // Use no candidate vector refinement
-#elif VECTOR_CANDIDATE_REFINEMENT == VCR_NONE
-    #define VCANDREF VCR_NONE   // Use no candidate vector refinement
-#elif VECTOR_CANDIDATE_REFINEMENT == VCR_ROPT
-    #define VCANDREF VCR_ROPT   // Use robust optimization for candidate vector refinement
-#else
-    #error "VECTOR_CANDIDATE_REFINEMENT has an unsupported value! Use either 0 (none), or 1 (robust optimization)."
-#endif
-
 namespace logger = fast_feedback::logger;
 using logger::stanza;
 
@@ -436,10 +423,8 @@ namespace {
         fast_feedback::output<float_type> output;
         float_type* candidate_length;           // Candidate vector groups length, [3 * max_input_cells]
         float_type* candidate_value;            // Candidate vector objective function values, [3 * max_input_cells * num_candidate_vectors]
-        #if VCANDREF == VCR_ROPT
-            float_type* refined_candidates;     // Refined candidate coordinates in consecutive aligned tripples
+        float_type* refined_candidates;         // Refined candidate coordinates in consecutive aligned tripples
                                                 // (x,y,z,gap; alignment = mem_txn_unit) [3 * max_input_cells * num_candidate_vectors * 3]
-        #endif
         unsigned* candidate_sample;             // Sample number of candidate vectors, [3 * max_input_cells * num_candidate_vectors]
         unsigned* cellvec_to_cand;              // Input cell vector to candidate group mapping, [3 * max_input_cells]
         unsigned* cell_to_cellvec;              // Input cell to representing cell vector mapping, [max_input_cells]
@@ -467,9 +452,7 @@ namespace {
         gpu_pointer<float_type> elements;                   // Input/output vector elements of data on GPU
         gpu_pointer<float_type> candidate_length;           // Candidate vector groups length values on GPU
         gpu_pointer<float_type> candidate_value;            // Candidate vectors objective function values on GPU
-        #if VCANDREF == VCR_ROPT
-            gpu_pointer<float_type> refined_candidates;     // Refined candidate coordinates in consecutive aligned tripples on GPU
-        #endif
+        gpu_pointer<float_type> refined_candidates;         // Refined candidate coordinates in consecutive aligned tripples on GPU
         gpu_pointer<unsigned> candidate_sample;             // Sample number of candidate vectors on GPU
         gpu_pointer<unsigned> cellvec_to_cand;              // Input cell vector to candidate group mapping on GPU
         gpu_pointer<unsigned> cell_to_cellvec;              // Input cell to cell representing vector mapping on GPU
@@ -537,9 +520,7 @@ namespace {
         // cbm      host callback function is called when results are ready
         indexer_gpu_state(gpu_pointer<content_type>&& d, gpu_pointer<float_type>&& e,
                           gpu_pointer<float_type>&& cl, gpu_pointer<float_type>&& cv,
-                          #if VCANDREF == VCR_ROPT
-                            gpu_pointer<float_type>&& rc,
-                          #endif
+                          gpu_pointer<float_type>&& rc,
                           gpu_pointer<unsigned>&& cs, gpu_pointer<unsigned>&& v2c,
                           gpu_pointer<unsigned>&& c2v, gpu_pointer<unsigned>&& vcgr,
                           gpu_pointer<unsigned>&& sb, gpu_stream&& stream,
@@ -548,9 +529,7 @@ namespace {
                           float_type* scores, int dev, unsigned n_cells_in)
             : data{std::move(d)}, elements{std::move(e)},
               candidate_length{std::move(cl)}, candidate_value{std::move(cv)},
-              #if VCANDREF == VCR_ROPT
-                refined_candidates{std::move(rc)},
-              #endif
+              refined_candidates{std::move(rc)},
               candidate_sample{std::move(cs)}, cellvec_to_cand{std::move(v2c)},
               cell_to_cellvec{std::move(c2v)}, vec_cgrps{std::move(vcgr)},
               seq_block{std::move(sb)}, cuda_stream{std::move(stream)},
@@ -1584,27 +1563,24 @@ namespace {
                     }
                     printf("\n");
                 }
-            }
-            #if VCANDREF == VCR_ROPT
-                else if (kind == 1u) { // kind == 1
-                    // Vector candidates refined
-                    const float_type* const rca = data->refined_candidates;
-                    for (unsigned i=0u; i<(3u*n_cells_in); ++i) {
-                        unsigned cg = data->cellvec_to_cand[i];
-                        if (cg > ncg)
-                            ncg = cg;
-                    }
-                    for (unsigned i=0u; i<=ncg; ++i) {
-                        printf("cg%u:", i);
-                        for (unsigned j=0; j<ncv; ++j) {
-                            auto rc = &rca[((i * ncv) + j) * constant<float_type>::mem_txn_unit];
-                            printf(" (%0.2f,%0.2f,%0.2f)", (float)rc[0], (float)rc[1], (float)rc[2]);
-                        }
-                        printf("\n");
-                    }
-                    return;
+            } else if (kind == 1u) { // kind == 1
+                // Vector candidates refined
+                const float_type* const rca = data->refined_candidates;
+                for (unsigned i=0u; i<(3u*n_cells_in); ++i) {
+                    unsigned cg = data->cellvec_to_cand[i];
+                    if (cg > ncg)
+                        ncg = cg;
                 }
-            #endif
+                for (unsigned i=0u; i<=ncg; ++i) {
+                    printf("cg%u:", i);
+                    for (unsigned j=0; j<ncv; ++j) {
+                        auto rc = &rca[((i * ncv) + j) * constant<float_type>::mem_txn_unit];
+                        printf(" (%0.2f,%0.2f,%0.2f)", (float)rc[0], (float)rc[1], (float)rc[2]);
+                    }
+                    printf("\n");
+                }
+                return;
+            }
         } else {
             const fast_feedback::output<float_type>& out = data->output;
             const unsigned n_cells_out  = data->cpers.max_output_cells;
@@ -1685,101 +1661,99 @@ namespace {
         }
     }
 
-    #if VCANDREF == VCR_ROPT
-        // vector candidate index       = blockIdx.x
-        // vector candidate group index = blockIdx.y
-        // cuda thread block size = warp_size (32)
-        template<typename float_type>
-        __global__ void gpu_refine_cand(indexer_device_data<float_type>* data)
-        {
-            // # Python equivalent
-            // class Optimizer:
-            //     def __init__(self, reciprocal_spots, beta=[.3, .1, .03, .01]):
-            //         self.spots = reciprocal_spots   # spots in reciprocal space
-            //         self.beta = beta                # list of diminishing beta values
-            //         self.select = None              # spot selector boolean vector
-            //     def __call__(self, b):              # b: approximation column vector in nonreciprocal space
-            //         coord = self.spots @ b          # spot coordinates in nonreciprocal space
-            //         miller = np.round(coord)        # closest integer coordinates
-            //         for beta in self.beta:
-            //             coord = self.spots @ b
-            //             self.select = np.abs(coord - miller) < beta # index set: spots within distance beta of miller coordinate
-            //             if sum(self.select) < 6:
-            //                 return None
-            //             b = np.linalg.lstsq(self.spots[self.select,:], miller[self.select],rcond=-1)[0] # use least squares fit to selected spots for a better approximation vector
-            //         return b
-            static constexpr unsigned n_rounds = 4;
-            static constexpr float_type beta[n_rounds] = {.1, .05, .025, 0.01};         // beta values per round
-            const unsigned n_cand = gridDim.x;                                          // number of candidates per candidate group
-            const unsigned cand = blockIdx.x;                                           // candidate vector index (within candidate group)
-            const unsigned cand_grp = blockIdx.y;                                       // candidate group index
-            const unsigned n_vsamples = data->crt.num_halfsphere_points;                // total number of sample vectors
-            const unsigned vsample = data->candidate_sample[cand_grp * n_cand + cand];  // sample vector index
-            const float_type vlength = data->candidate_length[cand_grp];                // sample vector length
-            const fast_feedback::input<float_type>& in = data->input;                   // input data
-            const unsigned n_spots = in.n_spots;                                        // number of reciprocal spots
-            const float_type* sx = in.spot.x;
-            const float_type* sy = in.spot.y;                                           // reciprocal spot coordinates
-            const float_type* sz = in.spot.z;
-            float_type z0[3];                                                           // sample vector
-            float_type z[3];                                                            // refined sample vector
-            float_type STS[6] = {};                                                     // S.T @ S, i'th block (upper trinagle)
-            float_type STS_r[6] = {};                                                   // rest values
-            float_type STm[3] = {};                                                     // S.T @ m, i'th block
-            float_type STm_r[3] = {};                                                   // rest values
+    // vector candidate index       = blockIdx.x
+    // vector candidate group index = blockIdx.y
+    // cuda thread block size = warp_size (32)
+    template<typename float_type>
+    __global__ void gpu_refine_cand(indexer_device_data<float_type>* data)
+    {
+        // # Python equivalent
+        // class Optimizer:
+        //     def __init__(self, reciprocal_spots, beta=[.3, .1, .03, .01]):
+        //         self.spots = reciprocal_spots   # spots in reciprocal space
+        //         self.beta = beta                # list of diminishing beta values
+        //         self.select = None              # spot selector boolean vector
+        //     def __call__(self, b):              # b: approximation column vector in nonreciprocal space
+        //         coord = self.spots @ b          # spot coordinates in nonreciprocal space
+        //         miller = np.round(coord)        # closest integer coordinates
+        //         for beta in self.beta:
+        //             coord = self.spots @ b
+        //             self.select = np.abs(coord - miller) < beta # index set: spots within distance beta of miller coordinate
+        //             if sum(self.select) < 6:
+        //                 return None
+        //             b = np.linalg.lstsq(self.spots[self.select,:], miller[self.select],rcond=-1)[0] # use least squares fit to selected spots for a better approximation vector
+        //         return b
+        static constexpr unsigned n_rounds = 4;
+        static constexpr float_type beta[n_rounds] = {.1, .05, .025, 0.01};         // beta values per round
+        const unsigned n_cand = gridDim.x;                                          // number of candidates per candidate group
+        const unsigned cand = blockIdx.x;                                           // candidate vector index (within candidate group)
+        const unsigned cand_grp = blockIdx.y;                                       // candidate group index
+        const unsigned n_vsamples = data->crt.num_halfsphere_points;                // total number of sample vectors
+        const unsigned vsample = data->candidate_sample[cand_grp * n_cand + cand];  // sample vector index
+        const float_type vlength = data->candidate_length[cand_grp];                // sample vector length
+        const fast_feedback::input<float_type>& in = data->input;                   // input data
+        const unsigned n_spots = in.n_spots;                                        // number of reciprocal spots
+        const float_type* sx = in.spot.x;
+        const float_type* sy = in.spot.y;                                           // reciprocal spot coordinates
+        const float_type* sz = in.spot.z;
+        float_type z0[3];                                                           // sample vector
+        float_type z[3];                                                            // refined sample vector
+        float_type STS[6] = {};                                                     // S.T @ S, i'th block (upper trinagle)
+        float_type STS_r[6] = {};                                                   // rest values
+        float_type STm[3] = {};                                                     // S.T @ m, i'th block
+        float_type STm_r[3] = {};                                                   // rest values
 
-            sample_point(vsample, n_vsamples, z);   // sample unit vector
-            for (unsigned i=0u; i<3u; i++) {
-                z[i] *= vlength;                    // refined sample vector
-                z0[i] = z[i];                       // sample vector
-            }
+        sample_point(vsample, n_vsamples, z);   // sample unit vector
+        for (unsigned i=0u; i<3u; i++) {
+            z[i] *= vlength;                    // refined sample vector
+            z0[i] = z[i];                       // sample vector
+        }
 
-            for (unsigned round=0; round<n_rounds; round++) {
-                {   // calculate miller indices and count good spots
-                    const float_type b = beta[round];
-                    unsigned good_spots = 0;
-                    for (unsigned i=threadIdx.x; i<n_spots; i+= warp_size) {
-                        const float_type s[3] = { sx[i], sy[i], sz[i] };                    // spot i
-                        const float_type m = util<float_type>::rint(dot(s, z0));            // Miller index i
-                        const float_type d = std::abs(dot(s, z) - m);
-                        if (d >= b)
-                            continue;
-                        good_spots++;
-                        for (unsigned j=0u; j<3u; j++) {
-                            ksum(STm[j], STm_r[j], s[j] * m);
-                            for (unsigned k=j; k<3u; k++) {
-                                unsigned l = (j<<1u) - (j>>1u) + k;
-                                ksum(STS[l], STS_r[l], s[j]*s[k]);
-                            }
+        for (unsigned round=0; round<n_rounds; round++) {
+            {   // calculate miller indices and count good spots
+                const float_type b = beta[round];
+                unsigned good_spots = 0;
+                for (unsigned i=threadIdx.x; i<n_spots; i+= warp_size) {
+                    const float_type s[3] = { sx[i], sy[i], sz[i] };                    // spot i
+                    const float_type m = util<float_type>::rint(dot(s, z0));            // Miller index i
+                    const float_type d = std::abs(dot(s, z) - m);
+                    if (d >= b)
+                        continue;
+                    good_spots++;
+                    for (unsigned j=0u; j<3u; j++) {
+                        ksum(STm[j], STm_r[j], s[j] * m);
+                        for (unsigned k=j; k<3u; k++) {
+                            unsigned l = (j<<1u) - (j>>1u) + k;
+                            ksum(STS[l], STS_r[l], s[j]*s[k]);
                         }
                     }
-
-                    reduce_add_broadcast(good_spots);
-
-                    if (good_spots < 6)
-                        break;
                 }
 
-                for (unsigned j=0u; j<3u; j++) {
-                    reduce_add(STm[j]);
-                    for (unsigned k=j; k<3u; k++)
-                        reduce_add(STS[(j<<1u)-(j>>1u)+k]);
-                }
+                reduce_add_broadcast(good_spots);
 
-                if (threadIdx.x == 0)
-                    sym_solve(z, STS, STm);
-
-                for (unsigned j=0u; j<3u; j++)
-                    z[j] = __shfl_sync(all_lanes, z[j], 0);
+                if (good_spots < data->crt.min_spots)
+                    break;
             }
 
-            if (threadIdx.x == 0) {
-                float_type* refined_candidate = &data->refined_candidates[(cand_grp * n_cand + cand) * constant<float_type>::mem_txn_unit];
-                for (unsigned i=0u; i<3u; i++)
-                    refined_candidate[i] = z[i];
+            for (unsigned j=0u; j<3u; j++) {
+                reduce_add(STm[j]);
+                for (unsigned k=j; k<3u; k++)
+                    reduce_add(STS[(j<<1u)-(j>>1u)+k]);
             }
+
+            if (threadIdx.x == 0)
+                sym_solve(z, STS, STm);
+
+            for (unsigned j=0u; j<3u; j++)
+                z[j] = __shfl_sync(all_lanes, z[j], 0);
         }
-    #endif
+
+        if (threadIdx.x == 0) {
+            float_type* refined_candidate = &data->refined_candidates[(cand_grp * n_cand + cand) * constant<float_type>::mem_txn_unit];
+            for (unsigned i=0u; i<3u; i++)
+                refined_candidate[i] = z[i];
+        }
+    }
 
     // sample rotation angle index = blockDim.x * blockIdx.x + threadIdx.x
     // for non-redundant (cpers.redundant_computations=false) calculations:
@@ -1809,15 +1783,15 @@ namespace {
             float_type vlength = data->candidate_length[cand_grp];
             float_type z[3], a[3], b[3];
 
-            #if VCANDREF == VCR_ROPT
+            if (data->crt.min_spots != 0) {
                 const float_type* const refined_candidate = &data->refined_candidates[(cand_grp * n_cand + cand) * constant<float_type>::mem_txn_unit];
                 for (unsigned i=0u; i<3u; i++)
                     z[i] = refined_candidate[i];
-            #else
+            } else {
                 sample_point(vsample, n_vsamples, z);
                 for (unsigned i=0u; i<3u; i++)
                     z[i] *= vlength;
-            #endif
+            }
             // z = (refined) rotated cell vector, vlength = original cell vector length
             if (flipped)
                 flip(z);
@@ -1844,12 +1818,13 @@ namespace {
 
         const unsigned n_output_cells = data->output.n_cells;
         auto cand_ptr = reinterpret_cast<cell_cand_t<float_type>*>(shared_ptr); // [output.n_cells]
-        if (threadIdx.x < n_output_cells)   // store top candidate cells into cand_ptr
-            #if VCANDREF == VCR_ROPT
+        if (threadIdx.x < n_output_cells) { // store top candidate cells into cand_ptr
+            if (data->crt.min_spots != 0) {
                 cand_ptr[threadIdx.x] = { vabc, cand, rsample, flipped ? (cell_vec | cell_cand_t<float_type>::FLIPPED) : cell_vec };
-            #else
+            } else {
                 cand_ptr[threadIdx.x] = { vabc, vsample, rsample, flipped ? (cell_vec | cell_cand_t<float_type>::FLIPPED) : cell_vec };
-            #endif
+            }
+        }
 
         if (n_output_cells < warp_size) {   // wait for cand_ptr
             if (threadIdx.x < warp_size)
@@ -1884,18 +1859,18 @@ namespace {
         float_type vlength = data->candidate_length[cand_grp];
         float_type z[3], a[3], b[3];
 
-        #if VCANDREF == VCR_ROPT
+        if (data->crt.min_spots != 0) {
             const unsigned cand = *reinterpret_cast<unsigned*>(&ox[cell_base]);
             const float_type* const refined_candidate = &data->refined_candidates[(cand_grp * n_cand + cand) * constant<float_type>::mem_txn_unit];
             for (unsigned i=0u; i<3u; i++)
                 z[i] = refined_candidate[i];
-        #else
+        } else {
             const unsigned vsample = *reinterpret_cast<unsigned*>(&ox[cell_base]);
             const unsigned n_vsamples = data->crt.num_halfsphere_points;
             sample_point(vsample, n_vsamples, z);
             for (unsigned i=0u; i<3u; i++)
                 z[i] *= vlength;
-        #endif
+        }
         if (flipped)
             flip(z);
         // z = rotated cell vector
@@ -2045,9 +2020,7 @@ namespace gpu {
                 std::lock_guard<std::mutex> state_lock{gpu_state::state_update};
                 gpu_state::ref(state_id) = gpu_state{std::move(data_ptr), std::move(element_ptr),
                                                      std::move(candidate_length_ptr), std::move(candidate_value_ptr),
-                                                     #if VCANDREF == VCR_ROPT
-                                                        std::move(refined_candidates_ptr),
-                                                     #endif
+                                                     std::move(refined_candidates_ptr),
                                                      std::move(candidate_sample_ptr), std::move(v2c_ptr),
                                                      std::move(c2v_ptr), std::move(vcgrp_ptr),
                                                      std::move(sequentializers_ptr), std::move(stream),
@@ -2062,9 +2035,7 @@ namespace gpu {
                               << stanza << "  cand len=" << candidate_length << ", val=" << candidate_value << ", smpl=" << candidate_sample << '\n'
                               << stanza << "  vec2cand=" << cellvec_to_cand << ", cell2vec=" << cell_to_cellvec << ", vec_cgrp=" << vec_cgrps << '\n'
                               << stanza << "  seq=" << sequentializers << ", elements=" << elements << ", score=" << scores << '\n'
-                              #if VCANDREF == VCR_ROPT
-                                << stanza << "  refcand=" << refined_candidates << '\n'
-                              #endif
+                              << stanza << "  refcand=" << refined_candidates << '\n'
                               << stanza << "    ox=" << ox << ", oy=" << oy << ", oz=" << oz << '\n'
                               << stanza << "    ix=" << ix << ", iy=" << iy << ", iz=" << iz << '\n';
             } LOG_END;
@@ -2076,9 +2047,7 @@ namespace gpu {
                               fast_feedback::input<float_type>{{ix, iy, iz}, {&ix[so], &iy[so], &iz[so]}, 0, 0, true, true},
                               fast_feedback::output<float_type>{ox, oy, oz, scores, 0},
                               candidate_length, candidate_value,
-                              #if VCANDREF == VCR_ROPT
-                                refined_candidates,
-                              #endif
+                              refined_candidates,
                               candidate_sample, cellvec_to_cand,
                               cell_to_cellvec, vec_cgrps,
                               sequentializers};
@@ -2121,7 +2090,7 @@ namespace gpu {
         const bool crt_changed = (std::memcmp(&conf_rt, &state.last_crt, sizeof(conf_rt)) != 0);
         const bool lth_changed = (state.last_crt.length_threshold != conf_rt.length_threshold);
 
-        // Check input/output
+        // Check input/output (*TODO*: merge this with check_config() for consistency)
         const auto n_cells_in = std::min(in.n_cells, instance.cpers.max_input_cells);
         const auto n_cells_out = out.n_cells;
         if (n_cells_in <= 0u)
@@ -2140,6 +2109,8 @@ namespace gpu {
             throw FF_EXCEPTION("lower trim value bigger than higher trim value");
         if (conf_rt.triml < .0f)
             throw FF_EXCEPTION("negative lower trim value");
+        if ((conf_rt.min_spots != 0) && (conf_rt.min_spots < 4))
+            throw FF_EXCEPTION("minimum number of spots to fit vectors against too low");
         if (n_cells_out > n_threads)
             throw FF_EXCEPTION("fewer threads in a block than output cells");
         if (instance.cpers.max_output_cells < out.n_cells)
@@ -2193,8 +2164,7 @@ namespace gpu {
             if (dbg_flag)
                 gpu_debug_out<float_type><<<1, 1, 0, stream>>>(gpu_state::ptr(state_id).get(), 0u);
         }
-        #if VCANDREF == VCR_ROPT
-        {
+        if (conf_rt.min_spots != 0) { // refine vectors
             const dim3 n_blocks{
                 instance.cpers.num_candidate_vectors,                                               // x: number of canditate vectors (per candidate group)
                 instance.cpers.redundant_computations ? state.n_cand_groups : state.n_vec_cgrps     // y: number of (cell representing vector) candidate groups
@@ -2204,7 +2174,6 @@ namespace gpu {
             if (dbg_flag)
                 gpu_debug_out<float_type><<<1, 1, 0, stream>>>(gpu_state::ptr(state_id).get(), 1u);
         }
-        #endif
         {   // find cells
             const unsigned n_xblocks = (conf_rt.num_angle_points == 0u ?
                                             (2.5 * std::sqrt(conf_rt.num_halfsphere_points) + n_threads - 1.) / n_threads // 2*pi*r^2 (half sphere) --> 2*pi*r (circumference)
@@ -2306,6 +2275,8 @@ namespace gpu {
                 throw FF_EXCEPTION("lower trim value bigger than higher trim value");
             if (crt->triml < .0f)
                 throw FF_EXCEPTION("negative lower trim value");
+            if ((crt->min_spots != 0) && (crt->min_spots < 4))
+                throw FF_EXCEPTION("minimum number of spots to fit vectors against too low");
         }
         if (crt && cpers) {
             if (crt->num_halfsphere_points < cpers->num_candidate_vectors)

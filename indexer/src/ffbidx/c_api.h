@@ -83,6 +83,7 @@ struct config_runtime {             // pinned memory
     float_type delta;               // log2 curve position: score = log2(trim(dist(x)) + delta)
     float_type dist1;               // maximum distance to int for single coordinate
     float_type dist3;               // maximum distance to int for tripple coordinates
+    unsigned min_spots=6;           // vector refinement: minimum number of spots to fit against (0: no refinement)
     unsigned num_halfsphere_points; // number of sample points on half sphere for finding vector candidates
     unsigned num_angle_points;      // number of sample points in rotation space for finding cell candidates (0: auto)
 };

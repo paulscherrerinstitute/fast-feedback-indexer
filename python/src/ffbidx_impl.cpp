@@ -102,7 +102,7 @@ namespace {
                                       "spots", "input_cells",
                                       "method",
                                       "length_threshold", "triml", "trimh", "delta", "dist1", "dist3",
-                                      "num_halfsphere_points", "num_angle_points", "n_output_cells",
+                                      "vr_min_spots", "num_halfsphere_points", "num_angle_points", "n_output_cells",
                                       "contraction", "max_dist",
                                       "min_spots", "n_iter",
                                       nullptr};
@@ -111,13 +111,13 @@ namespace {
         PyArrayObject* input_cells_ndarray = nullptr;
         const char* method = "ifssr";
         double length_threshold=1e-9, triml=.001, trimh=.3, delta=.1, dist1=.1, dist3=.3;
-        long num_halfsphere_points=32*1024, num_angle_points=0, n_output_cells=32;
+        long vr_min_spots=6, num_halfsphere_points=32*1024, num_angle_points=0, n_output_cells=32;
         double contraction=.8, max_dist=.00075;
         long min_spots=8, n_iter=32;
-        if (PyArg_ParseTupleAndKeywords(args, kwds, "lO!O!|sddddddlllddll", (char**)kw,
+        if (PyArg_ParseTupleAndKeywords(args, kwds, "lO!O!|sddddddllllddll", (char**)kw,
                                         &handle, &PyArray_Type, &spots_ndarray, &PyArray_Type, &input_cells_ndarray,
                                         &method, &length_threshold, &triml, &trimh, &delta, &dist1, &dist3,
-                                        &num_halfsphere_points, &num_angle_points, &n_output_cells,
+                                        &vr_min_spots, &num_halfsphere_points, &num_angle_points, &n_output_cells,
                                         &contraction, &max_dist, &min_spots, &n_iter) == 0)
             return nullptr;
 
@@ -157,6 +157,11 @@ namespace {
 
         if (dist3 <= .0)
             dist3 = trimh;
+
+        if ((vr_min_spots != 0) && (vr_min_spots < 4)) {
+            PyErr_SetString(PyExc_ValueError, "vr_min_spots value too low");
+            return nullptr;
+        }
 
         if (num_halfsphere_points < 0 || num_halfsphere_points > numeric_limits<unsigned>::max()) {
             PyErr_SetString(PyExc_ValueError, "num_halfsphere_points out of bounds for an unsigned integer");
@@ -327,7 +332,7 @@ namespace {
             npy_intp score_bytes = PyArray_NBYTES(score);
 
             fast_feedback::config_runtime<float> crt{(float)length_threshold, (float)triml, (float)trimh, (float)delta, (float)dist1, (float)dist3,
-                                                     (unsigned)num_halfsphere_points, (unsigned)num_angle_points};
+                                                     (unsigned)vr_min_spots, (unsigned)num_halfsphere_points, (unsigned)num_angle_points};
 
             fast_feedback::memory_pin pin_crt{fast_feedback::memory_pin::on(crt)};
             fast_feedback::memory_pin pin_score{score_data, (std::size_t)score_bytes};
