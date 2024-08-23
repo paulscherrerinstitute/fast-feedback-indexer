@@ -148,10 +148,10 @@ namespace {
     }
 
     template<typename T>
-    void parse_val(T& val, const std::string& opt, bool is_method_opt=false)
+    void parse_val(T& val, const std::string& opt, const std::string& for_method="")
     {
-        if (is_method_opt)
-            check_method();
+        if (! for_method.empty() && (method != for_method))
+            error(std::string("option ")+opt+" requires method "+for_method);
         std::istringstream iss(opt);
         iss >> val;
         if (! iss.eof())
@@ -251,13 +251,13 @@ namespace {
                 case 10:
                     parse_val(dist3, optarg); break;
                 case 11:
-                    parse_val(contr, optarg, true); break;
+                    parse_val(contr, optarg); break;
                 case 12:
-                    parse_val(maxdist, optarg, true); break;
+                    parse_val(maxdist, optarg); break;
                 case 13:
-                    parse_val(minpts, optarg, true); break;
+                    parse_val(minpts, optarg); break;
                 case 14:
-                    parse_val(iter, optarg, true); break;
+                    parse_val(iter, optarg); break;
                 case 15:
                     parse_val(worker_threads, optarg);
                     if (worker_threads < 1u)
@@ -296,13 +296,14 @@ namespace {
                     cell_geom = true;
                     break;
                 case 24:
-                    parse_val(vrminpts, optarg, true); break;
+                    parse_val(vrminpts, optarg); break;
                 case 25:
                     usage();
                 default:
                     error("internal: unknown option id");
             }
         } while (true);
+        check_method();
         for (; optind<argc; optind++)
             files.emplace_back(argv[optind]);
         if (files.empty())
@@ -747,7 +748,7 @@ namespace {
                                 else if (method == "ifssr")
                                     indexer_ifssr::refine(work->coords.bottomRows(work->in.n_spots), work->cells, work->scores, cifssr, block, refinement_blocks);
                                 else
-                                    throw std::runtime_error("unexpected method in refine state");  
+                                    throw std::runtime_error(method+": unexpected method in refine state");
 
                                 refine_time_priv += duration{clock::now() - t}.count();
 
