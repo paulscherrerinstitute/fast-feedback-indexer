@@ -80,6 +80,7 @@ namespace {
                      "output options:\n"
                      "  --help         show this help\n"
                      "  --quiet        no indexing result output\n"
+                     "  --notiming     no timing output\n"
                      "  --allcells     output all cells instead of only the best\n"
                      "  --cellgeom     output cell geometry\n"
                      "indexer options:\n"
@@ -133,6 +134,7 @@ namespace {
     unsigned refinement_blocks = 1u;    // number of output cell blocks for parallel refinement
     unsigned indexers_per_gpu = 1u;     // number of indexer objects per cuda device
     unsigned repetitions = 1u;          // number of times each file is indexed
+    bool notiming = false;              // don't print out timing output
     bool quiet = false;                 // don't produce indexing result output
     bool reducalc = false;              // calculate candidates for all 3 cell vectors instead of one
     bool best_only = true;              // output best cell only
@@ -217,7 +219,8 @@ namespace {
             { "allcells", 0, nullptr, 22},
             { "cellgeom", 0, nullptr, 23},
             { "vrminpts", 1, nullptr, 24},
-            { "help",     0, nullptr, 25},
+            { "notiming", 0, nullptr, 25},
+            { "help",     0, nullptr, 26},
             { nullptr,    0, nullptr, -1}
         };
 
@@ -298,6 +301,9 @@ namespace {
                 case 24:
                     parse_val(vrminpts, optarg); break;
                 case 25:
+                    notiming = true;
+                    break;
+                case 26:
                     usage();
                 default:
                     error("internal: unknown option id");
@@ -890,12 +896,13 @@ int main (int argc, char *argv[])
             }
         }
 
-        std::cout << "per file average timings:\n";
-        std::cout << "    clock time: " << (elapsed_sec / counter.load()) << "s\n";
-        std::cout << "  reading time: " << (read_time / counter.load()) << "s\n";
-        std::cout << "    index time: " << (indexer_time / counter.load()) << "s\n";
-        std::cout << "   refine time: " << (refine_time / counter.load()) << "s\n";
-
+        if (! notiming) {
+            std::cout << "per file average timings:\n";
+            std::cout << "    clock time: " << (elapsed_sec / counter.load()) << "s\n";
+            std::cout << "  reading time: " << (read_time / counter.load()) << "s\n";
+            std::cout << "    index time: " << (indexer_time / counter.load()) << "s\n";
+            std::cout << "   refine time: " << (refine_time / counter.load()) << "s\n";
+        }
     } catch (std::exception& ex) {
         std::cerr << "indexing failed: " << ex.what() << '\n' << failure;
     }
