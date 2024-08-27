@@ -265,7 +265,7 @@ namespace {
         {
             if (event == cudaEvent_t{})
                 return;
-            CU_CHECK(cudaEventDestroy(event));
+            CU_CHECK_EXT(cudaEventDestroy(event));
             event = cudaEvent_t{};
         }
         
