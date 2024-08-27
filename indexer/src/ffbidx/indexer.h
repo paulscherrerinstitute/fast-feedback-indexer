@@ -344,6 +344,33 @@ namespace fast_feedback {
     template<typename float_type=float>
     void check_config(const config_persistent<float_type>* cpers, const config_runtime<float_type>* crt);
 
+    // Print config_persistent into stream
+    template<typename CharT, typename Traits, typename float_type=float>
+    inline auto& operator<<(std::basic_ostream<CharT, Traits>& out, const config_runtime<float_type>& crt)
+    {
+        out << "crt: length_threshold=" << crt.length_threshold
+            << " triml=" << crt.triml
+            << " trimh=" << crt.trimh
+            << " delta=" << crt.delta
+            << " dist1=" << crt.dist1
+            << " dist3=" << crt.dist3
+            << " min_spots=" << crt.min_spots
+            << " num_halfsphere_points=" << crt.num_halfsphere_points
+            << " num_angle_points=" << crt.num_angle_points;
+        return out;
+    }
+
+    // Print config_persistent into stream
+    template<typename CharT, typename Traits, typename float_type=float>
+    inline auto& operator<<(std::basic_ostream<CharT, Traits>& out, const config_persistent<float_type>& cpers)
+    {
+        out << "cpers: max_output_cells=" << cpers.max_output_cells
+            << " max_input_cells=" << cpers.max_input_cells
+            << " max_spots=" << cpers.max_spots
+            << " num_candidate_vectors=" << cpers.num_candidate_vectors
+            << " redundant_computations=" << cpers.redundant_computations;
+        return out;
+    }
 } // namespace fast_feedback
 
 #endif

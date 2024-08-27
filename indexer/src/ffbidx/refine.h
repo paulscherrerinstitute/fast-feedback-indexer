@@ -984,6 +984,18 @@ namespace fast_feedback {
             return std::max(float_type{.0f}, score * score - threshold);
         }
 
+        // Make a string out of a configuration struct
+        template<typename config_type>
+        std::string conf2str(const config_type& conf)
+        {
+            std::ostringstream oss;
+            oss << "threshold_contraction=" << conf.threshold_contraction
+                << " max_distance=" << conf.max_distance
+                << " min_spots=" << conf.min_spots
+                << " max_iter=" << conf.max_iter;
+            return oss.str();
+        }
+
     } // namespace refine
 } // namespace fast_feedback
 

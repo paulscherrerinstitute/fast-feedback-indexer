@@ -728,7 +728,7 @@ namespace {
                                 if (method == "raw") { // skip refine state by doing work here
                                     work->best_cell = refine::best_cell(work->scores);
                                     if (crystals)
-                                        work->crystals = refine::select_crystals(work->cells, work->coords.bottomRows(work->in.n_spots), work->scores, maxdist, minpts, method=="ifssr");
+                                        work->crystals = refine::select_crystals(work->cells, work->coords.bottomRows(work->in.n_spots), work->scores, cifssr.max_distance, cifssr.min_spots, false);
                                     counter++;
                                     work->repetition++;
                                     if (work->repetition < repetitions) {
@@ -771,7 +771,7 @@ namespace {
                                 if (block + 1u >= refinement_blocks) {
                                     work->best_cell = refine::best_cell(work->scores);
                                     if (crystals)
-                                        work->crystals = refine::select_crystals(work->cells, work->coords.bottomRows(work->in.n_spots), work->scores, maxdist, minpts, method=="ifssr");
+                                        work->crystals = refine::select_crystals(work->cells, work->coords.bottomRows(work->in.n_spots), work->scores, cifssr.max_distance, cifssr.min_spots, method=="ifssr");
                                     work->repetition++;
                                     if (work->repetition < repetitions) {
                                         // init work item
@@ -857,17 +857,14 @@ int main (int argc, char *argv[])
         checkargs();
         setconf(cpers, crt, cifss, cifse, cifssr);
 
-        debug << stanza << "cpers: cells=" << cpers.max_output_cells << ", maxspots=" << cpers.max_spots
-                        << ", cands=" << cpers.num_candidate_vectors << ", reducalc=" << cpers.redundant_computations << '\n'
-              << stanza << "crt: hs-points=" << crt.num_halfsphere_points << ", a-points=" << crt.num_angle_points
-                        << ", triml=" << crt.triml << ", trimh=" << crt.trimh << ", delta=" << crt.delta
-                        << ", dist1=" << crt.dist1 << ", dist3=" << crt.dist3 << ", min_spots=" << crt.min_spots << '\n';
+        debug << stanza << cpers << '\n'
+              << stanza << crt << '\n';
         if (method == "ifss") {
-            debug << stanza << "cifss: contr=" << cifss.threshold_contraction << ", minpts=" << cifss.min_spots << ", iter=" << cifss.max_iter << '\n';
+            debug << stanza << "cifss: " << refine::conf2str(cifss) << '\n';
         } else if (method == "ifse") {
-            debug << stanza << "cifse: contr=" << cifse.threshold_contraction << ", minpts=" << cifss.min_spots << ", iter=" << cifse.max_iter << '\n';
+            debug << stanza << "cifse: " << refine::conf2str(cifse) << '\n';
         } else if (method == "ifssr") {
-            debug << stanza << "cifssr: contr=" << cifssr.threshold_contraction << ", minpts=" << cifssr.min_spots << ", iter=" << cifssr.max_iter << '\n';
+            debug << stanza << "cifssr: " << refine::conf2str(cifssr) << '\n';
         }
 
         init_indexers(cpers);
