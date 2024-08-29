@@ -915,7 +915,8 @@ int main (int argc, char *argv[])
         }
 
         if (! notiming) {
-            std::cout << "per file average timings:\n";
+            std::cout << "files: " << witem_list.size() << ", operations: " << counter.load() << '\n';
+            std::cout << "per operation average timings:\n";
             std::cout << "    clock time: " << (elapsed_sec / counter.load()) << "s\n";
             std::cout << "  reading time: " << (read_time / counter.load()) << "s\n";
             std::cout << "    index time: " << (indexer_time / counter.load()) << "s\n";

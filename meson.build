@@ -47,6 +47,7 @@ subdir('data/simple')
 subdir('indexer/src')
 subdir('python/src')
 subdir('tests/src')
+subdir('examples/cpp-simple-data-bulk-indexer')
 
 conf_data = configuration_data()
 conf_data.set('fast_feedback_indexer_ENV_SETUP', fast_feedback_indexer_ENV_SETUP)
