@@ -41,6 +41,8 @@ Author: hans-christian.stadler@psi.ch
 
 namespace {
     using indexer_t = fast_feedback::indexer<float>;
+    using fast_feedback::logger::debug;
+    using fast_feedback::logger::stanza;
 
     std::atomic_uint32_t next_handle{};
 
@@ -80,6 +82,8 @@ namespace {
         }
         const fast_feedback::config_persistent<float> cpers{(unsigned)max_output_cells, (unsigned)max_input_cells, (unsigned)max_spots, (unsigned)num_candidate_vectors, (bool)redundant_computations};
 
+        debug << stanza << "cpers: " << cpers << '\n';
+
         uint32_t handle = (uint32_t)-1;
         try {
             handle = next_handle.fetch_add(1u);
@@ -97,6 +101,7 @@ namespace {
     PyObject* ffbidx_index_(PyObject *args, PyObject *kwds)
     {
         using std::numeric_limits;
+        using fast_feedback::refine::conf2str;
 
         constexpr const char* kw[] = {"handle",
                                       "spots", "input_cells",
@@ -333,7 +338,7 @@ namespace {
 
             fast_feedback::config_runtime<float> crt{(float)length_threshold, (float)triml, (float)trimh, (float)delta, (float)dist1, (float)dist3,
                                                      (unsigned)vr_min_spots, (unsigned)num_halfsphere_points, (unsigned)num_angle_points};
-
+            debug << stanza << "crt: " << crt << '\n';
             fast_feedback::memory_pin pin_crt{fast_feedback::memory_pin::on(crt)};
             fast_feedback::memory_pin pin_score{score_data, (std::size_t)score_bytes};
             fast_feedback::memory_pin pin_out{out_data, (std::size_t)out_bytes};
@@ -362,12 +367,15 @@ namespace {
 
                 if (smethod == "ifss") {
                     config_ifss<float> cifss{(float)contraction, (float)max_dist, (unsigned)min_spots, (unsigned)n_iter};
+                    debug << stanza << "cifss: " << conf2str(cifss) << '\n';
                     indexer_ifss<float>::refine(spots, cells, scores, cifss);
                 } else if (smethod == "ifse") {
                     config_ifse<float> cifse{(float)contraction, (float)max_dist, (unsigned)min_spots, (unsigned)n_iter};
+                    debug << stanza << "cifse: " << conf2str(cifse) << '\n';
                     indexer_ifse<float>::refine(spots, cells, scores, cifse);
                 } else { // ifssr
                     config_ifssr<float> cifssr{(float)contraction, (float)max_dist, (unsigned)min_spots, (unsigned)n_iter};
+                    debug << stanza << "cifssr: " << conf2str(cifssr) << '\n';
                     indexer_ifssr<float>::refine(spots, cells, scores, cifssr);
                 }
             }
@@ -529,7 +537,10 @@ namespace {
             const Map<const MatrixX3f> spots{(const float*)PyArray_DATA(spots_ndarray), n_spots, 3};
             const Map<const VectorXf> scores{(const float*)PyArray_DATA(scores_ndarray), n_cells};
 
-            const std::vector<unsigned> crystals = select_crystals(cells, spots, scores, (float)threshold, min_spots, smethod=="ifssr");
+            bool reciprocal_dist = (smethod=="ifssr");
+            debug << stanza << "cryst: threshold=" << threshold << " min_spots=" << min_spots << " reciprocal=" << reciprocal_dist << '\n';
+
+            const std::vector<unsigned> crystals = select_crystals(cells, spots, scores, (float)threshold, min_spots, reciprocal_dist);
 
             if (crystals.empty())
                 Py_RETURN_NONE;
@@ -581,6 +592,12 @@ namespace {
         indexers.clear();
     }
 
+    int ffbidx_impl()
+    {
+        fast_feedback::logger::init_log_level();
+        return 1;
+    }
+
 } // namespace
 
 extern "C" {
@@ -627,7 +644,8 @@ extern "C" {
 
     PyMODINIT_FUNC PyInit_ffbidx_impl(void)
     {
-        import_array();
+        if (ffbidx_impl())
+            import_array();
         if (PyErr_Occurred())
             return nullptr;
         PyObject *m = PyModule_Create(&ffbidx_module);
