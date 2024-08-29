@@ -75,7 +75,7 @@ if(BUILD_FAST_INDEXER)
         target_compile_features(fast_indexer PUBLIC cxx_std_17)
         target_include_directories(fast_indexer PUBLIC .)
         target_link_libraries(fast_indexer
-                PRIVATE CUDA::cudart
+                                                
                 PRIVATE Threads::Threads
                 PUBLIC Eigen3::Eigen)
         install(TARGETS fast_indexer

@@ -41,6 +41,7 @@ add_subdirectory(indexer)
 add_subdirectory(data)
 add_subdirectory(tests)
 add_subdirectory(python)
+add_subdirectory(examples/cpp-simple-data-bulk-indexer)
 
 MESSAGE("ENV ${fast_feedback_indexer_ENV_SETUP}")
 configure_file(setup-env.sh.in
