@@ -51,20 +51,21 @@ A tuple of numpy arrays *(output_cells, output_scores)*
 
 - **spots** is a numpy array of spot coordinates in reciprocal space. In memory, all x coordinates followed by all y coordinates and finally all z coordinates. If there are *K* spots, the array shape is either *(3, K), order='C'*, or *(K, 3), order='F'*.
 - **input_cells** is a numpy array of input cell vector coordinates in real space. In memory, all x coordinates followed by all y coordinates and finally all z coordinates in consecutive packs of 3 coordinates. If there are *M* input cells, the array shape is either *(3, 3M), order='C'*, or *(3M, 3), order='F'*.
-- **method** refinement method: one of *'raw'* (no refinement), *'ifss'* (iterative fit to selected spots), *'ifse'* (iterative fit to selected errors), *'ifssr'* (iterative fit to selected spots reciprocal).
+- **method** cell refinement method: one of *'raw'* (no refinement), *'ifss'* (iterative fit to selected spots), *'ifse'* (iterative fit to selected errors), *'ifssr'* (iterative fit to selected spots reciprocal).
 - **length_threshold**: consider input cell vector length the same if they differ by less than this
 - **triml**: >= 0, low trim value, 0 means no trimming
 - **trimh**: <= 0.5, high trim value, 0.5 means no trimming
 - **delta**: > 0 - triml, $\log_2$ curve position, lower values will be more selective in choosing close spots
 - **dist1**: spots within this coordinate distance are contributing to the score in the vector sampling step (set to *trimh* if <=0)
 - **dist3**: spots within this coordinate distance are contributing to the score in the cell sampling step (set to *trimh* if <=0)
+- **vr_min_spots**: stop vector refinement if less than this number of spots are selected for fitting (0: no vector refinement)
 - **num_halfsphere_points** is the number of sampling points per sample vector length on the half sphere for vector sampling
 - **num_angle_points** is the number of angular sampling points for cell rotation sampling (0 for heuristic)
 - **n_output_cells** is the number of desired output cells
-- **contraction** threshold contraction parameter for the refinement methods
-- **max_dist** maximum distance parameter for refinement methods
-- **min_spots** minimum number of spots to fit against for refinement methods
-- **n_iter** maximum number of iterations for refinement methods
+- **contraction** threshold contraction parameter for the cell refinement methods
+- **max_dist** maximum distance parameter for cell refinement methods
+- **min_spots** minimum number of spots to fit against for cell refinement methods
+- **n_iter** maximum number of iterations for cell refinement methods
 
 **Refinement Methods**:
 
@@ -97,6 +98,10 @@ Numpy array with indices of the cells representing separate crystals, or *None* 
 #### del indexer
 
 Release the indexer object and associated GPU memory.
+
+#### with ffbidx.Indexer(...) as indexer
+
+Indexer objects also support Python context management and can thus be used in a Python *with* statement to make cleanup more convenient.
 
 ### Issues
 

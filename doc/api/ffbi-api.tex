@@ -140,6 +140,7 @@ struct config_runtime {
     float_type delta=0.1;
     float_type dist1=0.3;
     float_type dist3=0.2;
+    unsigned min_spots=6;
     unsigned num_halfsphere_points=32*1024;
     unsigned num_angle_points=0;
 };
@@ -157,9 +158,11 @@ The \textbf{triml}, \textbf{trimh}, and \textbf{delta} members are used for cand
 
 The \textbf{dist1} and \textbf{dist3} members are used for candidate unit cell vector and unit cell orientation scoring, respectively. They are subsumed in the $\beta$ parameter in the algorithm description.
 
+The \textbf{min\_spots} member is used as a threshold for the minimum number of close spots for vector refinement. This parameter is called $m$ in the vector refinement algorithm description. It can be set to $zero$ in order to disable vector refinement.
+
 The \textbf{num\_halfsphere\_points} member is the number of sampling points used for the candidate unit cell vector orientation sampling. This parameter is called $P^*$ in the algorithm description.
 
-The \textbf{num\_angle\_points} member is the number of rotation angle sampling points used for candidate unit cell orientation sampling. This parameter is called $Q^*$ in the algorithm description. If this member is set to $0$, it will be set automatically to $2.5\,\sqrt{P^*}$ to approximately maintain the sampling density.
+The \textbf{num\_angle\_points} member is the number of rotation angle sampling points used for candidate unit cell orientation sampling. This parameter is called $Q^*$ in the algorithm description. If this member is set to $zero$, it will be set automatically to $2.5\,\sqrt{P^*}$ to approximately maintain the sampling density.
 
 \subsection{Input}
 
@@ -365,7 +368,7 @@ The \textbf{min\_spots} member is used as a threshold for the minimum number of 
 
 The \textbf{max\_iter} member is used to limit the number of refinement iterations. This parameter is called $maxiter$ in the refinement algorithm description.
 
-The \textbf{max\_distance} parameter is used as an experimental extra stop criterion for the refinement loop. It is not described in the algorithm description. To match the algorithm description, it would have to be set to $0$. Looking at the algorithm description, the loop will stop if the closeness threshold $t$ is less than \emph{max\_distance}. The value of \emph{max\_distance} should therefore be less than the parameter $\beta$ in the algorithm description.
+The \textbf{max\_distance} parameter is used as an experimental extra stop criterion for the refinement loop. It is not described in the algorithm description. To match the algorithm description, it would have to be set to $zero$. Looking at the algorithm description, the loop will stop if the closeness threshold $t$ is less than \emph{max\_distance}. The value of \emph{max\_distance} should therefore be less than the parameter $\beta$ in the algorithm description.
 
 \subsubsection{Cell Similarity}
 
@@ -742,7 +745,7 @@ indices = indexer.crystals(
 )
 
 # Dispose off the indexer object
-indxer.__del__()
+indexer.__del__()
 \end{lstlisting}
 %
 The \textbf{ffbidx.Indexer} function creates an indexer object. The arguments are
@@ -789,7 +792,7 @@ The \textbf{indexer.crystals} method calculates the indices of cells that repres
  \item \textbf{min\_spots} - minimum number of extra spots covered by a candidate cell for considering the cell a representative of a separate crystal.
 \end{enumerate}
 
-The \textbf{indexer.\_\_del\_\_()} method disposes off an indexer objects state on the GPU and on the CPU.
+The \textbf{indexer.\_\_del\_\_()} method disposes off an indexer objects state on the GPU and on the CPU. Python context management is also suported by indexer objects.
 
 \subsection{Issues}
 
