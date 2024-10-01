@@ -577,6 +577,8 @@ void dist1 (float_type d);
 float_type dist1 () const;
 void dist3 (float_type d);
 float_type dist3 () const;
+void min_spots1 (unsigned ms);
+unsigned min_spots1 () const;
 void num_halfsphere_points (unsigned nhsp);
 unsigned num_halfsphere_points () const;
 void num_angle_points (unsigned nap);
@@ -586,7 +588,7 @@ const config_runtime<float_type>&
 ...
 \end{lstlisting}
 %
-The \textbf{length\_threshold}, \textbf{triml}, \textbf{trimh}, \textbf{delta}, \textbf{dist1}, \textbf{dist3}, \textbf{num\_half\-sphe\-re\_points}, and \textbf{num\_angle\_points} functions provide access to the corresponding members of the \emph{runtime configuration} object. The \textbf{config\_runtime} function retrieves an immutable reference to this object. Initial values are given when constructing the \emph{indexer} object. Changing these values will have an effect on the next indexing operation.
+The \textbf{length\_threshold}, \textbf{triml}, \textbf{trimh}, \textbf{delta}, \textbf{dist1}, \textbf{dist3}, \textbf{min\_spots1}, plus \textbf{num\_half\-sphe\-re\_points} and \textbf{num\_angle\_points} functions provide access to the corresponding members of the \emph{runtime configuration} object. The \textbf{config\_runtime} function retrieves an immutable reference to this object. Initial values are given when constructing the \emph{indexer} object. Changing these values will have an effect on the next indexing operation.
 %
 \begin{lstlisting}
     ...

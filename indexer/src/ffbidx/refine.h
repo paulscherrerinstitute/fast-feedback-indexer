@@ -355,6 +355,14 @@ namespace fast_feedback {
                 return crt.dist3;
             }
 
+            inline void min_spots1 (unsigned ms) noexcept
+            {
+                crt.min_spots = ms;
+            }
+
+            inline unsigned min_spots1 () const noexcept
+            { return crt.min_spots; }
+
             inline void num_halfsphere_points (unsigned nhsp)
             {
                 unsigned tmp = crt.num_halfsphere_points;
