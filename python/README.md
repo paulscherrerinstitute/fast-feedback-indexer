@@ -35,7 +35,7 @@ Indexer object
 
 This allocates space on the GPU for all the data structures used in the computation. The GPU device is parsed from the *INDEXER_GPU_DEVICE* environment variable. If it is not set, the current GPU device is used.
 
-#### output_cells, output_scores = indexer.run(spots, input_cells, method='ifssr', length_threshold=1e-9, triml=.001, trimh=.3, delta=0.1, dist1=.0, dist3=.15, num_halfsphere_points=32*1024, num_angle_points=0, n_output_cells=32, contraction=.8, max_dist=.00075, min_spots=8, n_iter=32)
+#### output_cells, output_scores = indexer.run(spots, input_cells, method='ifssr', length_threshold=1e-9, triml=.001, trimh=.3, delta=0.1, dist1=.0, dist3=.15, vr_min_spots=6, num_halfsphere_points=32*1024, num_angle_points=0, n_output_cells=32, contraction=.8, max_dist=.00075, min_spots=8, n_iter=32)
 
 Run the fast feedback indexer on given 3D real space input cells and reciprocal spots packed in the **input_cells** and **spots** numpy array and return oriented cells and their scores. Read the LaTeX file in the algoritm subfolder of the doc folder to understand the algorithm and the parameters. Intermediate scores for vector and cell sampling are calculated as $\sqrt[|spots|]{\prod_{s \in spots} trim_l^h(dist(s, clp)) + delta} - delta - c - 1$.
 Here, $trim$ stands for trimming, $dist(s, clp)$ for the distance of a spot to the closest lattice point in lattice coordinate space, $l,h$ are the lower and higher trimming thresholds, and $c$ is the number of close spots contributing to the score. The refinement (if any) score is the worst distance amongst the **min_spots** best approximated spots. This distance is measured in coordinate space (*'ifss'* and *'ifse'* methods) or in reciprocal space (*'ifssr'*) method.

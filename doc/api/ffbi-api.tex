@@ -728,6 +728,7 @@ output_cells, scores = indexer.run(
     delta=0.1,
     dist1=.1,
     dist3=.15,
+    vr_min_spots=6,
     num_sample_points=32*1024,
     n_output_cells=32,
     contraction=.8,
@@ -774,6 +775,7 @@ The \textbf{indexer.run} method runs the fast feedback indexer and returns \emph
  \item \textbf{delta} - $\log_2$ curve position, lower values will increase selectiveness for close spots
  \item \textbf{dist1} - spots within this distance in coordinate space are contributing to the score in the vector sampling step. Will be set to \emph{trimh} if zero.
  \item \textbf{dist3} - spots within this distance in coordinate space are contributing to the score in the cell sampling step. Will be set to \emph{trimh} if zero.
+ \item \textbf{vr\_min\_spots} - minimum number of spots to fit against for vector refinement, a value of zero means no vector refinement
  \item \textbf{num\_halfsphere\_points} - the number of sampling points on the half sphere for vector sampling
  \item \textbf{num\_angle\_points} - the number of angular sampling points for cell sampling
  \item \textbf{n\_output\_cells} - the number of desired output cells
