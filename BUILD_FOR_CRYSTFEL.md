@@ -73,9 +73,9 @@ Amongst others, this sets up the LD_LIBRARY_PATH and PKG_CONFIG_PATH. The pkg-co
 
 ## Build and Install CrystFEL
 
-Presently, a special branch of a [forked version](https://github.com/fleon-psi/crystfel/tree/fast_indexer) of CrystFEL by *Filip Leonarski* is required to integrate the fast feedback indexer into CrystFEL. Clone the code with
+Presently, a special branch of a [forked version](https://github.com/fleon-psi/crystfel/tree/fast_indexer.0.11.0) of CrystFEL by *Filip Leonarski* is required to integrate the fast feedback indexer into CrystFEL. Clone the code with
 
-    git clone -b fast_indexer_new_c_api https://github.com/fleon-psi/crystfel
+    git clone -b fast_indexer.0.11.0 https://github.com/fleon-psi/crystfel
     cd crystfel
 
 Configure the build with
