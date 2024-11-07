@@ -1,6 +1,9 @@
 project('ffbidx',
     ['cpp', 'cuda'],
-    version: '1.0.1')
+    version: '1.0.1',
+    meson_version: '>=1.1',
+    license: 'BSD-3-Clause',
+    license_files: ['LICENSE.md'])
 
 # Shell script variable settings for setup-env.sh
 fast_feedback_indexer_ENV_SETUP  = ''
