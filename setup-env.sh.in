@@ -21,6 +21,11 @@ if [ "${ffbidx_CPLUS_INCLUDE_PATH}" != "" ]; then
 	else
 		export CPLUS_INCLUDE_PATH="${ffbidx_CPLUS_INCLUDE_PATH}"
 	fi
+	if [ "${C_INCLUDE_PATH}" != "" ]; then
+		C_INCLUDE_PATH="${ffbidx_CPLUS_INCLUDE_PATH}:${C_INCLUDE_PATH}"
+	else
+		export C_INCLUDE_PATH="${ffbidx_CPLUS_INCLUDE_PATH}"
+	fi
 fi
 
 if [ "${ffbidx_PKG_CONFIG_PATH}" != "" ]; then
