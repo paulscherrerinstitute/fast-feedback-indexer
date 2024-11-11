@@ -103,11 +103,15 @@ int main (int argc, char *argv[])
         if (check_config(&cpers, &crt, &cifssr, &err) == -1)
             throw std::runtime_error{error_msg.data()};
 
-        int h = create_indexer(&cpers, &err, nullptr);  // indexer
+        int h = create_indexer(&cpers, MEMORY_PIN_DYNAMIC, &err, nullptr);  // indexer
         if (h == -1)
             throw std::runtime_error{error_msg.data()};
         
         int idx = indexer_op(h, &in, &out, &crt, &cifssr); // run indexer
+        if (idx == -1)
+            throw std::runtime_error{error_msg.data()};
+
+        idx = indexer_op(h, &in, &out, &crt, &cifssr); // run indexer a second time
         if (idx == -1)
             throw std::runtime_error{error_msg.data()};
 

@@ -114,7 +114,7 @@ int main(int argc, char *argv[])
     if (check_config(&cpers, &crt, &cifssr, &err))
         error(-1, 0, "config check failed: %s", message);
 
-    int h = create_indexer(&cpers, &err, NULL);
+    int h = create_indexer(&cpers, MEMORY_PIN_DYNAMIC, &err, NULL);
     if (h < 0)
         error(-1, 0, "can't create indexer: %s", message);
 

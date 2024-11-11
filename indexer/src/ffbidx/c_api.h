@@ -35,8 +35,21 @@ extern "C" {
 
 typedef float float_type;
 
+// MEMORY_PINNING:
+// static:  Data arrays (input cells and spots, output cells and score)
+//          are assumed to have maximum size (defined in config_persistent).
+//          This is ideal if the memory is allocated once and reused.
+// dynamic: Data arrays are assumed to be allocated dynamically,
+//          (!!) resulting in different pointers (!!) for every call
+//          to index_start() or indexer_op(). In this case n_cells and n_spots
+//          are taken as dynamic array sizes for input and output.
+#define MEMORY_PIN_STATIC  false
+#define MEMORY_PIN_DYNAMIC true
+
+// MEMORY_PINNING:
 // When first used, the C API pinns the cell and spot coordinates
-// using 3*n_cells and n_spots as array sizes.
+// using 3*n_cells and n_spots (in case of dynamic pinning) or
+// using 3*max_input_cells and max_spots as array sizes.
 // The user is responsible to keep the pinned memory area valid
 // during use!
 // The idea is to preallocate coordinate data space and then
@@ -44,6 +57,7 @@ typedef float float_type;
 // It's possible to change coordinate pointers before indexing starts.
 // This is detected by (!!) pointer comparison (!!). The old pointer is then
 // unpinned, and the area of a size given with 3*n_cells or n_spots
+// (in case of dynamic pinning) or 3*max_input_cells and max_spots
 // of memory under the corresponding pointer is then pinned.
 // Pinning takes place in indexer_start() or indexer_op().
 struct input {
@@ -63,9 +77,10 @@ struct input {
     bool new_spots;     // set to true if spots are new or have changed
 };
 
+// MEMORY_PINNING:
 // See comments related to pinning for input.
-// The coordinate pointers here are pinned with a size of 3*n_cells,
-// the score pointer with a size of n_cells.
+// The coordinate pointers here are pinned with a size of 3*n_cells (dynamic pinning) or 3*max_output_cells,
+// the score pointer with a size of n_cells (dynamic pinning) or max_output_cells.
 struct output {
     float_type* x;      // x coordinates, pinned memory
     float_type* y;      // y coordinates, pinned memory
@@ -127,6 +142,11 @@ void set_defaults(struct config_persistent* cfg_persistent,
                   struct config_ifssr* cfg_ifssr);
 
 // Create a handle for an indexer using cfg_persistent.
+// See MEMORY_PINNING for the effect of pin_dynamic.
+// If pin_dynamic is false, maximum data array sizes will be assumed,
+// which is ideal if memory is allocated once and reused.
+// If pin_dynamic is true, it is assumed, that data pointers
+// will change for every call to index_start.
 // Store error struct for the handle returned.
 // Store data pointer for the handle returned. The data pointer can
 // be retrieved with user_data()
@@ -135,6 +155,7 @@ void set_defaults(struct config_persistent* cfg_persistent,
 // - handle (>=0) on success
 // - -1 on failure (tries to fill in err->message)
 int create_indexer(const struct config_persistent* cfg_persistent,
+                   bool pin_dynamic,    // see MEMORY_PINNING
                    struct error* err,   // error message will be put here
                    void* data);         // arbitrary user data
 
@@ -158,7 +179,7 @@ struct error* error_message(int handle); // error message for handle
 void* user_data(int handle);            // user data for handle
 
 // Start GPU part of indexing asynchronously
-// This will pin data (see comments for input, output, and cfg_runtime) (!!)
+// This will pin data (see MEMORY_PINNING in comments for input, output, and cfg_runtime) (!!)
 // If callback is not NULL, it will be called with data as argument as soon as the partial
 // indexing result is ready on the GPU, and index_end() must not be called before that (!!).
 // If callback is NULL, index_end() will block until partial results on GPU are ready.

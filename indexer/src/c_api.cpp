@@ -61,6 +61,7 @@ namespace {
         fast_feedback::memory_pin pin_oz;
         fast_feedback::memory_pin pin_os;
         fast_feedback::memory_pin pin_crt;
+        bool pin_dynamic;
     };
 
     std::atomic_int next_id{0};
@@ -105,8 +106,9 @@ namespace {
     }
 
     int create_indexer_impl(const config_persistent* cfg_persistent,
-                       error* err,
-                       void* data)
+                            bool pin_dynamic,
+                            error* err,
+                            void* data)
     {
         static_assert(sizeof(fast_feedback::config_persistent<float_type>) == sizeof(*cfg_persistent));
         try {
@@ -117,7 +119,7 @@ namespace {
             }
             const auto* cpers = reinterpret_cast<const fast_feedback::config_persistent<float_type>*>(cfg_persistent);
             std::unique_ptr<fast_feedback::indexer<float_type>> idx{new fast_feedback::indexer<float_type>{*cpers}};
-            handler_map.emplace(std::make_pair(id, handler{std::move(idx), err, data, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}}));
+            handler_map.emplace(std::make_pair(id, handler{std::move(idx), err, data, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, pin_dynamic}));
             error_from_msg(handler_map[id], no_error);
             return id;
         } catch (std::exception& ex) {
@@ -176,28 +178,29 @@ namespace {
         try {
             handler& hdl = handler_map.at(handle);
             try {
+                const fast_feedback::config_persistent<float>& cpers = hdl.idx->cpers;
                 if (hdl.pin_crt.ptr != cfg_runtime)
                     hdl.pin_crt = fast_feedback::memory_pin::on(cfg_runtime);
                 if (hdl.pin_isx.ptr != in->spot.x)
-                    hdl.pin_isx = fast_feedback::memory_pin(in->spot.x, in->n_spots * sizeof(float));
+                    hdl.pin_isx = fast_feedback::memory_pin(in->spot.x, (hdl.pin_dynamic ? in->n_spots : cpers.max_spots) * sizeof(float));
                 if (hdl.pin_isy.ptr != in->spot.y)
-                    hdl.pin_isy = fast_feedback::memory_pin(in->spot.y, in->n_spots * sizeof(float));
+                    hdl.pin_isy = fast_feedback::memory_pin(in->spot.y, (hdl.pin_dynamic ? in->n_spots : cpers.max_spots) * sizeof(float));
                 if (hdl.pin_isz.ptr != in->spot.z)
-                    hdl.pin_isz = fast_feedback::memory_pin(in->spot.z, in->n_spots * sizeof(float));
-                if (hdl.pin_icx.ptr != in->spot.x)
-                    hdl.pin_icx = fast_feedback::memory_pin(in->cell.x, 3*in->n_cells * sizeof(float));
-                if (hdl.pin_icy.ptr != in->spot.y)
-                    hdl.pin_icy = fast_feedback::memory_pin(in->cell.y, 3*in->n_cells * sizeof(float));
-                if (hdl.pin_icz.ptr != in->spot.z)
-                    hdl.pin_icz = fast_feedback::memory_pin(in->cell.z, 3*in->n_cells * sizeof(float));
+                    hdl.pin_isz = fast_feedback::memory_pin(in->spot.z, (hdl.pin_dynamic ? in->n_spots : cpers.max_spots) * sizeof(float));
+                if (hdl.pin_icx.ptr != in->cell.x)
+                    hdl.pin_icx = fast_feedback::memory_pin(in->cell.x, 3*(hdl.pin_dynamic ? in->n_cells : cpers.max_input_cells) * sizeof(float));
+                if (hdl.pin_icy.ptr != in->cell.y)
+                    hdl.pin_icy = fast_feedback::memory_pin(in->cell.y, 3*(hdl.pin_dynamic ? in->n_cells : cpers.max_input_cells) * sizeof(float));
+                if (hdl.pin_icz.ptr != in->cell.z)
+                    hdl.pin_icz = fast_feedback::memory_pin(in->cell.z, 3*(hdl.pin_dynamic ? in->n_cells : cpers.max_input_cells) * sizeof(float));
                 if (hdl.pin_ox.ptr != out->x)
-                    hdl.pin_ox = fast_feedback::memory_pin(out->x, 3*out->n_cells * sizeof(float));
+                    hdl.pin_ox = fast_feedback::memory_pin(out->x, 3*(hdl.pin_dynamic ? out->n_cells : cpers.max_output_cells) * sizeof(float));
                 if (hdl.pin_oy.ptr != out->y)
-                    hdl.pin_oy = fast_feedback::memory_pin(out->y, 3*out->n_cells * sizeof(float));
+                    hdl.pin_oy = fast_feedback::memory_pin(out->y, 3*(hdl.pin_dynamic ? out->n_cells : cpers.max_output_cells) * sizeof(float));
                 if (hdl.pin_oz.ptr != out->z)
-                    hdl.pin_oz = fast_feedback::memory_pin(out->z, 3*out->n_cells * sizeof(float));
+                    hdl.pin_oz = fast_feedback::memory_pin(out->z, 3*(hdl.pin_dynamic ? out->n_cells : cpers.max_output_cells) * sizeof(float));
                 if (hdl.pin_os.ptr != out->score)
-                    hdl.pin_os = fast_feedback::memory_pin(out->score, out->n_cells * sizeof(float));
+                    hdl.pin_os = fast_feedback::memory_pin(out->score, (hdl.pin_dynamic ? out->n_cells : cpers.max_output_cells) * sizeof(float));
                 const auto* crt = cfg_runtime == nullptr ?
                     &default_crt :
                     reinterpret_cast<const fast_feedback::config_runtime<float_type>*>(cfg_runtime);
@@ -373,10 +376,11 @@ extern "C" {
     }
 
     int create_indexer(const config_persistent* cfg_persistent,
+                       bool pin_dynamic,
                        error* err,
                        void* data)
     {
-        return create_indexer_impl(cfg_persistent, err, data);
+        return create_indexer_impl(cfg_persistent, pin_dynamic, err, data);
     }
 
     int drop_indexer(int handle)
