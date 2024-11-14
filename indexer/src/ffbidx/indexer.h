@@ -110,8 +110,8 @@ namespace fast_feedback {
     // State ID to identify object private state
     struct state_id final {
         using type = unsigned;
-        static constexpr type null = 0u;                    // instance identity usable to denote object instance without private state
-        static inline std::atomic<type> next = null + 1u;   // monotonically increasing atomic counter
+        static constexpr type null = 0u;    // instance identity usable to denote object instance without private state
+        static std::atomic<type> next;      // monotonically increasing atomic counter
 
         // Allocate a new state identifier
         static type alloc() noexcept

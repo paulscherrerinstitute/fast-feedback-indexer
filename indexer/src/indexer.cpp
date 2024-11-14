@@ -29,6 +29,8 @@ Author: hans-christian.stadler@psi.ch
 
 namespace fast_feedback {
 
+    std::atomic<state_id::type> state_id::next = static_cast<const type>(state_id::null + 1u);
+
     template <typename float_type>
     void indexer<float_type>::init (indexer<float_type>& instance, const config_persistent<float_type>& conf)
     {

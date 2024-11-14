@@ -132,7 +132,7 @@ namespace fast_feedback {
 
 // Start and end locked logging conditional on logging level
 // This will hold the logger::lock()
-#define LOG_START(level) if (fast_feedback::logger::level_active<level>()) { std::lock_guard logger_output_lock{fast_feedback::logger::lock()}; do
+#define LOG_START(level) if (fast_feedback::logger::level_active<level>()) { std::lock_guard<std::mutex> logger_output_lock{fast_feedback::logger::lock()}; do
 #define LOG_END while(false); }
 
 #endif // INDEXER_LOG_H
