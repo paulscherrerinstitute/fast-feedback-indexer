@@ -51,14 +51,14 @@ The following command will show the CPU model
 
     $ lscpu
 
-Then the model needs to mapped to the architecture, e.g. with the help of [Wikipedias list of AMD processors](https://en.wikipedia.org/wiki/List_of_AMD_processors) or similar.
+Then the model needs to be mapped to the architecture, e.g. with the help of [Wikipedias list of AMD processors](https://en.wikipedia.org/wiki/List_of_AMD_processors) or similar.
 
 ### Install
 
 Choose an installation destination, here ${BASE_DIR}/ffbidx, and once the meson.options file has the desired options, compile and install the library with
 
     $ INSTALL_DIR=${BASE_DIR}/ffbidx
-    $ CXX=g++-13 meson setup --reconfigure --buildtype=release --prefix=${INSTALL_DIR} --libdir=lib build-ffbidx
+    $ meson setup --reconfigure --buildtype=release --prefix=${INSTALL_DIR} --libdir=lib build-ffbidx
     $ cd build-ffbidx
     $ meson compile
     $ meson install
@@ -73,14 +73,14 @@ Amongst others, this sets up the LD_LIBRARY_PATH and PKG_CONFIG_PATH. The pkg-co
 
 ## Build and Install CrystFEL
 
-Presently, a special branch of a [forked version](https://github.com/fleon-psi/crystfel/tree/fast_indexer.0.11.0) of CrystFEL by *Filip Leonarski* is required to integrate the fast feedback indexer into CrystFEL. Clone the code with
+Presently, a [forked version](https://github.com/hcstadler/crystfel) of CrystFEL by *Filip Leonarski* and others is required to integrate the fast feedback indexer into CrystFEL. Clone the code with
 
-    git clone -b fast_indexer.0.11.0 https://github.com/fleon-psi/crystfel
+    git clone https://github.com/hcstadler/crystfel
     cd crystfel
 
 Configure the build with
 
-    meson setup -Dprefix=${BASE_DIR}/crystfel build-crystfel
+    meson setup --reconfigure --buildtype=release --prefix=${BASE_DIR}/crystfel build-crystfel
 
 Then compile and install the CrystFEL code with
 
