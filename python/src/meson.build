@@ -3,7 +3,7 @@ if get_option('include-python-api').enabled()
         error('"-D build-ffbidx=enabled" option is required for enabling option "include-python-api"')
     endif
     pymod = import('python')
-    python = pymod.find_installation('python3', modules: 'numpy')
+    python = pymod.find_installation(get_option('python-installation'), modules: 'numpy')
     python_dep = python.dependency()
     incdir_numpy = include_directories(
         run_command(python,

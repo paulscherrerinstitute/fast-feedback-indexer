@@ -14,6 +14,10 @@ option('build-ffbidx', type: 'feature', value: 'enabled')
 option('include-c-api', type: 'feature', value: 'enabled')
 option('include-python-api', type: 'feature', value: 'disabled')
 
+# The python installation used if include-python-api is set,
+# see https://mesonbuild.com/Python-module.html#find_installation
+option('python-installation', type: 'string', value: 'python3')
+
 # Build the toy simple data indexers
 # requires: install-simple-data-reader, build-ffbidx
 option('build-simple-indexers', type: 'feature', value: 'disabled')
