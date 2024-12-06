@@ -345,7 +345,7 @@ namespace {
                 spots.col(0) = Map<Vx>(in->spot.x, in->n_spots);
                 spots.col(1) = Map<Vx>(in->spot.y, in->n_spots);
                 spots.col(2) = Map<Vx>(in->spot.z, in->n_spots);
-                Mx3 cells(3*in->n_cells, 3);
+                Mx3 cells(3*out->n_cells, 3);
                 cells.col(0) = Map<Vx>(out->x, 3*out->n_cells);
                 cells.col(1) = Map<Vx>(out->y, 3*out->n_cells);
                 cells.col(2) = Map<Vx>(out->z, 3*out->n_cells);
