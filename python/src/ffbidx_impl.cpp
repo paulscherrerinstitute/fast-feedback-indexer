@@ -37,6 +37,7 @@ Author: hans-christian.stadler@psi.ch
 #include <stdexcept>
 #include <string>
 #include <memory>
+#include "ffbidx/log.h"
 #include "ffbidx/refine.h"
 
 namespace {
@@ -649,6 +650,15 @@ extern "C" {
         if (PyErr_Occurred())
             return nullptr;
         PyObject *m = PyModule_Create(&ffbidx_module);
+
+        if (m == nullptr)
+            return m;
+
+        if (PyModule_AddStringConstant(m, "__version__", fast_feedback::logger::get_version()) != 0) {
+            Py_DECREF(m);
+            return nullptr;
+        }
+
         return m;
     }
     

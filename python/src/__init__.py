@@ -57,3 +57,6 @@ Author: hans-christian.stadler@psi.ch
 
 from ffbidx.ffbidx_impl import indexer, index, release
 from ffbidx.ffbidx_cl import Indexer
+
+ffbidx_cl.__version__ = ffbidx_impl.__version__
+__version__ = ffbidx_impl.__version__
