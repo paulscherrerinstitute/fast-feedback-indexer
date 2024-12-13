@@ -132,13 +132,14 @@ See: https://git.psi.ch/germann_e/spack-psi
 ### Installation with Meson
 (This was tested with meson-1.4.0 and ninja-1.10.1)
 
-In the top code directory do the following after adapting these lines to your own needs:
+In the top code directory do the following after adapting these lines (especially the cpu-arch and gpu-arch) to your own needs:
 ```
 $ FFBIDX_INSTALL_DIR=${HOME}/ffbidx
 $ CXX=g++-13 meson setup --reconfigure --buildtype=release --prefix=${FFBIDX_INSTALL_DIR} \
   --libdir=lib -D install-simple-data-reader=enabled -D install-simple-data-files=enabled \
   -D build-tests=enabled -D build-simple-indexers=enabled -D include-python-api=enabled \
-  -D default_library=both -D gpu-arch='arch=compute_89,code=sm_89' meson
+  -D python-installation=python3 -D default_library=both \
+  -D cpu-arch=native -D gpu-arch='arch=compute_89,code=sm_89' meson
 $ cd meson
 $ meson compile -v
 $ meson test
@@ -156,4 +157,9 @@ $ python -c "import ffbidx; print('OK')"
 ```
 
 ### Installation for Python through conda-forge
-TODO
+
+The conda-forge package for the fast feedback indexer is called ffbidx, as is the Python module. It can be installed with something like
+```
+micromamba install -c conda-forge ffbidx
+```
+Make sure your Nvidia driver is compatible with the CUDA version the package was built with.
