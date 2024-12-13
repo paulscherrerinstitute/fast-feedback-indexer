@@ -4,10 +4,10 @@
 # This script only works if executed from the top directory of the repository.
 #
 # Usage: sh archive.sh
-# Result: ../fast-feedback-indexer.tar.xz
+# Result: ../fast-feedback-indexer.tgz
 
 if test -r archive.sh; then
-    tar cvJf ../fast-feedback-indexer.tar.xz --exclude=build --exclude=install *
+    git archive --format=tgz --output=../fast-feedback-indexer.tgz --prefix=fast-feedback-indexer/ HEAD
 else
     echo "Failed: execute this command from the top directory of the repository!"
 fi
