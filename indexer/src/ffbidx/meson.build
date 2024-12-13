@@ -4,7 +4,7 @@ if git_exe.found()
 endif
 
 if git_exe.found() and result.returncode() == 0
-    version_txt = result.stdout()
+    version_txt = '"'+meson.project_version()+', '+result.stdout().strip('"')+'"'
 else
     version_txt = '"'+meson.project_version()+'"'
 endif

@@ -29,6 +29,7 @@ if (BUILD_FAST_INDEXER OR BUILD_FAST_INDEXER_STATIC)
                         ${CMAKE_COMMAND}
                         -D SRC=${CMAKE_CURRENT_SOURCE_DIR}/version.h.in
                         -D DST=${CMAKE_CURRENT_SOURCE_DIR}/ffbidx/version.h
+                        -D VRS=${CMAKE_PROJECT_VERSION}
                         -P ${CMAKE_CURRENT_SOURCE_DIR}/GenerateVersionH.cmake
         )
         set(THREADS_PREFER_PTHREAD_FLAG ON)
