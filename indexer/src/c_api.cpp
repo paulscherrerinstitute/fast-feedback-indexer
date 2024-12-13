@@ -34,6 +34,7 @@ Author: hans-christian.stadler@psi.ch
 #include <algorithm>
 #include <Eigen/Dense>
 #include "ffbidx/refine.h"
+#include "ffbidx/log.h"
 #include "ffbidx/c_api.h"
 
 namespace {
@@ -470,6 +471,11 @@ extern "C" {
             ; // ignore
         }
         return -1;
+    }
+
+    const char* get_version()
+    {
+        return fast_feedback::logger::get_version();
     }
 
     // try to avoid using the following, they don't really belong here

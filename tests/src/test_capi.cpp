@@ -28,6 +28,7 @@ Author: hans-christian.stadler@psi.ch
 #include <stdexcept>
 #include <vector>
 #include <cmath>
+#include "ffbidx/log.h"
 #include "ffbidx/exception.h"
 #include "ffbidx/simple_data.h"
 #include "ffbidx/c_api.h"
@@ -152,6 +153,10 @@ int main (int argc, char *argv[])
         }
 
         std::cout << "=> " << spots_matched << " matches.\n";
+
+        std::string version(get_version());
+        if (version != fast_feedback::logger::get_version())
+            throw std::runtime_error(version+" - version mismatch");
 
         if (spots_matched >= n_matches)
             std::cout << "Test OK.\n" << success;

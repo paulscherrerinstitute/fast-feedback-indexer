@@ -266,6 +266,11 @@ int check_config(const struct config_persistent* cfg_persistent,
                  const struct config_ifssr* cfg_ifssr,
                  struct error* err);
 
+// Pointer to version string
+// Return:
+// Pointer to version string
+const char* get_version();
+
 // Foreign convenience wrappers, use cuda_runtime.h directly if possible
 int num_gpus();
 int select_gpu(int gpu);
