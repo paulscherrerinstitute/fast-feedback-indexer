@@ -1,7 +1,7 @@
 cmake_minimum_required (VERSION 3.21)
 project(fast_feedback_indexer
         DESCRIPTION "Fast feedback indexer library"
-        VERSION 1.1.1
+        VERSION 1.1.2
         LANGUAGES CXX CUDA)
 
 
