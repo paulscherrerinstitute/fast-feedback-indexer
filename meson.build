@@ -32,7 +32,7 @@ cxx_flags = [ '--std=c++17' ]
 extra_warning_flags = [ '-Wall', '-Wextra' ]
 if get_option('buildtype') == 'release'
     cxx_flags += [
-        '-Ofast',
+        '-O3',
         '-DNDEBUG'
     ]
     if cpu_arch != ''
