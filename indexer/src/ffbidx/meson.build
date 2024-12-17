@@ -1,10 +1,10 @@
 git_exe = find_program('git')
 if git_exe.found()
-    result = run_command(git_exe, 'log', '--pretty=format:"%H: %aD"', '-1', check: false)
+    result = run_command(git_exe, 'log', '--pretty=format:%h', '-1', check: false)
 endif
 
 if git_exe.found() and result.returncode() == 0
-    version_txt = '"'+meson.project_version()+', '+result.stdout().strip('"')+'"'
+    version_txt = '"'+meson.project_version()+'-'+result.stdout()+'"'
 else
     version_txt = '"'+meson.project_version()+'"'
 endif
