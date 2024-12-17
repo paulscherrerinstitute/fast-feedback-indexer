@@ -68,7 +68,7 @@ namespace {
     }
 
     // input stream for next line in file
-    std::istringstream next_line(std::ifstream& fin)
+    inline std::istringstream next_line(std::ifstream& fin)
     {
         for (std::string line; std::getline(fin, line);) {
             if (line[0] == '#')
