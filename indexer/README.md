@@ -91,4 +91,16 @@ Steer library behaviour with environment variables.
 The Meson build differs in certain points from the CMake build.
 * GPU and CPU architecture can be left undefined
 * Less control over rpaths and compiler options
+* Option cpu-arch=xxx sets the -march=xxx compiler flag
+* Option gpu-arch=xxx sets the --gencode=xxx nvcc flag
+* CXX and CXXFLAGS will be picked up in the build setup
+* NVCC_PREPEND_FLAGS and NVCC_APPEND_FLAGS can be used to set nvcc flags at compile time
 See the meson.options file for available options.
+
+### Using the library in your own code
+
+Depending on what is included in the build, the setup-env.sh script sets up a bash environment that enables
+* PKG_CONFIG_PATH for the Linux pkg-config mechanism ('fast_indexer' or 'fast_indexer_static') to pickup linking flags and include directories, e.g. in Cmake or meson projects
+* LD_LIBRARY_PATH for linking at runtime
+* CPLUS_INCLUDE_PATH and C_INCLUDE_PATH for picking up includes
+* PYTHONPATH for importing the ffbidx python package

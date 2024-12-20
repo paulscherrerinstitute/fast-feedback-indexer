@@ -2,7 +2,7 @@
 
 Develop an indexer for fast feedback
 
-*Status*: We're optimistic that it does what it's supposed to. *Filip Leonarski* will integrate this code into CrystFEL.
+*Status*: We're very optimistic that it does what it's supposed to. *David Waterman* has integrated this indexer into DIALS. *Thomas White* has integrated this indexer into CrystFEL.
 
 *Luis Barbas* PyTorch implementation has been benchmarked extensively here at PSI and shows indexing quality on par with other known indexers and superior speed. This CUDA version has been tested internally by *Duan Jiaxin*, shows indexing quality on par with XGandalf and superior speed.
 
@@ -11,8 +11,7 @@ Develop an indexer for fast feedback
 *Issues*:
 
 * The refinement algorithms misbehave with electron diffraction data
-* The refinement algorithms misbehave with small molecule data
-* Implemented in CUDA, so only Nvidia GPUs are supported currently. With a suitable development machine, porting the code to HIP looks like a very realistic possibility. Porting to SYCL could also be an option.
+* Implemented in CUDA, so only Nvidia GPUs are supported currently.
 
 ### Alternative Implementations
 
@@ -44,7 +43,7 @@ This is the result of the REDML Project, and other more or less informal collabo
 ### External Build Dependencies
 
 * C++17 compatible compiler
-* cmake > 3.21 (not so sure if it works with earlier versions as well)
+* cmake > 3.21 (not so sure if it works with earlier versions as well) or meson >= 1.1
 * Eigen3 header only library
 * *BUILD_FAST_INDEXER* needs a compiler compatible CUDA toolkit
 * *PYTHON_MODULE* needs Python3 and NumPy (also see https://cmake.org/cmake/help/latest/module/FindPython3.html)
@@ -52,6 +51,8 @@ This is the result of the REDML Project, and other more or less informal collabo
 ### Internal Build Dependencies
 
 Cmake should complain and tell you what to add to the cmake commandline if internal dependencies are not met. In general tests require what is tested, executables need the simple data reader and indexer libraries, and the python module needs the indexer library.
+
+Meson should also complain if requested features cannot be built and tell you what to add to the commandline.
 
 ### Build Instructions
 
@@ -73,6 +74,19 @@ $ make
 $ ctest
 ```
 
+or with meson from the repository top directory after adapting these lines (especially the cpu-arch and gpu-arch) to your own needs:
+```
+$ FFBIDX_INSTALL_DIR=${HOME}/ffbidx
+$ CXX=g++-13 meson setup --reconfigure --buildtype=release --prefix=${FFBIDX_INSTALL_DIR} \
+  --libdir=lib -D install-simple-data-reader=enabled -D install-simple-data-files=enabled \
+  -D build-tests=enabled -D build-simple-indexers=enabled -D include-python-api=enabled \
+  -D python-installation=python3 -D default_library=both \
+  -D cpu-arch=native -D gpu-arch='arch=compute_89,code=sm_89' meson
+$ cd meson
+$ meson compile -v
+$ meson test
+```
+
 ### Installation Instructions
 
 Take note of the CMAKE_INSTALL_PREFIX value above.
@@ -84,7 +98,14 @@ $ # Adapt the script if you're using something else.
 $ . ${FFBIDX_INSTALL_DIR}/share/ffbidx/setup-env.sh
 ```
 
-As a quick installation test you could do
+for Cmake and with meson, use
+
+```
+$ meson install
+$ . ${FFBIDX_INSTALL_DIR}/share/ffbidx/setup-env.sh
+```
+
+If you included the simple indexers and python interface in the build, a quick installation test would be
 
 ```
 $ refined_simple_data_indexer \
@@ -129,26 +150,8 @@ spack load ffbidx
 
 See: https://git.psi.ch/germann_e/spack-psi
 
-### Installation with Meson
-(This was tested with meson-1.4.0 and ninja-1.10.1)
+### Installation for Python using micromamba and conda-build
 
-In the top code directory do the following after adapting these lines (especially the cpu-arch and gpu-arch) to your own needs:
-```
-$ FFBIDX_INSTALL_DIR=${HOME}/ffbidx
-$ CXX=g++-13 meson setup --reconfigure --buildtype=release --prefix=${FFBIDX_INSTALL_DIR} \
-  --libdir=lib -D install-simple-data-reader=enabled -D install-simple-data-files=enabled \
-  -D build-tests=enabled -D build-simple-indexers=enabled -D include-python-api=enabled \
-  -D python-installation=python3 -D default_library=both \
-  -D cpu-arch=native -D gpu-arch='arch=compute_89,code=sm_89' meson
-$ cd meson
-$ meson compile -v
-$ meson test
-$ meson install
-$ . ${FFBIDX_INSTALL_DIR}/share/ffbidx/setup-env.sh
-```
-Then do the qiuck installation test above.
-
-### Installation for Python using micromamba and conda-build (experimental)
 ```
 $ micromamba install conda-build
 $ conda-build -c conda-forge conda/meta.yaml

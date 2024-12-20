@@ -1,4 +1,6 @@
-# Compile options, can be set to 'ignore'
+# Compile options, can be set to 'ignore' to avoid setting the flags
+# cpu-arch=xxx sets the -march=xxx compiler flag
+# gpu-arch=xxx sets the --gencode=xxx nvcc flag
 option('cpu-arch', type: 'string', value: 'ignore')
 option('gpu-arch', type: 'string', value: 'ignore')
 option('all-warnings', type: 'feature', value: 'disabled')
