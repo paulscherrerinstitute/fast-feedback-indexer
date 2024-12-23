@@ -101,4 +101,4 @@ class Ffbidx(CMakePackage, CudaPackage):
         env.append_path('LIBRARY_PATH', self.prefix.lib)
         env.append_path('PKG_CONFIG_PATH', self.prefix.share.ffbidx.pkgconfig)
         if '+python' in self.spec:
-            env.append_path('PYTHONPATH', self.prefix.lib.ffbidx)
+            env.append_path('PYTHONPATH', self.prefix.lib)
