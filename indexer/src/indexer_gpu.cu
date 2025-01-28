@@ -685,14 +685,6 @@ namespace {
             CU_CHECK(cudaMemcpyAsync(gpu_state.vec_cgrps.get(), vec_cgrps.data(), n_vec_cgrps * sizeof(unsigned), cudaMemcpyHostToDevice, stream));
         }
 
-        static inline void init_score(const key_type& state_id, const config_persistent& cpers, cudaStream_t stream=0)
-        {
-            const auto n_cells = cpers.max_output_cells;
-            const auto& gpu_state = ref(state_id);
-
-            CU_CHECK(cudaMemsetAsync(gpu_state.cell_score, 0, n_cells * sizeof(float_type), stream));
-        }
-
         // Copy output data from GPU
         // This is a blocking call that synchronizes on stream
         // Precondition: output.n_cells != 0
