@@ -2204,9 +2204,6 @@ namespace gpu {
 
         gpu_device::set(state.device);
         gpu_stream& stream = state.cuda_stream;
-
-        if (! state.callback_mode)
-            stream.sync();
         state.callback_mode = false;
 
         gpu_state::copy_out(state_id, out, stream); // synchronizes on stream
