@@ -592,7 +592,7 @@ namespace {
         }
 
         // Copy runtime configuration to GPU
-        static inline void copy_crt(const key_type& state_id, const config_runtime& crt, cudaStream_t stream=0)
+        static inline void copy_crt(const key_type& state_id, const config_runtime& crt, cudaStream_t stream)
         {
             const auto crt_dp = &ptr(state_id)->crt;
             CU_CHECK(cudaMemcpyAsync(crt_dp, &crt, sizeof(crt), cudaMemcpyHostToDevice, stream));
@@ -606,7 +606,7 @@ namespace {
         static inline void copy_in(const key_type& state_id, const config_persistent& cpers,
                                    const fast_feedback::input<float_type>& input,
                                    fast_feedback::output<float_type>& output,
-                                   cudaStream_t stream=0)
+                                   cudaStream_t stream)
         {
             if (!input.new_cells && !input.new_spots)
                 return;
@@ -673,7 +673,7 @@ namespace {
                                      const config_persistent& cpers,
                                      const std::vector<float_type>& cand_len, const std::vector<unsigned>& cand_idx,
                                      const std::vector<unsigned>& cell_cand, const std::vector<unsigned>& vec_cgrps,
-                                     cudaStream_t stream=0)
+                                     cudaStream_t stream)
         {
             const auto n_cand_vecs = n_cand_groups * cpers.num_candidate_vectors;
             const auto& gpu_state = ref(state_id);
@@ -695,7 +695,7 @@ namespace {
 
         // Copy output data from GPU
         // This is a blocking call that synchronizes on stream
-        static inline void copy_out(const key_type& state_id, fast_feedback::output<float_type>& output, cudaStream_t stream=0)
+        static inline void copy_out(const key_type& state_id, fast_feedback::output<float_type>& output, gpu_stream &stream)
         {
             if (output.n_cells == 0u)
                 return;
