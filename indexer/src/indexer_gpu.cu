@@ -2210,6 +2210,7 @@ namespace gpu {
         auto state_id = instance.state;
         auto& state = gpu_state::ref(state_id);
 
+        gpu_device::set(state.device);
         gpu_stream& stream = state.cuda_stream;
 
         if (! state.callback_mode)
