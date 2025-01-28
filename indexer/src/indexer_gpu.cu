@@ -695,11 +695,9 @@ namespace {
 
         // Copy output data from GPU
         // This is a blocking call that synchronizes on stream
+        // Precondition: output.n_cells != 0
         static inline void copy_out(const key_type& state_id, fast_feedback::output<float_type>& output, gpu_stream &stream)
         {
-            if (output.n_cells == 0u)
-                return;
-
             const auto& gpu_state = ref(state_id);
             const auto& device_data = gpu_state.data;
             const auto cell_sz = 3u * output.n_cells * sizeof(float_type);
