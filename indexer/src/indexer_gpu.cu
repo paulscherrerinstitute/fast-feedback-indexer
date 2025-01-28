@@ -706,7 +706,7 @@ namespace {
             CU_CHECK(cudaMemcpyAsync(output.y, gpu_state.oy, cell_sz, cudaMemcpyDeviceToHost, stream));
             CU_CHECK(cudaMemcpyAsync(output.z, gpu_state.oz, cell_sz, cudaMemcpyDeviceToHost, stream));
             CU_CHECK(cudaMemcpyAsync(output.score, gpu_state.cell_score, output.n_cells * sizeof(float_type), cudaMemcpyDeviceToHost, stream));
-            CU_CHECK(cudaStreamSynchronize(stream));
+            stream.sync();
 
             LOG_START(logger::l_debug) {
                 logger::debug << stanza << "copy out: " << output.n_cells << " cells, elements=" << gpu_state.elements.get() << ": "
