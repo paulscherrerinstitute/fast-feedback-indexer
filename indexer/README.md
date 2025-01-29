@@ -39,6 +39,7 @@ Memory needs to be pinned and kept alive by the user.
 ### Multiple GPUs
 
 Every indexer object can act on a separate GPU
+
 * if *INDEXER_GPU_DEVICE* is set in the environment, the device is taken from that
 * otherwise the current CUDA device is used
 
@@ -89,17 +90,20 @@ Steer library behaviour with environment variables.
 ### Meson
 
 The Meson build differs in certain points from the CMake build.
+
 * GPU and CPU architecture can be left undefined
 * Less control over rpaths and compiler options
 * Option cpu-arch=xxx sets the -march=xxx compiler flag
 * Option gpu-arch=xxx sets the --gencode=xxx nvcc flag
 * CXX and CXXFLAGS will be picked up in the build setup
 * NVCC_PREPEND_FLAGS and NVCC_APPEND_FLAGS can be used to set nvcc flags at compile time
+
 See the meson.options file for available options.
 
 ### Using the library in your own code
 
 Depending on what is included in the build, the setup-env.sh script sets up a bash environment that enables
+
 * PKG_CONFIG_PATH for the Linux pkg-config mechanism ('fast_indexer' or 'fast_indexer_static') to pickup linking flags and include directories, e.g. in Cmake or meson projects
 * LD_LIBRARY_PATH for linking at runtime
 * CPLUS_INCLUDE_PATH and C_INCLUDE_PATH for picking up includes
