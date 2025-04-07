@@ -944,7 +944,11 @@ namespace {
     // acquire block sequentializer in busy wait loop
     __device__ __forceinline__ void seq_acquire(unsigned& seq) noexcept
     {
-        while (atomicCAS(&seq, 0u, 1u) != 0u);
+        while (atomicCAS(&seq, 0u, 1u) != 0u)
+            #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 700)
+                __nanosleep(1)
+            #endif
+            ;
     }
 
     // release block sequentializer
