@@ -26,6 +26,9 @@ if get_option('buildtype') == 'release'
 endif
 if get_option('gpu-arch') != 'ignore'
     nvcc_flags += [ '-gencode', get_option('gpu-arch') ]
+    add_project_link_arguments(
+        nvcc_flags,
+        language: 'cuda')
 endif
 
 cxx_flags = [ '--std=c++17' ]
