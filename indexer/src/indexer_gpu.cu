@@ -863,7 +863,9 @@ namespace {
             return rintf(val);
         }
 
-        __device__ __forceinline__ static void sincos(const float angle, float* sine, float* cosine) noexcept
+        __device__ __forceinline__ static void sincos(const float angle,
+                                                      float* __restrict__ sine,
+                                                      float* __restrict__ cosine) noexcept
         {
             return sincosf(angle, sine, cosine);
         }
@@ -942,7 +944,7 @@ namespace {
     };
 
     // acquire block sequentializer in busy wait loop
-    __device__ __forceinline__ void seq_acquire(unsigned& seq) noexcept
+    __device__ __forceinline__ void seq_acquire(unsigned& __restrict__ seq) noexcept
     {
         while (atomicCAS(&seq, 0u, 1u) != 0u)
             #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 700)
@@ -952,7 +954,7 @@ namespace {
     }
 
     // release block sequentializer
-    __device__ __forceinline__ void seq_release(unsigned& seq) noexcept
+    __device__ __forceinline__ void seq_release(unsigned& __restrict__ seq) noexcept
     {
         __threadfence();
         __stwt(&seq, 0u);
@@ -961,7 +963,9 @@ namespace {
     // kahan sum
     // (a, rest) = a + b + rest
     template<typename float_type>
-    __device__ __forceinline__ void ksum(float_type& a, float_type& rest, const float_type b) noexcept
+    __device__ __forceinline__ void ksum(float_type& __restrict__ a,
+                                         float_type& __restrict__ rest,
+                                         const float_type b) noexcept
     {
         const float_type s = rest + b;
         const float_type t = a;
@@ -970,7 +974,7 @@ namespace {
     }
 
     // warpwise aggregate of float a in lane 0
-    __device__ __forceinline__ void reduce_add(float& a) noexcept
+    __device__ __forceinline__ void reduce_add(float& __restrict__ a) noexcept
     {
         float r = .0f;
         for (unsigned d=1; d<warp_size; d <<= 1u) {
@@ -981,7 +985,7 @@ namespace {
     }
 
     // warpwise aggregate of unsigned a in all lanes
-    __device__ __forceinline__ void reduce_add_broadcast(unsigned &a) noexcept
+    __device__ __forceinline__ void reduce_add_broadcast(unsigned& __restrict__ a) noexcept
     {
         #if __CUDA_ARCH__ >= 800
             a = __reduce_add_sync(all_lanes, a);
@@ -1003,7 +1007,8 @@ namespace {
     // return value trimmed to the range [triml..trimh]
     // assume triml <= trimh
     template<typename float_type>
-    __device__ __forceinline__ float_type trim(const fast_feedback::config_runtime<float_type>& crt, const float_type val) noexcept
+    __device__ __forceinline__ float_type trim(const fast_feedback::config_runtime<float_type>& __restrict__ crt,
+                                               const float_type val) noexcept
     {
         return min(max(crt.triml, val), crt.trimh);
     }
@@ -1112,7 +1117,7 @@ namespace {
     // pre: l = |a|
     // post: result is false if and only if a is not unique (a and b collinear)
     template<typename float_type>
-    __device__ __forceinline__ bool add_unify(float_type a[3], float_type b[3], float_type& l) noexcept
+    __device__ __forceinline__ bool add_unify(float_type a[3], float_type b[3], float_type& __restrict__ l) noexcept
     {
         const float_type lb = util<float_type>::norm(b[0], b[1], b[2]);
         for (unsigned i=0u; i<3u; i++) {
@@ -1160,7 +1165,8 @@ namespace {
     // pre: |z| == 1
     template<typename float_type>
     __device__ __forceinline__ void project_unify(float_type x[3], const float_type a[3], const float_type z[3],
-                                                  float_type &laz, float_type &laxy) noexcept
+                                                  float_type& __restrict__ laz,
+                                                  float_type& __restrict__ laxy) noexcept
     {
         laz = dot(a, z);
         for (unsigned i=0u; i<3u; i++)
@@ -1188,7 +1194,10 @@ namespace {
 
     // single threaded merge of block local sorted candidate vector array into global sorted candidate vector array
     template<typename float_type>
-    __device__ __forceinline__ void merge_top_vecs(float_type* top_val, unsigned* top_sample, vec_cand_t<float_type>* cand, const unsigned n_cand) noexcept
+    __device__ __forceinline__ void merge_top_vecs(float_type* __restrict__ top_val,
+                                                   unsigned* __restrict__ top_sample,
+                                                   vec_cand_t<float_type>* __restrict__ cand,
+                                                   const unsigned n_cand) noexcept
     {
         // ---- python equivalent ----
         // def a_top(A, B):
@@ -1274,7 +1283,9 @@ namespace {
     // Misuse output cell vector as storage for { score[i]=value, x[i]=vsample, y[i]=rsample, z[i]=cell_vector_index }
     // Run a separate kernel to expand vsample, rsample, cell_vector_index into cell vectors
     template<typename float_type>
-    __device__ __forceinline__ void merge_top_cells(fast_feedback::output<float_type>& out, cell_cand_t<float_type>* cand, const unsigned n_cand) noexcept
+    __device__ __forceinline__ void merge_top_cells(fast_feedback::output<float_type>& __restrict__ out,
+                                                    cell_cand_t<float_type>* __restrict__ cand,
+                                                    const unsigned n_cand) noexcept
     {
         if (out.score[n_cand-1] <= cand[0].value)
             return;
@@ -1394,8 +1405,10 @@ namespace {
     // post |z_out|=1, vlength=|z_in|
     template<typename float_type>
     __device__ __forceinline__ void sample_cell(float_type z[3], float_type a[3], float_type b[3],
-                                                const float_type* cx, const float_type* cy, const float_type* cz,                                                
-                                                float_type& vlength,
+                                                const float_type* __restrict__ cx,
+                                                const float_type* __restrict__ cy,
+                                                const float_type* __restrict__ cz,                                                
+                                                float_type& __restrict__ vlength,
                                                 const unsigned rsample, const unsigned n_rsamples,
                                                 const unsigned cell_vec) noexcept
     {
@@ -1440,9 +1453,11 @@ namespace {
     // s{x,y,z}     spot coordinate pointers [n_spots]
     // n_spots      number of spots
     template<typename float_type>
-    __device__ __forceinline__ float_type sample1(const fast_feedback::config_runtime<float_type>& crt,
+    __device__ __forceinline__ float_type sample1(const fast_feedback::config_runtime<float_type>& __restrict__ crt,
                                                   const float_type v[3], const float_type vlength,
-                                                  const float_type *sx, const float_type *sy, const float_type *sz,
+                                                  const float_type* __restrict__ sx,
+                                                  const float_type* __restrict__ sy,
+                                                  const float_type* __restrict__ sz,
                                                   const unsigned n_spots) noexcept
     {
         constexpr unsigned BATCH = 1u << 3;     // 2^n, with n=3
@@ -1477,9 +1492,11 @@ namespace {
     // lz           length of c
     // n_spots      number of spots
     template<typename float_type>
-    __device__ __forceinline__ float_type sample3(const fast_feedback::config_runtime<float_type>& crt,
+    __device__ __forceinline__ float_type sample3(const fast_feedback::config_runtime<float_type>& __restrict__ crt,
                                                   const float_type z[3], const float_type a[3], const float_type b[3],
-                                                  const float_type *sx, const float_type *sy, const float_type *sz,
+                                                  const float_type* __restrict__ sx,
+                                                  const float_type* __restrict__ sy,
+                                                  const float_type* __restrict__ sz,
                                                   const float_type lz, const unsigned n_spots) noexcept
     {
         constexpr unsigned BATCH = 1u << 3;     // 2^n, with n=3
@@ -1519,7 +1536,7 @@ namespace {
     //      2-output cells (unsigned)
     //      3-output cells (float)
     template<typename float_type>
-    __global__ void gpu_debug_out(indexer_device_data<float_type>* data, const unsigned kind)
+    __global__ void gpu_debug_out(indexer_device_data<float_type>* __restrict__ data, const unsigned kind)
     {
         printf("### INDEXER_GPU_DEBUG (%u)\n", kind);
         if (kind <= 1u) {
@@ -1530,8 +1547,8 @@ namespace {
 
             if (kind == 0u) {
                 // Vector candidates sampled
-                const float_type* const cvp = data->candidate_value;
-                const unsigned* const csp = data->candidate_sample;
+                const float_type* const __restrict__ cvp = data->candidate_value;
+                const unsigned* const __restrict__ csp = data->candidate_sample;
                 for (unsigned i=0u; i<n_cells_in; ++i) {
                     printf("input cell%u rep %u, cgi:", i, data->cell_to_cellvec[i]);
                     for (unsigned j=3*i; j<3*i+3; ++j) {
@@ -1559,7 +1576,7 @@ namespace {
                 }
             } else if (kind == 1u) { // kind == 1
                 // Vector candidates refined
-                const float_type* const rca = data->refined_candidates;
+                const float_type* const __restrict__ rca = data->refined_candidates;
                 for (unsigned i=0u; i<(3u*n_cells_in); ++i) {
                     unsigned cg = data->cellvec_to_cand[i];
                     if (cg > ncg)
@@ -1604,7 +1621,7 @@ namespace {
     // for redundant computations:
     //      candidate group index = blockIdx.y
     template<typename float_type>
-    __global__ void gpu_find_candidates(indexer_device_data<float_type>* data)
+    __global__ void gpu_find_candidates(indexer_device_data<float_type>* __restrict__ data)
     {
         extern __shared__ double* shared_ptr[];
 
@@ -1659,7 +1676,7 @@ namespace {
     // vector candidate group index = blockIdx.y
     // cuda thread block size = warp_size (32)
     template<typename float_type>
-    __global__ void gpu_refine_cand(indexer_device_data<float_type>* data)
+    __global__ void gpu_refine_cand(indexer_device_data<float_type>* __restrict__ data)
     {
         // # Python equivalent
         // class Optimizer:
@@ -1757,7 +1774,7 @@ namespace {
     // vector candidate index = blockIdx.z / 2
     // flipped candidate = blockIdx.z & 1
     template<typename float_type>
-    __global__ void gpu_find_cells(indexer_device_data<float_type>* data)
+    __global__ void gpu_find_cells(indexer_device_data<float_type>* __restrict__ data)
     {
         extern __shared__ double* shared_ptr[];
 
@@ -1772,13 +1789,13 @@ namespace {
         float_type vabc=.0f;    // accumulated sample values for a, b, c cell vectors
 
         { // calculate vabc for vsample/rsample/
-            const fast_feedback::input<float_type>& in = data->input;
+            const fast_feedback::input<float_type>& __restrict__ in = data->input;
             const unsigned n_rsamples = gridDim.x * blockDim.x;
             float_type vlength = data->candidate_length[cand_grp];
             float_type z[3], a[3], b[3];
 
             if (data->crt.min_spots != 0) {
-                const float_type* const refined_candidate = &data->refined_candidates[(cand_grp * n_cand + cand) * constant<float_type>::mem_txn_unit];
+                const float_type* const __restrict__ refined_candidate = &data->refined_candidates[(cand_grp * n_cand + cand) * constant<float_type>::mem_txn_unit];
                 for (unsigned i=0u; i<3u; i++)
                     z[i] = refined_candidate[i];
             } else {
@@ -1811,7 +1828,7 @@ namespace {
         }
 
         const unsigned n_output_cells = data->output.n_cells;
-        auto cand_ptr = reinterpret_cast<cell_cand_t<float_type>*>(shared_ptr); // [output.n_cells]
+        auto __restrict__ cand_ptr = reinterpret_cast<cell_cand_t<float_type>*>(shared_ptr); // [output.n_cells]
         if (threadIdx.x < n_output_cells) { // store top candidate cells into cand_ptr
             if (data->crt.min_spots != 0) {
                 cand_ptr[threadIdx.x] = { vabc, cand, rsample, flipped ? (cell_vec | cell_cand_t<float_type>::FLIPPED) : cell_vec };
@@ -1837,13 +1854,13 @@ namespace {
     // threadIdx.x = output cell index
     // n_rsamples   number of rotation angle samples rounded up to n_threads (must match n_rsamples in gpu_find_cells)
     template<typename float_type>
-    __global__ void gpu_expand_cells(indexer_device_data<float_type>* data, const unsigned n_rsamples)
+    __global__ void gpu_expand_cells(indexer_device_data<float_type>* __restrict__ data, const unsigned n_rsamples)
     {
-        const fast_feedback::input<float_type>& in = data->input;
-        fast_feedback::output<float_type>& out = data->output;
-        float_type* ox = out.x;
-        float_type* oy = out.y;
-        float_type* oz = out.z;
+        const fast_feedback::input<float_type>& __restrict__ in = data->input;
+        fast_feedback::output<float_type>& __restrict__ out = data->output;
+        float_type* __restrict__ ox = out.x;
+        float_type* __restrict__ oy = out.y;
+        float_type* __restrict__ oz = out.z;
         const unsigned cell_base = 3u * threadIdx.x;
         const unsigned rsample = *reinterpret_cast<unsigned*>(&oy[cell_base]);
         const unsigned cell_vec = *reinterpret_cast<unsigned*>(&oz[cell_base]) & ~cell_cand_t<float_type>::FLIPPED;
@@ -1855,7 +1872,7 @@ namespace {
 
         if (data->crt.min_spots != 0) {
             const unsigned cand = *reinterpret_cast<unsigned*>(&ox[cell_base]);
-            const float_type* const refined_candidate = &data->refined_candidates[(cand_grp * n_cand + cand) * constant<float_type>::mem_txn_unit];
+            const float_type* const __restrict__ refined_candidate = &data->refined_candidates[(cand_grp * n_cand + cand) * constant<float_type>::mem_txn_unit];
             for (unsigned i=0u; i<3u; i++)
                 z[i] = refined_candidate[i];
         } else {
