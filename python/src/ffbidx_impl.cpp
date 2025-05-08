@@ -588,6 +588,18 @@ namespace {
         Py_RETURN_NONE;
     }
 
+    PyObject* ffbidx_runtime_check_()
+    {
+        try {
+            fast_feedback::runtime_check();
+        } catch (std::exception& ex) {
+            PyErr_SetString(PyExc_RuntimeError, ex.what());
+            return nullptr;
+        }
+
+        Py_RETURN_NONE;
+    }
+
     void ffbidx_free(void *)
     {
         indexers.clear();
@@ -623,11 +635,17 @@ extern "C" {
         return ffbidx_release_(args, kwds);
     }
 
+    PyObject* ffbidx_runtime_check([[maybe_unused]] PyObject *self, [[maybe_unused]] PyObject *args)
+    {
+        return ffbidx_runtime_check_();
+    }
+
     PyMethodDef ffbidx_methods[] = {
         {"indexer", (PyCFunction)(void*)ffbidx_indexer, METH_VARARGS | METH_KEYWORDS, PyDoc_STR("Get an indexer handle")},
         {"index", (PyCFunction)(void*)ffbidx_index, METH_VARARGS | METH_KEYWORDS, PyDoc_STR("Call indexer")},
         {"crystals", (PyCFunction)(void*)ffbidx_crystals, METH_VARARGS | METH_KEYWORDS, PyDoc_STR("Select crystals")},
         {"release", (PyCFunction)(void*)ffbidx_release, METH_VARARGS | METH_KEYWORDS, PyDoc_STR("Release indexer handle")},
+        {"runtime_check", (PyCFunction)(void*)ffbidx_runtime_check, METH_NOARGS, PyDoc_STR("Check runtime")},
         {NULL, NULL, 0, NULL}
     };
 

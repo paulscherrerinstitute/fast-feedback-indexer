@@ -60,6 +60,8 @@ int main (int argc, char *argv[])
     using namespace simple_data;
 
     try {
+        fast_feedback::runtime_check();
+
         if (argc <= 1)
             throw std::runtime_error("missing file argument");
 

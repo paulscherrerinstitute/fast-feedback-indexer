@@ -88,6 +88,11 @@ namespace fast_feedback {
         gpu::check_config(cpers, crt);
     }
 
+    void runtime_check()
+    {
+        gpu::runtime_check();
+    }
+
     template void indexer<float>::init(indexer<float>&, const config_persistent<float>&);
     template void indexer<float>::drop(indexer<float>&);
     template void indexer<float>::index_start(const input<float>&, output<float>&, const config_runtime<float>&, void(*)(void*), void*);

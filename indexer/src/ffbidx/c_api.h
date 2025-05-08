@@ -266,6 +266,11 @@ int check_config(const struct config_persistent* cfg_persistent,
                  const struct config_ifssr* cfg_ifssr,
                  struct error* err);
 
+// Check runtime
+// - 0 if no incompatibilities could be detected
+// - -1 if incompatibilities were detected (tries to fill in err)
+int runtime_check(struct error* err);
+
 // Pointer to version string
 // Return:
 // Pointer to version string

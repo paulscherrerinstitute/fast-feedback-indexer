@@ -101,6 +101,9 @@ int main (int argc, char *argv[])
         std::vector<char> error_msg(128);               // memory for error message
         error err = { error_msg.data(), (unsigned)error_msg.size() };
 
+        if (runtime_check(&err) != 0)
+            throw std::runtime_error{error_msg.data()};
+
         if (check_config(&cpers, &crt, &cifssr, &err) == -1)
             throw std::runtime_error{error_msg.data()};
 

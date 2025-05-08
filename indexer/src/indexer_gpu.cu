@@ -1902,6 +1902,13 @@ namespace {
         oz[cell_base + ib] = b[2];
     }
 
+    // Test PTX compatibility
+    // Flip bit zero of *int_ptr with a single cuda thread
+    __global__ void gpu_ptx_compatibility_test(int* int_ptr)
+    {
+        *int_ptr ^= 1;
+    }
+
 } // anonymous namespace
 
 namespace gpu {
@@ -2293,6 +2300,29 @@ namespace gpu {
             if ((crt->num_angle_points > 0u) && (crt->num_angle_points < cpers->max_output_cells))
                 throw FF_EXCEPTION("fewer angle sample points than required candidate cells");
         }
+    }
+
+    // Check compatibility between driver and runtime,
+    // throw an exception if incompatibility is detected
+    void runtime_check()
+    {
+        // check compatibility between reported driver and runtime versions
+        int driver=0, runtime=0;
+        CU_CHECK(cudaDriverGetVersion(&driver));
+        CU_CHECK(cudaRuntimeGetVersion(&runtime));
+        logger::debug << stanza << "CUDA version check: driver=" << driver << ", runtime=" << runtime << '\n';
+        if (driver < runtime)
+            throw FF_EXCEPTION("CUDA driver version is older than the runtime version");
+
+        // call dummy compatibility test kernel that flips bit 0, with one CUDA thread
+        int* dummy, data=0;
+        CU_CHECK(cudaMalloc(&dummy, sizeof(int)));
+        gpu_pointer<int> gpu_ptr(dummy);
+        CU_CHECK(cudaMemcpy(dummy, &data, sizeof(int), cudaMemcpyHostToDevice));
+        gpu_ptx_compatibility_test<<<1,1>>>(dummy);
+        CU_CHECK(cudaMemcpy(&data, dummy, sizeof(int), cudaMemcpyDeviceToHost));
+        if (data != 1)
+            throw FF_EXCEPTION("PTX compatibility test failed");
     }
 
     template void init<float> (const indexer<float>&);

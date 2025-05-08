@@ -64,6 +64,9 @@ namespace gpu {
    template<typename float_type=float>
    void check_config(const config_persistent<float_type>* cpers, const config_runtime<float_type>* crt);
 
+   // Check gpu runtime, throws exception on incompatibility
+   void runtime_check();
+
 } // namespace gpu
 
 #endif

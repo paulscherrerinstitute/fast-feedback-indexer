@@ -371,6 +371,10 @@ namespace fast_feedback {
             << " redundant_computations=" << cpers.redundant_computations;
         return out;
     }
+
+    // Throw exception if runtime problem is detected
+    void runtime_check();
+
 } // namespace fast_feedback
 
 #endif

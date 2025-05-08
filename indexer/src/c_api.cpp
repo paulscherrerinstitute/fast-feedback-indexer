@@ -473,6 +473,19 @@ extern "C" {
         return -1;
     }
 
+    int runtime_check(struct error* err)
+    {
+        try {
+            fast_feedback::runtime_check();
+            return 0;
+        } catch (std::exception& ex) {
+            set_error(err, ex.what());
+        } catch (...) {
+            ; // ignore
+        }
+        return -1;
+    }
+
     const char* get_version()
     {
         return fast_feedback::logger::get_version();

@@ -845,6 +845,8 @@ int main (int argc, char *argv[])
     try {
         logger::init_log_level();
 
+        runtime_check();
+
         cfgps_t cpers{};
         cfgrt_t crt{};
         cifss_t cifss{};
