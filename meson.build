@@ -1,6 +1,6 @@
 project('ffbidx',
     ['cpp', 'cuda'],
-    version: '1.1.2',
+    version: '1.1.3',
     meson_version: '>=1.1',
     license: 'BSD-3-Clause',
     license_files: ['LICENSE.md'])
