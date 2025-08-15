@@ -11,7 +11,8 @@ Develop an indexer for fast feedback
 *Issues*:
 
 * The refinement algorithms misbehave with electron diffraction data
-* Implemented in CUDA, so only Nvidia GPUs are supported currently.
+* Implemented in CUDA, so only Nvidia GPUs are supported currently
+* Unoptimized code from *debug* builds doesn't fit onto the GPU properly
 
 ### Alternative Implementations
 

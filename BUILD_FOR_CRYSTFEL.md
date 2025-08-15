@@ -25,11 +25,11 @@ If you manage your own Eigen installation, set the option to the directory that 
 
 ### Collect System Information
 
-The library build uses CPU and GPU architecture specific optimization flags. In order to determine these flags, it's necessary to know what CPU and GPU hardware the library code needs to run on. 
+The library build uses CPU and GPU architecture specific optimization flags. In order to determine these flags, it's necessary to know what CPU and GPU hardware the library code needs to run on.
 
 #### Determine GPU Compute Capability (Option gpu-arch)
 
-In order to determin the compute capability of the GPUs the code should be able to run on, use the nvidia-smi command.
+In order to determine the compute capability of the GPUs the code should be able to run on, use the nvidia-smi command.
 
     $ nvidia-smi --query-gpu=compute_cap --format=csv,noheader
 
@@ -110,3 +110,6 @@ To print possible configuration options for the Fast Feedback Indexer, you can r
 
 The indexer algorithm and its options are described in the LaTeX documents in the 'doc' folder of the Fast Feedback Indexer repository.
 
+## Issues
+
+* *cudaErrorLaunchOutOfResources*: if the fast feedback indexer library is built with --buildtype=debug, the unoptimized code will no longer fit onto the GPU properly
