@@ -151,13 +151,13 @@ spack load ffbidx
 
 See: https://git.psi.ch/germann_e/spack-psi
 
-### Installation for Python using micromamba and conda-build
+### Installation for Python using micromamba and rattler-build
 
 ```
-$ micromamba install conda-build
-$ conda-build -c conda-forge conda/meta.yaml
-$ micromamba install -c local ffbidx
-$ python -c "import ffbidx; print('OK')"
+$ micromamba install conda rattler-build
+$ rattler-build build --channel=conda-forge --recipe=conda/recipe.yaml
+$ conda install -c local output/linux-64/ffbidx-1.1.3-hb0f4dca_0.conda
+$ python -c 'import ffbidx; ffbidx.runtime_check(); print("ffbidx", ffbidx.__version__, "-> OK")'
 ```
 
 ### Installation for Python through conda-forge
