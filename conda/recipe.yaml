@@ -36,17 +36,20 @@ requirements:
   build:
     - ${{ compiler('cxx') }}
     - cuda-compiler
-    - cuda-cudart-dev
-    - eigen # header only library
     - meson
     - pkg-config
+    - numpy
+
+  host:
     - python
     - numpy
+    - eigen
+    - cuda-cudart-dev # [cuda_compiler_version]
 
   run:
     - python
-    - cuda-cudart
     - numpy
+    - cuda-cudart # [cuda_compiler_version]
 
 tests:
   - package_contents:
