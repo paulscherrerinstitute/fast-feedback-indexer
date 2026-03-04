@@ -16,7 +16,7 @@ Develop an indexer for fast feedback
 
 ### Alternative Implementations
 
-*Luis Barba* from the Swiss Data Science Center has done an implementation with PyTorch: https://renkulab.io/projects/lfbarba/toro-indexer-for-serial-crystallography
+*Luis Barba* from the Swiss Data Science Center has done an implementation with PyTorch. (defunct link: https://renkulab.io/projects/lfbarba/toro-indexer-for-serial-crystallography)
 
 The CUDA implementation exploits parallelism within the algorithm to a larger extent than the PyTorch version. That's why the PyTorch version relies on batching for speed, where the CUDA version can be fast taking frame by frame separately. The Python code of the PyTorch version is easier to understand and is thus recommended for experimentation with the algorithm.
 
