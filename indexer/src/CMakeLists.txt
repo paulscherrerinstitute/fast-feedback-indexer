@@ -43,6 +43,16 @@ if (BUILD_FAST_INDEXER OR BUILD_FAST_INDEXER_STATIC)
                 set(CMAKE_CUDA_ARCHITECTURES "75;80")
         endif()
         find_package(CUDAToolkit REQUIRED)
+
+         if (MSVC)
+                # indexer_gpu.cu pulls in CUB (<cub/block/block_radix_sort.cuh>). CUB — like all of
+                # CCCL (Thrust/CUB/libcu++) — hard-#errors unless MSVC uses its standard-conforming
+                # preprocessor, because its macro machinery relies on conforming __VA_ARGS__ handling
+                # that MSVC's traditional preprocessor gets wrong. Forward /Zc:preprocessor to the
+                # host compiler for the CUDA sources.
+                set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler=/Zc:preprocessor")
+        endif()
+        
         message("CMAKE_CUDA_ARCHITECTURES=${CMAKE_CUDA_ARCHITECTURES}")
         set(fast_indexer_PUB_HEADER_LIST
                 ffbidx/indexer.h
