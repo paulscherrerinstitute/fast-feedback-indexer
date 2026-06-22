@@ -67,7 +67,7 @@ namespace {
     // NOTE: not allowed as member of constant
     // (dl * 2^N) mod 2pi
     template<typename float_type>
-    __constant__ static constexpr float_type dl2pNmod2pi[32] = {
+    __constant__ static float_type dl2pNmod2pi[32] = {
         0.76393202250021030359082633,   // N = 0
         1.5278640450004206071816527,
         3.0557280900008412143633053,
