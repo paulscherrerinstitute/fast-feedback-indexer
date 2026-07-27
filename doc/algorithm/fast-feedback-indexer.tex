@@ -54,13 +54,18 @@ The indexing task consist of refining and reorienting or, in the more complicate
 The row vectors in $\mat{A}$ shall be denoted as $\vect{a}_1,\vect{a}_2,\vect{a}_3$, the ones for $\mat{B}$ as $\vect{b}_1,\vect{b}_2,\vect{b}_3$, and finally the spot vectors as $\vect{s}_1, \vect{s}_2, ..., \vect{s}_n$. With that, the structural similarity (\ref{eq:similar}) shall be defined based on some small positive tolerance parameter $\varepsilon$ by
 %
 \begin{align}\label{eq:similarity}
+  D_\measuredangle &:= \max_{i \neq j} \left (
+    \frac
+      {| \measuredangle(\vect{a}_i, \vect{a}_j) - \measuredangle(\vect{b}_i, \vect{b}_j) |}
+      {\measuredangle(\vect{a}_i, \vect{a}_j)}
+    \right ) \notag \\
   D_l &:= \max_{1 \leq i \leq 3} \left |\, \frac{\| \vect{a}_i \| - \| \vect{b}_i \|}{\| \vect{a}_i \|}\, \right | \notag \\
   D_d &:= \left | \frac{\det(\mat{B}) - \det(\mat{A})}{\det(\mat{A})} \right | \notag \\
- \similar(\mat{B}, \mat{A}) &:= ( D_d + D_l )^2 \\
+ \similar(\mat{B}, \mat{A}) &:= ( D_d + D_l + D_\measuredangle )^2 \\
   \mat{B} \simeq \mat{A} &\Leftrightarrow \similar(\mat{B}, \mat{A}) < \varepsilon \notag
 \end{align}
 %
-Structural similarity in (\ref{eq:similar}) thus means that $\|\vect{a}_i\| \approx \|\vect{b}_i\|$ for all row vectors and $\det(\mat{A}) \approx \det(\mat{B})$, or in other words $\mat{B}$ is almost $\mat{A}$ rotated in some way.
+Structural similarity in (\ref{eq:similar}) thus means that the angle between vectors is the same $\measuredangle(\vect{a}_i, \vect{a}_j) \approx \measuredangle(\vect{b}_i, \vect{b}_j)$, the vector length are the same $\|\vect{a}_i\| \approx \|\vect{b}_i\|$ for all row vectors and $\det(\mat{A}) \approx \det(\mat{B})$, or in other words $\mat{B}$ is almost $\mat{A}$ rotated in some way.
 
 In practise (\ref{eq:integer}) can never be achieved exactly. For once, the spots $\vect{s}_i$ are a result of measurements and transformations with errors and imperfections, and then there might be several crystals with differing orientations in the sample. To find a unit cell of a specific crystal that fits well to spots belonging to that crystal, the relevant spots have to be identified together with the matrix $\mat{B}$. We define a subset of indices $\mathcal{I} = \{i \mid \vect{s}_i\ belongs\ to\ the\ crystal \}$ containing the indices of inliers - points we deem to belong to the crystal with unit cell $\mat{B}$. The requirement $\mat{Z} \in \mathbb{Z}^{n \times 3}$ in (\ref{eq:integer}) is unrealistic, we just demand that the relevant coordinate vectors $\vect{z}_i, i \in \mathcal{I}$ of $\mat{Z}$ are close to integers, thus $\mat{Z} \in \mathbb{R}^{n \times 3}$. For that, we define
 %
