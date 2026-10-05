@@ -24,8 +24,8 @@ The CUDA implementation exploits parallelism within the algorithm to a larger ex
 
 When referring to the algorithm implemented here, please use:
 
-- DOI: https://doi.org/10.1107/S1600576724003182
-- *TODO*: Add some future paper with quality tests for the CUDA version
+- For the algorithm - DOI: https://doi.org/10.1107/S1600576724003182
+- For this implementation - DOI: https://doi.org/10.1107/S1600576726008083
 
 A copy of the BibTeX file can be found in this repo with the name *BIBTeX.bib*.
 
