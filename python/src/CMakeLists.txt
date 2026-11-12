@@ -3,7 +3,10 @@ option(PYTHON_MODULE_RPATH "Set python module RPATH to fast indexer library inst
 set(PYTHON_MODULE_PATH "${CMAKE_INSTALL_LIBDIR}" CACHE PATH "Indexer python module installation path")
 
 if(PYTHON_MODULE)
-        find_package(Eigen3 3 NO_MODULE)
+        find_package(Eigen3 NO_MODULE)
+        if(${Eigen3_FOUND} AND Eigen3_VERSION VERSION_LESS 3)
+                message(FATAL_ERROR "Eigen3 ${Eigen3_VERSION} found, 3 or newer is required.")
+        endif()
         if(NOT ${Eigen3_FOUND})
                 message(FATAL_ERROR
                         "Eigen3 library not found! Install a distro specific package, or use 'git submodule update' to download the submodule.")
