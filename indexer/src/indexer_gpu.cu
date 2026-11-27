@@ -2310,13 +2310,14 @@ namespace gpu {
     // throw an exception if incompatibility is detected
     void runtime_check()
     {
-        // check compatibility between reported driver and runtime versions
+        // check compatibility between reported driver and runtime major versions,
+        // CUDA minor version compatibility covers an older driver minor version
         int driver=0, runtime=0;
         CU_CHECK(cudaDriverGetVersion(&driver));
         CU_CHECK(cudaRuntimeGetVersion(&runtime));
         logger::debug << stanza << "CUDA version check: driver=" << driver << ", runtime=" << runtime << '\n';
-        if (driver < runtime)
-            throw FF_EXCEPTION("CUDA driver version is older than the runtime version");
+        if (driver / 1000 < runtime / 1000)
+            throw FF_EXCEPTION("CUDA driver major version is older than the runtime major version");
 
         // call dummy compatibility test kernel that flips bit 0, with one CUDA thread
         int* dummy, data=0;
